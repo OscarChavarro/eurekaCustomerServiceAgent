@@ -5,13 +5,18 @@ import type { ConversationCsvSourcePort } from '../../ports/inbound/conversation
 import type { EmbeddingGeneratorPort } from '../../ports/outbound/embedding-generator.port';
 import type { VectorPoint, VectorStorePort } from '../../ports/outbound/vector-store.port';
 import { TOKENS } from '../../ports/tokens';
+import { ConversationChunkingService } from './conversation-chunking.service';
 import { ConversationCsvRecordTranslatorService } from './conversation-csv-record-translator.service';
 import { ConversationMessageCleaningService } from './conversation-message-cleaning.service';
+import { ConversationStructuringService } from './conversation-structuring.service';
 import type { KwoledgeIngestionCommand } from './kwoledge-ingestion.command';
 import {
-  MessageDirection
+  CleanedConversationMessage,
+  MessageDirection,
+  RawConversationMessage,
+  StructuredConversationTurn,
+  SemanticConversationChunk
 } from './kwoledge-ingestion-message.model';
-import type { KwoledgeIngestionMessage } from './kwoledge-ingestion-message.model';
 import {
   KwoledgeIngestionLimits,
   KwoledgeIngestionMessagesBreakdown,
@@ -21,6 +26,7 @@ import {
 @Injectable()
 export class KwoledgeIngestionUseCase {
   private readonly logger = new Logger(KwoledgeIngestionUseCase.name);
+  private readonly embeddingStageReady = false;
 
   constructor(
     @Inject(TOKENS.ConversationCsvSourcePort)
@@ -32,129 +38,136 @@ export class KwoledgeIngestionUseCase {
     @Inject(TOKENS.IngestionRuntimeConfigPort)
     private readonly ingestionRuntimeConfigPort: IngestionRuntimeConfigPort,
     private readonly conversationCsvRecordTranslatorService: ConversationCsvRecordTranslatorService,
-    private readonly conversationMessageCleaningService: ConversationMessageCleaningService
+    private readonly conversationMessageCleaningService: ConversationMessageCleaningService,
+    private readonly conversationStructuringService: ConversationStructuringService,
+    private readonly conversationChunkingService: ConversationChunkingService
   ) {}
 
   public async execute(command: KwoledgeIngestionCommand): Promise<KwoledgeIngestionResult> {
-    const rawRecords = await this.conversationCsvSourcePort.readFromFolder(
-      command.folderPath
-    );
-    const conversationMessages = rawRecords.map((record) => {
-      const translatedRecord = this.conversationCsvRecordTranslatorService.translate(record);
+    const rawMessages = await this.loadRawMessages(command.folderPath);
+    const cleanedMessages = this.runCleaningStage(rawMessages);
+    const structuredTurns = this.runStructuringStage(cleanedMessages);
+    const semanticChunks = this.runChunkingStage(structuredTurns);
 
-      this.logger.log(
-        JSON.stringify(this.conversationCsvRecordTranslatorService.buildLogPayload(translatedRecord))
-      );
-
-      return translatedRecord;
-    });
-
-    const cleanedMessages = this.conversationMessageCleaningService.clean(conversationMessages);
-    const indexableMessages = cleanedMessages.filter((message) => message.text.trim().length > 0);
     const uniqueFiles = new Set(cleanedMessages.map((message) => message.sourceFile));
     const messagesBreakdown = this.buildMessagesBreakdown(cleanedMessages);
     const limits = this.buildLimits(cleanedMessages);
+    const skippedMessages = cleanedMessages.filter((message) => message.cleanedText.length === 0).length;
 
-    if (indexableMessages.length === 0) {
-      this.logger.warn(`No indexable messages found in folder ${command.folderPath}.`);
-      return new KwoledgeIngestionResult(
-        command.folderPath,
-        uniqueFiles.size,
-        0,
-        cleanedMessages.length,
-        messagesBreakdown,
-        limits
-      );
+    if (semanticChunks.length === 0) {
+      this.logger.warn(`No semantic chunks found in folder ${command.folderPath}.`);
     }
 
-    if (!this.conversationMessageCleaningService.isReadyForEmbeddingIngestion()) {
-      this.logger.log(
-        'Message cleaning is pending. Skipping embedding generation and vector storage.'
-      );
-
-      const skippedMessages = cleanedMessages.length - indexableMessages.length;
-
-      return new KwoledgeIngestionResult(
-        command.folderPath,
-        uniqueFiles.size,
-        0,
-        skippedMessages,
-        messagesBreakdown,
-        limits
-      );
-    }
-
-    if (!this.ingestionRuntimeConfigPort.isQdrantIngestionEnabled()) {
-      this.logger.log(
-        'Qdrant ingestion is disabled by configuration. Skipping embedding generation and vector storage.'
-      );
-
-      const skippedMessages = cleanedMessages.length - indexableMessages.length;
-
-      return new KwoledgeIngestionResult(
-        command.folderPath,
-        uniqueFiles.size,
-        0,
-        skippedMessages,
-        messagesBreakdown,
-        limits
-      );
-    }
-
-    const embeddings = await this.embeddingGeneratorPort.generateEmbeddings(
-      indexableMessages.map((message) => message.text)
-    );
-
-    if (embeddings.length !== indexableMessages.length) {
-      throw new Error('Embedding generator returned an unexpected number of vectors.');
-    }
-
-    await this.vectorStorePort.ensureCollection(this.embeddingGeneratorPort.getDimensions());
-
-    const points: VectorPoint[] = indexableMessages.map((message, index) => {
-      const vector = embeddings[index];
-
-      if (!vector) {
-        throw new Error(`Missing vector for message index ${index}.`);
-      }
-
-      return {
-        id: this.buildPointId(message, index),
-        vector,
-        payload: {
-          conversationId: message.conversationId,
-          externalId: message.externalId,
-          sentAt: message.sentAt?.toISOString() ?? null,
-          sender: message.sender,
-          direction: message.direction,
-          text: message.text,
-          sourceFile: message.sourceFile,
-          rowNumber: message.rowNumber,
-          normalizedFields: message.normalizedFields
-        }
-      };
-    });
-
-    await this.vectorStorePort.upsert(points);
-
-    const skippedMessages = cleanedMessages.length - indexableMessages.length;
-
-    this.logger.log(
-      `Indexed ${indexableMessages.length} messages from ${uniqueFiles.size} csv files in ${command.folderPath}.`
-    );
+    const embeddings = await this.runEmbeddingStage(semanticChunks);
+    const indexedChunks = await this.runStorageStage(semanticChunks, embeddings);
 
     return new KwoledgeIngestionResult(
       command.folderPath,
       uniqueFiles.size,
-      indexableMessages.length,
+      indexedChunks,
       skippedMessages,
       messagesBreakdown,
       limits
     );
   }
 
+  private async loadRawMessages(folderPath: string): Promise<RawConversationMessage[]> {
+    const rawRecords = await this.conversationCsvSourcePort.readFromFolder(folderPath);
+
+    return rawRecords.map((record) => {
+      const rawMessage = this.conversationCsvRecordTranslatorService.translate(record);
+      this.logger.log(JSON.stringify(this.conversationCsvRecordTranslatorService.buildLogPayload(rawMessage)));
+      return rawMessage;
+    });
+  }
+
+  private runCleaningStage(rawMessages: RawConversationMessage[]): CleanedConversationMessage[] {
+    return this.conversationMessageCleaningService.clean(rawMessages);
+  }
+
+  private runStructuringStage(
+    cleanedMessages: CleanedConversationMessage[]
+  ): StructuredConversationTurn[] {
+    return this.conversationStructuringService.buildTurns(cleanedMessages);
+  }
+
+  private runChunkingStage(structuredTurns: StructuredConversationTurn[]): SemanticConversationChunk[] {
+    return this.conversationChunkingService.buildSemanticChunks(structuredTurns);
+  }
+
+  private async runEmbeddingStage(
+    semanticChunks: SemanticConversationChunk[]
+  ): Promise<number[][] | null> {
+    if (!this.embeddingStageReady) {
+      this.logger.log('Embedding stage planned. Waiting for finalized cleaning rules.');
+      return null;
+    }
+
+    if (!this.ingestionRuntimeConfigPort.isQdrantIngestionEnabled()) {
+      this.logger.log('Embedding stage disabled by configuration.');
+      return null;
+    }
+
+    if (semanticChunks.length === 0) {
+      return [];
+    }
+
+    const embeddings = await this.embeddingGeneratorPort.generateEmbeddings(
+      semanticChunks.map((chunk) => chunk.content)
+    );
+
+    if (embeddings.length !== semanticChunks.length) {
+      throw new Error('Embedding generator returned an unexpected number of vectors.');
+    }
+
+    return embeddings;
+  }
+
+  private async runStorageStage(
+    semanticChunks: SemanticConversationChunk[],
+    embeddings: number[][] | null
+  ): Promise<number> {
+    if (!embeddings) {
+      this.logger.log('Storage stage planned. Waiting for embedding stage activation.');
+      return 0;
+    }
+
+    if (semanticChunks.length === 0) {
+      return 0;
+    }
+
+    await this.vectorStorePort.ensureCollection(this.embeddingGeneratorPort.getDimensions());
+
+    const points: VectorPoint[] = semanticChunks.map((semanticChunk, index) => {
+      const vector = embeddings[index];
+
+      if (!vector) {
+        throw new Error(`Missing vector for semantic chunk index ${index}.`);
+      }
+
+      return {
+        id: this.buildPointId(semanticChunk, index),
+        vector,
+        payload: {
+          chunkId: semanticChunk.chunkId,
+          turnId: semanticChunk.turnId,
+          conversationId: semanticChunk.conversationId,
+          sourceFile: semanticChunk.sourceFile,
+          content: semanticChunk.content,
+          metadata: semanticChunk.metadata
+        }
+      };
+    });
+
+    await this.vectorStorePort.upsert(points);
+
+    this.logger.log(`Stored ${points.length} semantic chunks in vector storage.`);
+
+    return points.length;
+  }
+
   private buildMessagesBreakdown(
-    messages: KwoledgeIngestionMessage[]
+    messages: CleanedConversationMessage[]
   ): KwoledgeIngestionMessagesBreakdown {
     const sent = messages.filter((message) => message.direction === MessageDirection.Outgoing).length;
     const totalMessages = messages.length;
@@ -168,7 +181,7 @@ export class KwoledgeIngestionUseCase {
     );
   }
 
-  private buildLimits(messages: KwoledgeIngestionMessage[]): KwoledgeIngestionLimits {
+  private buildLimits(messages: CleanedConversationMessage[]): KwoledgeIngestionLimits {
     const dates = messages
       .map((message) => message.sentAt)
       .filter((sentAt): sentAt is Date => sentAt !== null)
@@ -205,7 +218,7 @@ export class KwoledgeIngestionUseCase {
     );
   }
 
-  private hasAssociatedMedia(message: KwoledgeIngestionMessage): boolean {
+  private hasAssociatedMedia(message: CleanedConversationMessage): boolean {
     const attachment = message.normalizedFields.attachment ?? '';
     const attachmentType = message.normalizedFields.attachmentType ?? '';
     const attachmentInfo = message.normalizedFields.attachmentInfo ?? '';
@@ -242,9 +255,9 @@ export class KwoledgeIngestionUseCase {
       .toLowerCase();
   }
 
-  private buildPointId(message: KwoledgeIngestionMessage, index: number): string {
+  private buildPointId(semanticChunk: SemanticConversationChunk, index: number): string {
     const hash = createHash('sha256')
-      .update(`${message.conversationId}|${message.externalId}|${message.text}|${index}`)
+      .update(`${semanticChunk.chunkId}|${semanticChunk.conversationId}|${index}`)
       .digest('hex');
 
     return this.toUuid(hash);

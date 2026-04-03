@@ -14,11 +14,12 @@ export class ServiceConfig {
   }
 
   public get qdrantUrl(): string {
-    return this.secretsConfig.values.qdrant.url;
+    return this.normalizeUrl(process.env.QDRANT_URL?.trim() || this.secretsConfig.values.qdrant.url);
   }
 
   public get qdrantApiKey(): string | undefined {
-    return this.secretsConfig.values.qdrant.apiKey ?? undefined;
+    const rawValue = process.env.QDRANT_API_KEY?.trim() ?? this.secretsConfig.values.qdrant.apiKey;
+    return rawValue ? rawValue.trim() : undefined;
   }
 
   public get qdrantCollectionName(): string {
@@ -54,5 +55,10 @@ export class ServiceConfig {
     }
 
     return parsed;
+  }
+
+  private normalizeUrl(url: string): string {
+    const parsed = new URL(url);
+    return parsed.toString().replace(/\/$/, '');
   }
 }

@@ -6,6 +6,10 @@ This project is focused on building a customer-service knowledge and operations 
 
 The initial scope is to process WhatsApp conversation exports (CSV files generated with iMazing), transform them into structured knowledge, and prepare them for semantic search using vector storage.
 
+High-level ingestion flow:
+
+`CSV -> parse -> clean -> structure -> chunk -> embed -> store`
+
 This foundation is intended to support future customer-service workflows such as faster context retrieval, conversation understanding, and operational analytics.
 
 ## Project Components

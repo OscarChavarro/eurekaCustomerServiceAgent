@@ -2,9 +2,9 @@ import { Injectable } from '@nestjs/common';
 import { basename } from 'node:path';
 import type { ConversationCsvRawRecord } from '../../ports/inbound/conversation-csv-source.port';
 import {
-  KwoledgeIngestionMessage,
   MessageDirection,
-  NormalizedConversationCsvFields
+  NormalizedConversationCsvFields,
+  RawConversationMessage
 } from './kwoledge-ingestion-message.model';
 
 type TranslatableField = keyof NormalizedConversationCsvFields;
@@ -57,13 +57,13 @@ const FIELD_TRANSLATION_TABLE: Record<string, TranslatableField> = {
 
 @Injectable()
 export class ConversationCsvRecordTranslatorService {
-  public translate(record: ConversationCsvRawRecord): KwoledgeIngestionMessage {
+  public translate(record: ConversationCsvRawRecord): RawConversationMessage {
     const normalizedFields = this.normalizeFields(record.fields);
     const fallbackConversationId = basename(record.sourceFile, '.csv');
     const conversationId = normalizedFields.chatSession ?? fallbackConversationId;
     const text = normalizedFields.text ?? '';
 
-    return new KwoledgeIngestionMessage(
+    return new RawConversationMessage(
       conversationId,
       this.buildExternalId(conversationId, record.rowNumber),
       this.parseDate(normalizedFields.sentDate ?? normalizedFields.messageDate),
@@ -76,7 +76,7 @@ export class ConversationCsvRecordTranslatorService {
     );
   }
 
-  public buildLogPayload(message: KwoledgeIngestionMessage): Record<string, unknown> {
+  public buildLogPayload(message: RawConversationMessage): Record<string, unknown> {
     return {
       sourceFile: message.sourceFile,
       rowNumber: message.rowNumber,

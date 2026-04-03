@@ -19,7 +19,7 @@ export class KwoledgeIngestionResult {
   constructor(
     public readonly folderPath: string,
     public readonly processedFiles: number,
-    public readonly indexedMessages: number,
+    public readonly indexedChunks: number,
     public readonly skippedMessages: number,
     public readonly messagesBreakdown: KwoledgeIngestionMessagesBreakdown,
     public readonly limits: KwoledgeIngestionLimits
