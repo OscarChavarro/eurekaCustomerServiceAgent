@@ -23,7 +23,7 @@ export class NormalizedConversationCsvFields {
   ) {}
 }
 
-export class KwoledgeIngestionMessage {
+export class RawConversationMessage {
   constructor(
     public readonly conversationId: string,
     public readonly externalId: string,
@@ -34,5 +34,43 @@ export class KwoledgeIngestionMessage {
     public readonly rowNumber: number,
     public readonly direction: MessageDirection,
     public readonly normalizedFields: NormalizedConversationCsvFields
+  ) {}
+}
+
+export class CleanedConversationMessage {
+  constructor(
+    public readonly conversationId: string,
+    public readonly externalId: string,
+    public readonly sentAt: Date | null,
+    public readonly sender: string | null,
+    public readonly cleanedText: string,
+    public readonly sourceFile: string,
+    public readonly rowNumber: number,
+    public readonly direction: MessageDirection,
+    public readonly normalizedFields: NormalizedConversationCsvFields
+  ) {}
+}
+
+export class StructuredConversationTurn {
+  constructor(
+    public readonly turnId: string,
+    public readonly conversationId: string,
+    public readonly sourceFile: string,
+    public readonly customerMessage: string,
+    public readonly agentMessage: string,
+    public readonly startedAt: Date | null,
+    public readonly endedAt: Date | null,
+    public readonly messageIds: string[]
+  ) {}
+}
+
+export class SemanticConversationChunk {
+  constructor(
+    public readonly chunkId: string,
+    public readonly turnId: string,
+    public readonly conversationId: string,
+    public readonly sourceFile: string,
+    public readonly content: string,
+    public readonly metadata: Record<string, unknown>
   ) {}
 }

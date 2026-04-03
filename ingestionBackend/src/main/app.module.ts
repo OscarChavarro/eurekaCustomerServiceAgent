@@ -4,8 +4,10 @@ import { IngestionController } from './adapters/inbound/http/ingestion.controlle
 import { LocalHashEmbeddingGeneratorAdapter } from './adapters/outbound/embeddings/local-hash-embedding-generator.adapter';
 import { QdrantVectorStoreAdapter } from './adapters/outbound/qdrant/qdrant-vector-store.adapter';
 import { TOKENS } from './application/ports/tokens';
+import { ConversationChunkingService } from './application/use-cases/kwoledge-ingestion/conversation-chunking.service';
 import { ConversationCsvRecordTranslatorService } from './application/use-cases/kwoledge-ingestion/conversation-csv-record-translator.service';
 import { ConversationMessageCleaningService } from './application/use-cases/kwoledge-ingestion/conversation-message-cleaning.service';
+import { ConversationStructuringService } from './application/use-cases/kwoledge-ingestion/conversation-structuring.service';
 import { KwoledgeIngestionUseCase } from './application/use-cases/kwoledge-ingestion/kwoledge-ingestion.use-case';
 import { ServiceConfigIngestionRuntimeConfigAdapter } from './infrastructure/config/adapters/service-config-ingestion-runtime-config.adapter';
 import { ServiceConfig } from './infrastructure/config/service.config';
@@ -24,6 +26,8 @@ import { SettingsConfig } from './infrastructure/config/settings/settings.config
     },
     ConversationCsvRecordTranslatorService,
     ConversationMessageCleaningService,
+    ConversationStructuringService,
+    ConversationChunkingService,
     KwoledgeIngestionUseCase,
     {
       provide: TOKENS.ConversationCsvSourcePort,
