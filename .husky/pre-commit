@@ -1,0 +1,2 @@
+cd ingestionBackend || exit 1
+npm run arch:check
