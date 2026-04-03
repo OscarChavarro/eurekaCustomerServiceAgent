@@ -1,0 +1,10 @@
+{
+  "service": {
+    "port": 3666,
+    "qdrantConnectionFailurePauseMinutes": 15,
+    "enableQdrantIngestion": false
+  },
+  "qdrant": {
+    "collectionName": "whatsapp_conversations"
+  }
+}
