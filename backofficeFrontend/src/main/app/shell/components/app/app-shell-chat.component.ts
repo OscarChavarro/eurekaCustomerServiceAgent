@@ -5,6 +5,7 @@ import {
   ChatConversation,
   ChatConversationService,
   ChatMessage,
+  ConversationViewMode,
 } from '../../services/chat-conversation.service';
 
 @Component({
@@ -20,6 +21,14 @@ export class AppShellChatComponent {
   protected readonly conversations = this.chatConversationService.conversations;
   protected readonly activeConversation = this.chatConversationService.activeConversation;
   protected readonly activeConversationId = this.chatConversationService.activeConversationId;
+  protected readonly viewMode = this.chatConversationService.viewMode;
+  protected readonly availableViewModes: ConversationViewMode[] = [
+    'raw',
+    'clean',
+    'structure',
+    'chunk',
+    'embed',
+  ];
   protected readonly filteredConversations = computed(() => {
     const normalizedSearchTerm = this.searchTermState().trim().toLowerCase();
 
@@ -38,6 +47,10 @@ export class AppShellChatComponent {
 
   protected selectConversation(conversationId: string): void {
     this.chatConversationService.setActiveConversation(conversationId);
+  }
+
+  protected selectViewMode(viewMode: ConversationViewMode): void {
+    this.chatConversationService.setViewMode(viewMode);
   }
 
   protected trackByConversation(_: number, conversation: ChatConversation): string {

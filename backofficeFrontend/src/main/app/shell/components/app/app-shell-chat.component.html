@@ -61,9 +61,16 @@
             <p>En linea</p>
           </div>
         </div>
-        <div class="header-actions">
-          <button type="button" aria-label="Buscar en conversacion">SR</button>
-          <button type="button" aria-label="Mas opciones">OP</button>
+        <div class="header-actions stage-actions">
+          @for (mode of availableViewModes; track mode) {
+            <button
+              type="button"
+              [class.is-active]="mode === viewMode()"
+              (click)="selectViewMode(mode)"
+            >
+              {{ mode }}
+            </button>
+          }
         </div>
       </header>
 
@@ -73,16 +80,24 @@
             class="message-bubble"
             [class.outgoing]="message.direction === 'outgoing'"
             [class.system]="message.direction === 'system'"
+            [class.has-group-color]="!!message.backgroundColor"
+            [style.background-color]="message.backgroundColor || null"
           >
-            <p>{{ message.text }}</p>
-            @if (message.direction !== 'system') {
-              <footer>
-                <time>{{ message.sentAt }}</time>
-                @if (message.direction === 'outgoing' && message.status) {
-                  <span class="message-status">{{ message.status }}</span>
-                }
-              </footer>
+            @if (message.showRawStrikethrough) {
+              <p class="message-text-raw">{{ message.rawText }}</p>
+              <p class="message-text-clean">{{ message.text }}</p>
+            } @else {
+              <p>{{ message.text }}</p>
             }
+            <footer>
+              <time>{{ message.sentAt }}</time>
+              @if (message.stageLabel) {
+                <span class="message-stage">{{ message.stageLabel }}</span>
+              }
+              @if (message.direction === 'outgoing' && message.status) {
+                <span class="message-status">{{ message.status }}</span>
+              }
+            </footer>
           </article>
         }
       </div>
