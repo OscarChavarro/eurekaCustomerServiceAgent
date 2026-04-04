@@ -9,6 +9,8 @@ export const secretsSettingsSchema = z.object({
     })
   }),
   embedding: z.object({
-    dimension: z.number().int().positive()
+    provider: z.string().trim().min(1),
+    host: z.string().trim().min(1),
+    port: z.number().int().positive()
   })
 });

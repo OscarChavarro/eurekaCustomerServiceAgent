@@ -2,7 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import type { IngestionRuntimeConfigPort } from '../../ports/config/ingestion-runtime-config.port';
 import type { ConversationCsvSourcePort } from '../../ports/inbound/conversation-csv-source.port';
-import type { EmbeddingGeneratorPort } from '../../ports/outbound/embedding-generator.port';
+import type { EmbeddingPort } from '../../ports/outbound/embedding.port';
 import type { VectorPoint, VectorStorePort } from '../../ports/outbound/vector-store.port';
 import { TOKENS } from '../../ports/tokens';
 import { ConversationChunkingService } from './conversation-chunking.service';
@@ -23,16 +23,38 @@ import {
   KwoledgeIngestionResult
 } from './kwoledge-ingestion.result';
 
+type EmbeddingPayloadRawMessage = {
+  conversationId: string;
+  externalId: string;
+  sentAt: string | null;
+  sender: string | null;
+  text: string;
+  sourceFile: string;
+  rowNumber: number;
+  direction: MessageDirection;
+  normalizedFields: Record<string, unknown>;
+};
+
+type EmbeddingChunkPayload = {
+  rawMessages: EmbeddingPayloadRawMessage[];
+  chunkMessage: string;
+};
+
+type EmbeddedChunk = {
+  semanticChunk: SemanticConversationChunk;
+  vector: number[];
+  payload: EmbeddingChunkPayload;
+};
+
 @Injectable()
 export class KwoledgeIngestionUseCase {
   private readonly logger = new Logger(KwoledgeIngestionUseCase.name);
-  private readonly embeddingStageReady = false;
 
   constructor(
     @Inject(TOKENS.ConversationCsvSourcePort)
     private readonly conversationCsvSourcePort: ConversationCsvSourcePort,
-    @Inject(TOKENS.EmbeddingGeneratorPort)
-    private readonly embeddingGeneratorPort: EmbeddingGeneratorPort,
+    @Inject(TOKENS.EmbeddingPort)
+    private readonly embeddingPort: EmbeddingPort,
     @Inject(TOKENS.VectorStorePort)
     private readonly vectorStorePort: VectorStorePort,
     @Inject(TOKENS.IngestionRuntimeConfigPort)
@@ -65,8 +87,8 @@ export class KwoledgeIngestionUseCase {
       this.logger.warn(`No semantic chunks found in folder ${command.folderPath}.`);
     }
 
-    const embeddings = await this.runEmbeddingStage(semanticChunks);
-    const indexedChunks = await this.runStorageStage(semanticChunks, embeddings);
+    const embeddedChunks = await this.runEmbeddingStage(rawMessages, semanticChunks);
+    const indexedChunks = await this.runStorageStage(embeddedChunks);
 
     return new KwoledgeIngestionResult(
       command.folderPath,
@@ -102,89 +124,143 @@ export class KwoledgeIngestionUseCase {
   }
 
   private async runEmbeddingStage(
+    rawMessages: RawConversationMessage[],
     semanticChunks: SemanticConversationChunk[]
-  ): Promise<number[][] | null> {
-    if (!this.embeddingStageReady) {
-      this.logStageAsJson('EMBED', {
-        status: 'planned',
-        reason: 'Embedding stage planned. Waiting for finalized cleaning rules.'
-      });
-      return null;
-    }
-
-    if (!this.ingestionRuntimeConfigPort.isQdrantIngestionEnabled()) {
-      this.logStageAsJson('EMBED', {
-        status: 'disabled',
-        reason: 'Embedding stage disabled by configuration.'
-      });
-      return null;
-    }
-
+  ): Promise<EmbeddedChunk[]> {
     if (semanticChunks.length === 0) {
       this.logStageAsJson('EMBED', []);
       return [];
     }
 
-    const embeddings = await this.embeddingGeneratorPort.generateEmbeddings(
-      semanticChunks.map((chunk) => chunk.content)
-    );
+    const rawMessagesByExternalId = this.buildRawMessagesIndex(rawMessages);
+    const embeddedChunks: EmbeddedChunk[] = [];
+    const stagePayload: Array<{
+      chunkId: string;
+      payload: EmbeddingChunkPayload;
+      dimensions: number;
+      first10: number[];
+    }> = [];
 
-    if (embeddings.length !== semanticChunks.length) {
-      throw new Error('Embedding generator returned an unexpected number of vectors.');
+    for (const chunk of semanticChunks) {
+      const payload = this.buildEmbeddingPayload(chunk, rawMessagesByExternalId);
+      const vector = await this.embeddingPort.generateEmbedding(payload.chunkMessage);
+      embeddedChunks.push({
+        semanticChunk: chunk,
+        vector,
+        payload
+      });
+
+      const first10Dimensions = vector.slice(0, 10);
+      stagePayload.push({
+        chunkId: chunk.chunkId,
+        payload,
+        dimensions: vector.length,
+        first10: first10Dimensions
+      });
     }
 
-    this.logStageAsJson('EMBED', embeddings);
+    this.logStageAsJson('EMBED', stagePayload);
 
-    return embeddings;
+    return embeddedChunks;
   }
 
-  private async runStorageStage(
-    semanticChunks: SemanticConversationChunk[],
-    embeddings: number[][] | null
-  ): Promise<number> {
-    if (!embeddings) {
+  private async runStorageStage(embeddedChunks: EmbeddedChunk[]): Promise<number> {
+    if (!this.ingestionRuntimeConfigPort.isQdrantIngestionEnabled()) {
       this.logStageAsJson('STORE', {
         status: 'planned',
-        reason: 'Storage stage planned. Waiting for embedding stage activation.'
+        reason: 'Storage stage planned. Waiting for storage stage activation.'
       });
       return 0;
     }
 
-    if (semanticChunks.length === 0) {
+    if (embeddedChunks.length === 0) {
       this.logStageAsJson('STORE', []);
       return 0;
     }
 
-    await this.vectorStorePort.ensureCollection(this.embeddingGeneratorPort.getDimensions());
+    await this.vectorStorePort.ensureCollection(embeddedChunks[0]?.vector.length ?? 0);
 
-    const points: VectorPoint[] = semanticChunks.map((semanticChunk, index) => {
-      const vector = embeddings[index];
+    const points: VectorPoint[] = embeddedChunks.map((embeddedChunk, index) => {
+      const vector = embeddedChunk.vector;
 
       if (!vector) {
         throw new Error(`Missing vector for semantic chunk index ${index}.`);
       }
 
       return {
-        id: this.buildPointId(semanticChunk, index),
+        id: this.buildPointId(embeddedChunk.semanticChunk, index),
         vector,
-        payload: {
-          chunkId: semanticChunk.chunkId,
-          turnId: semanticChunk.turnId,
-          conversationId: semanticChunk.conversationId,
-          sourceFile: semanticChunk.sourceFile,
-          content: semanticChunk.content,
-          metadata: semanticChunk.metadata
-        }
+        payload: embeddedChunk.payload
       };
     });
 
-    this.logStageAsJson('STORE', points);
+    this.logStageAsJson(
+      'STORE',
+      points.map((point) => ({
+        id: point.id,
+        vectorDimensions: point.vector.length,
+        vectorFirst10: point.vector.slice(0, 10),
+        payload: point.payload
+      }))
+    );
 
     await this.vectorStorePort.upsert(points);
 
     this.logger.log(`Stored ${points.length} semantic chunks in vector storage.`);
 
     return points.length;
+  }
+
+  private buildRawMessagesIndex(
+    rawMessages: RawConversationMessage[]
+  ): Map<string, RawConversationMessage> {
+    const rawMessagesByExternalId = new Map<string, RawConversationMessage>();
+
+    for (const rawMessage of rawMessages) {
+      rawMessagesByExternalId.set(rawMessage.externalId, rawMessage);
+    }
+
+    return rawMessagesByExternalId;
+  }
+
+  private buildEmbeddingPayload(
+    semanticChunk: SemanticConversationChunk,
+    rawMessagesByExternalId: Map<string, RawConversationMessage>
+  ): EmbeddingChunkPayload {
+    const messageIds = this.extractChunkMessageIds(semanticChunk);
+    const rawMessages = messageIds
+      .map((messageId) => rawMessagesByExternalId.get(messageId))
+      .filter((rawMessage): rawMessage is RawConversationMessage => rawMessage !== undefined)
+      .map((rawMessage) => this.toEmbeddingPayloadRawMessage(rawMessage));
+
+    return {
+      rawMessages,
+      chunkMessage: semanticChunk.content
+    };
+  }
+
+  private extractChunkMessageIds(semanticChunk: SemanticConversationChunk): string[] {
+    const messageIds = semanticChunk.metadata.messageIds;
+
+    if (!Array.isArray(messageIds)) {
+      return [];
+    }
+
+    return messageIds.filter((messageId): messageId is string => typeof messageId === 'string');
+  }
+
+  private toEmbeddingPayloadRawMessage(rawMessage: RawConversationMessage): EmbeddingPayloadRawMessage {
+    return {
+      conversationId: rawMessage.conversationId,
+      externalId: rawMessage.externalId,
+      sentAt: rawMessage.sentAt?.toISOString() ?? null,
+      sender: rawMessage.sender,
+      text: rawMessage.text,
+      sourceFile: rawMessage.sourceFile,
+      rowNumber: rawMessage.rowNumber,
+      direction: rawMessage.direction,
+      normalizedFields: rawMessage.normalizedFields as unknown as Record<string, unknown>
+    };
   }
 
   private logStageAsJson(stage: string, payload: unknown): void {

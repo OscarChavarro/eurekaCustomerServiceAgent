@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { FileSystemConversationCsvSourceAdapter } from './adapters/inbound/csv/file-system-conversation-csv-source.adapter';
 import { IngestionController } from './adapters/inbound/http/ingestion.controller';
-import { LocalHashEmbeddingGeneratorAdapter } from './adapters/outbound/embeddings/local-hash-embedding-generator.adapter';
+import { BgeEmbeddingAdapter } from './adapters/outbound/embeddings/bge-embedding.adapter';
 import { QdrantVectorStoreAdapter } from './adapters/outbound/qdrant/qdrant-vector-store.adapter';
 import { TOKENS } from './application/ports/tokens';
 import { ConversationChunkingService } from './application/use-cases/kwoledge-ingestion/conversation-chunking.service';
@@ -34,8 +34,8 @@ import { SettingsConfig } from './infrastructure/config/settings/settings.config
       useClass: FileSystemConversationCsvSourceAdapter
     },
     {
-      provide: TOKENS.EmbeddingGeneratorPort,
-      useClass: LocalHashEmbeddingGeneratorAdapter
+      provide: TOKENS.EmbeddingPort,
+      useClass: BgeEmbeddingAdapter
     },
     {
       provide: TOKENS.VectorStorePort,
