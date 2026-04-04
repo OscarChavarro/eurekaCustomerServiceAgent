@@ -1,0 +1,97 @@
+<div class="chat-workspace">
+  <aside class="left-sidebar" aria-label="Menu principal">
+    <button class="sidebar-button is-active" type="button" aria-label="Chats">CH</button>
+    <button class="sidebar-button" type="button" aria-label="Estadisticas">ST</button>
+    <button class="sidebar-button" type="button" aria-label="Clientes">CL</button>
+    <button class="sidebar-button" type="button" aria-label="Calendario">CA</button>
+    <button class="sidebar-button" type="button" aria-label="Configuracion">CF</button>
+  </aside>
+
+  <section class="conversation-list" aria-label="Lista de conversaciones">
+    <header class="panel-header">
+      <h1>Conversaciones</h1>
+      <button type="button" class="panel-action" aria-label="Nueva conversacion">+</button>
+    </header>
+
+    <label class="search-box" aria-label="Buscar conversacion">
+      <span>?</span>
+      <input
+        type="text"
+        placeholder="Buscar o iniciar un nuevo chat"
+        (input)="setSearchTerm($any($event.target).value)"
+      />
+    </label>
+
+    <div class="conversation-items">
+      @for (
+        conversation of filteredConversations();
+        track trackByConversation($index, conversation)
+      ) {
+        <button
+          class="conversation-item"
+          type="button"
+          [class.is-active]="conversation.id === activeConversationId()"
+          (click)="selectConversation(conversation.id)"
+        >
+          <span class="avatar">{{ conversation.contactAvatar }}</span>
+          <span class="conversation-main">
+            <span class="conversation-top-row">
+              <span class="contact-name">{{ conversation.contactName }}</span>
+              <span class="message-time">{{ conversation.lastMessageAt }}</span>
+            </span>
+            <span class="conversation-bottom-row">
+              <span class="message-preview">{{ conversation.lastMessagePreview }}</span>
+              @if (conversation.unreadCount > 0) {
+                <span class="unread-pill">{{ conversation.unreadCount }}</span>
+              }
+            </span>
+          </span>
+        </button>
+      }
+    </div>
+  </section>
+
+  <section class="conversation-panel" aria-label="Mensajes de la conversacion">
+    @if (activeConversation(); as currentConversation) {
+      <header class="panel-header conversation-header">
+        <div class="profile-pill">
+          <span class="avatar">{{ currentConversation.contactAvatar }}</span>
+          <div>
+            <strong>{{ currentConversation.contactName }}</strong>
+            <p>En linea</p>
+          </div>
+        </div>
+        <div class="header-actions">
+          <button type="button" aria-label="Buscar en conversacion">SR</button>
+          <button type="button" aria-label="Mas opciones">OP</button>
+        </div>
+      </header>
+
+      <div class="messages-area">
+        @for (message of currentConversation.messages; track trackByMessage($index, message)) {
+          <article
+            class="message-bubble"
+            [class.outgoing]="message.direction === 'outgoing'"
+            [class.system]="message.direction === 'system'"
+          >
+            <p>{{ message.text }}</p>
+            @if (message.direction !== 'system') {
+              <footer>
+                <time>{{ message.sentAt }}</time>
+                @if (message.direction === 'outgoing' && message.status) {
+                  <span class="message-status">{{ message.status }}</span>
+                }
+              </footer>
+            }
+          </article>
+        }
+      </div>
+
+      <footer class="composer-row">
+        <button type="button" aria-label="Adjuntar archivo">+</button>
+        <input type="text" placeholder="Escribe un mensaje" aria-label="Escribe un mensaje" />
+        <button type="button" aria-label="Enviar mensaje">EN</button>
+      </footer>
+    }
+  </section>
+</div>
