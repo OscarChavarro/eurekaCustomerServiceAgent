@@ -29,8 +29,7 @@ export class ConversationMessageCleaningService {
   }
 
   private cleanText(text: string): string {
-    const withoutEmoji = text.replace(/[\p{Extended_Pictographic}\p{Emoji_Presentation}]/gu, '');
-    const withoutArtifacts = withoutEmoji
+    const withoutArtifacts = text
       .replace(/<media omitted>/gi, ' ')
       .replace(/\[(image|video|audio|document) omitted\]/gi, ' ')
       .replace(/\u200e|\u200f|\u2060/g, ' ');

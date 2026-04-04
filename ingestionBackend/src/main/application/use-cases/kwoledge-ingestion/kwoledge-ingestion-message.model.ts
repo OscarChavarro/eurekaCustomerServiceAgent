@@ -56,8 +56,8 @@ export class StructuredConversationTurn {
     public readonly turnId: string,
     public readonly conversationId: string,
     public readonly sourceFile: string,
-    public readonly customerMessage: string,
-    public readonly agentMessage: string,
+    public readonly question: string,
+    public readonly answer: string,
     public readonly startedAt: Date | null,
     public readonly endedAt: Date | null,
     public readonly messageIds: string[]
