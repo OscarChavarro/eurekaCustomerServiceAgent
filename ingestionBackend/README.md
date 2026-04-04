@@ -23,6 +23,16 @@ Current stage implementation:
 - `embed`: BGE embedding service via HTTP (`/embed`) generating one vector per semantic chunk.
 - `store`: wired through `VectorStorePort`; can stay disabled with `service.enableQdrantIngestion=false` while validating embedding quality.
 
+## Processing Debug Output
+
+- Stage payloads are persisted per conversation in `output/<processedConversationsFolderName>`.
+- One JSON file is generated per `conversationId`.
+- Console output only prints `<conversationId> - <phase>` (for `raw`, `clean`, `structure`, `chunk`, `embed`).
+- On service startup, the output folder is validated for write access (created if missing).
+- If write access fails, service logs:
+  `Can not write to folder <path> ... Waiting for pod to allow debugging...`
+  then pauses using `service.qdrantConnectionFailurePauseMinutes` and exits.
+
 ## Qdrant Installation
 
 Use Docker to install and run Qdrant:
@@ -145,5 +155,6 @@ npm run start:dev
 
 - Non-secret settings: `src/main/infrastructure/config/settings/environment.json`
 - Secret/runtime settings: `secrets.json` (use `secrets-example.json` as template)
+- Processed conversations output folder name is configured with `service.processedConversationsFolderName`.
 - Embedding service secrets are configured under `embedding.provider`, `embedding.host`, and `embedding.port`.
 - Set `service.enableQdrantIngestion` to `false` to keep storage ingestion disabled while refining cleaning/structuring/chunking quality.

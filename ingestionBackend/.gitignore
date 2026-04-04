@@ -4,3 +4,4 @@ secrets.json
 dist
 coverage
 .DS_Store
+output/processedConversations/*

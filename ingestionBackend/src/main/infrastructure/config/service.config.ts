@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { resolve } from 'node:path';
 import { SecretsConfig } from './settings/secrets.config';
 import { SettingsConfig } from './settings/settings.config';
 
@@ -53,6 +54,14 @@ export class ServiceConfig {
       host,
       port
     };
+  }
+
+  public get processedConversationsOutputPath(): string {
+    return resolve(
+      process.cwd(),
+      'output',
+      this.settingsConfig.values.service.processedConversationsFolderName
+    );
   }
 
   private readPositiveInt(name: string, fallback: number): number {

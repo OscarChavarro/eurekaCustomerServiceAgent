@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import {
   CleanedConversationMessage,
   RawConversationMessage
@@ -6,8 +6,6 @@ import {
 
 @Injectable()
 export class ConversationMessageCleaningService {
-  private readonly logger = new Logger(ConversationMessageCleaningService.name);
-
   public clean(rawMessages: RawConversationMessage[]): CleanedConversationMessage[] {
     return rawMessages.map((rawMessage) => {
       const cleanedText = this.cleanText(rawMessage.text);
