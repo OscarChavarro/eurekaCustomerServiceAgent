@@ -39,8 +39,8 @@ export class ConversationChunkingService {
   }
 
   private buildChunkContent(turn: StructuredConversationTurn): string {
-    const customerLine = turn.customerMessage ? `Customer: ${turn.customerMessage}` : '';
-    const agentLine = turn.agentMessage ? `Agent: ${turn.agentMessage}` : '';
+    const customerLine = turn.question ? `Cliente: ${turn.question}` : '';
+    const agentLine = turn.answer ? `Agente: ${turn.answer}` : '';
 
     return [customerLine, agentLine].filter((line) => line.length > 0).join('\n').trim();
   }

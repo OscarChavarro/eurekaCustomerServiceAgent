@@ -5,5 +5,5 @@ export interface ConversationCsvRawRecord {
 }
 
 export interface ConversationCsvSourcePort {
-  readFromFolder(folderPath: string): Promise<ConversationCsvRawRecord[]>;
+  readFromPath(path: string): Promise<ConversationCsvRawRecord[]>;
 }

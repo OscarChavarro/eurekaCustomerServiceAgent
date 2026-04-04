@@ -45,9 +45,16 @@ export class KwoledgeIngestionUseCase {
 
   public async execute(command: KwoledgeIngestionCommand): Promise<KwoledgeIngestionResult> {
     const rawMessages = await this.loadRawMessages(command.folderPath);
+    this.logStageAsJson('RAW', rawMessages);
+
     const cleanedMessages = this.runCleaningStage(rawMessages);
+    this.logStageAsJson('CLEAN', cleanedMessages);
+
     const structuredTurns = this.runStructuringStage(cleanedMessages);
+    this.logStageAsJson('STRUCTURE', structuredTurns);
+
     const semanticChunks = this.runChunkingStage(structuredTurns);
+    this.logStageAsJson('CHUNK', semanticChunks);
 
     const uniqueFiles = new Set(cleanedMessages.map((message) => message.sourceFile));
     const messagesBreakdown = this.buildMessagesBreakdown(cleanedMessages);
@@ -72,11 +79,10 @@ export class KwoledgeIngestionUseCase {
   }
 
   private async loadRawMessages(folderPath: string): Promise<RawConversationMessage[]> {
-    const rawRecords = await this.conversationCsvSourcePort.readFromFolder(folderPath);
+    const rawRecords = await this.conversationCsvSourcePort.readFromPath(folderPath);
 
     return rawRecords.map((record) => {
       const rawMessage = this.conversationCsvRecordTranslatorService.translate(record);
-      this.logger.log(JSON.stringify(this.conversationCsvRecordTranslatorService.buildLogPayload(rawMessage)));
       return rawMessage;
     });
   }
@@ -99,16 +105,23 @@ export class KwoledgeIngestionUseCase {
     semanticChunks: SemanticConversationChunk[]
   ): Promise<number[][] | null> {
     if (!this.embeddingStageReady) {
-      this.logger.log('Embedding stage planned. Waiting for finalized cleaning rules.');
+      this.logStageAsJson('EMBED', {
+        status: 'planned',
+        reason: 'Embedding stage planned. Waiting for finalized cleaning rules.'
+      });
       return null;
     }
 
     if (!this.ingestionRuntimeConfigPort.isQdrantIngestionEnabled()) {
-      this.logger.log('Embedding stage disabled by configuration.');
+      this.logStageAsJson('EMBED', {
+        status: 'disabled',
+        reason: 'Embedding stage disabled by configuration.'
+      });
       return null;
     }
 
     if (semanticChunks.length === 0) {
+      this.logStageAsJson('EMBED', []);
       return [];
     }
 
@@ -120,6 +133,8 @@ export class KwoledgeIngestionUseCase {
       throw new Error('Embedding generator returned an unexpected number of vectors.');
     }
 
+    this.logStageAsJson('EMBED', embeddings);
+
     return embeddings;
   }
 
@@ -128,11 +143,15 @@ export class KwoledgeIngestionUseCase {
     embeddings: number[][] | null
   ): Promise<number> {
     if (!embeddings) {
-      this.logger.log('Storage stage planned. Waiting for embedding stage activation.');
+      this.logStageAsJson('STORE', {
+        status: 'planned',
+        reason: 'Storage stage planned. Waiting for embedding stage activation.'
+      });
       return 0;
     }
 
     if (semanticChunks.length === 0) {
+      this.logStageAsJson('STORE', []);
       return 0;
     }
 
@@ -159,11 +178,18 @@ export class KwoledgeIngestionUseCase {
       };
     });
 
+    this.logStageAsJson('STORE', points);
+
     await this.vectorStorePort.upsert(points);
 
     this.logger.log(`Stored ${points.length} semantic chunks in vector storage.`);
 
     return points.length;
+  }
+
+  private logStageAsJson(stage: string, payload: unknown): void {
+    this.logger.log(`= ${stage} ===================`);
+    this.logger.log(JSON.stringify(payload, null, 2));
   }
 
   private buildMessagesBreakdown(
