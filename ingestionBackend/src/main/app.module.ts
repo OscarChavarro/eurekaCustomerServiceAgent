@@ -3,6 +3,9 @@ import { FileSystemConversationCsvSourceAdapter } from './adapters/inbound/csv/f
 import { IngestionController } from './adapters/inbound/http/ingestion.controller';
 import { FileSystemProcessedConversationStageStoreAdapter } from './adapters/outbound/debug/file-system-processed-conversation-stage-store.adapter';
 import { BgeEmbeddingAdapter } from './adapters/outbound/embeddings/bge-embedding.adapter';
+import { MongoClientProvider } from './adapters/outbound/mongo/mongo-client.provider';
+import { MongoConversationsRepositoryAdapter } from './adapters/outbound/mongo/mongo-conversations.repository.adapter';
+import { MongoEmbeddingsRepositoryAdapter } from './adapters/outbound/mongo/mongo-embeddings.repository.adapter';
 import { QdrantVectorStoreAdapter } from './adapters/outbound/qdrant/qdrant-vector-store.adapter';
 import { TOKENS } from './application/ports/tokens';
 import { ConversationChunkingService } from './application/use-cases/kwoledge-ingestion/conversation-chunking.service';
@@ -12,6 +15,7 @@ import { ConversationStructuringService } from './application/use-cases/kwoledge
 import { KwoledgeIngestionUseCase } from './application/use-cases/kwoledge-ingestion/kwoledge-ingestion.use-case';
 import { StartupValidationOrchestrator } from './infrastructure/bootstrap/startup-validation.orchestrator';
 import { BgeConnectivityStartupValidator } from './infrastructure/bootstrap/validators/bge-connectivity-startup.validator';
+import { MongoConnectivityStartupValidator } from './infrastructure/bootstrap/validators/mongo-connectivity-startup.validator';
 import { ProcessedConversationsFolderStartupValidator } from './infrastructure/bootstrap/validators/processed-conversations-folder-startup.validator';
 import { QdrantConnectivityStartupValidator } from './infrastructure/bootstrap/validators/qdrant-connectivity-startup.validator';
 import { ServiceConfigIngestionRuntimeConfigAdapter } from './infrastructure/config/adapters/service-config-ingestion-runtime-config.adapter';
@@ -25,7 +29,9 @@ import { SettingsConfig } from './infrastructure/config/settings/settings.config
     SettingsConfig,
     SecretsConfig,
     ServiceConfig,
+    MongoClientProvider,
     ProcessedConversationsFolderStartupValidator,
+    MongoConnectivityStartupValidator,
     QdrantConnectivityStartupValidator,
     BgeConnectivityStartupValidator,
     StartupValidationOrchestrator,
@@ -53,6 +59,14 @@ import { SettingsConfig } from './infrastructure/config/settings/settings.config
     {
       provide: TOKENS.ProcessedConversationStageStorePort,
       useClass: FileSystemProcessedConversationStageStoreAdapter
+    },
+    {
+      provide: TOKENS.ConversationsRepositoryPort,
+      useClass: MongoConversationsRepositoryAdapter
+    },
+    {
+      provide: TOKENS.EmbeddingsRepositoryPort,
+      useClass: MongoEmbeddingsRepositoryAdapter
     }
   ]
 })

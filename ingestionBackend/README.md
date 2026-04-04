@@ -33,6 +33,34 @@ Current stage implementation:
   `Can not write to folder <path> ... Waiting for pod to allow debugging...`
   then pauses using `service.qdrantConnectionFailurePauseMinutes` and exits.
 
+## MongoDB Observability
+
+- MongoDB is used as an additional persistence layer for visualization and debugging.
+- Startup includes a MongoDB connectivity validation.
+- If MongoDB is not reachable, the service logs:
+  `Cannot connect to MongoDB, waiting for pod to become available`
+  then pauses using `service.qdrantConnectionFailurePauseMinutes` and exits.
+
+Collections:
+
+- `conversations` (one document per conversation):
+  - `_id` (`conversationId`)
+  - `rawMessages`
+  - `cleanedMessages`
+  - `structuredMessages`
+  - `chunkedMessages`
+  - `metadata` (`createdAt`, `source`)
+- `embeddings` (one document per chunk):
+  - `_id` (`embeddingId`)
+  - `conversationId`
+  - `chunkIndex`
+  - `chunkId`
+  - `text`
+  - `vector`
+  - `createdAt`
+
+The pipeline updates `conversations` after each stage (`raw`, `clean`, `structure`, `chunk`) and persists chunk vectors into `embeddings` during `embed`.
+
 ## Qdrant Installation
 
 Use Docker to install and run Qdrant:
@@ -157,4 +185,5 @@ npm run start:dev
 - Secret/runtime settings: `secrets.json` (use `secrets-example.json` as template)
 - Processed conversations output folder name is configured with `service.processedConversationsFolderName`.
 - Embedding service secrets are configured under `embedding.provider`, `embedding.host`, and `embedding.port`.
+- MongoDB secrets are configured under `mongo.host`, `mongo.port`, `mongo.database`, `mongo.username`, and `mongo.password`.
 - Set `service.enableQdrantIngestion` to `false` to keep storage ingestion disabled while refining cleaning/structuring/chunking quality.

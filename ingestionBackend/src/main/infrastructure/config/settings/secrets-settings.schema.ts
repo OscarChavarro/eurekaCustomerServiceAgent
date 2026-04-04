@@ -12,5 +12,12 @@ export const secretsSettingsSchema = z.object({
     provider: z.string().trim().min(1),
     host: z.string().trim().min(1),
     port: z.number().int().positive()
+  }),
+  mongo: z.object({
+    host: z.string().trim().min(1),
+    port: z.number().int().positive(),
+    database: z.string().trim().min(1),
+    username: z.string().trim().min(1),
+    password: z.string().trim().min(1)
   })
 });
