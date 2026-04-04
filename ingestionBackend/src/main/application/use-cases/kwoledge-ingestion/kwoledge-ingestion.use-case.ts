@@ -2,7 +2,12 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import type { IngestionRuntimeConfigPort } from '../../ports/config/ingestion-runtime-config.port';
 import type { ConversationCsvSourcePort } from '../../ports/inbound/conversation-csv-source.port';
+import type { ConversationsRepositoryPort } from '../../ports/outbound/conversations-repository.port';
 import type { EmbeddingPort } from '../../ports/outbound/embedding.port';
+import type {
+  EmbeddingRepositoryRecord,
+  EmbeddingsRepositoryPort
+} from '../../ports/outbound/embeddings-repository.port';
 import type { ProcessedConversationStageStorePort } from '../../ports/outbound/processed-conversation-stage-store.port';
 import type { VectorPoint, VectorStorePort } from '../../ports/outbound/vector-store.port';
 import { TOKENS } from '../../ports/tokens';
@@ -43,11 +48,12 @@ type EmbeddingChunkPayload = {
 
 type EmbeddedChunk = {
   semanticChunk: SemanticConversationChunk;
+  chunkIndex: number;
   vector: number[];
   payload: EmbeddingChunkPayload;
 };
 
-type StageDirection = 'user_to_agent' | 'agent_to_user';
+type StageDirection = 'customer_to_agent' | 'agent_to_customer';
 type RawStageDirection = StageDirection | 'whatsapAuto';
 
 type RawStageMessage = {
@@ -105,6 +111,10 @@ export class KwoledgeIngestionUseCase {
     private readonly embeddingPort: EmbeddingPort,
     @Inject(TOKENS.VectorStorePort)
     private readonly vectorStorePort: VectorStorePort,
+    @Inject(TOKENS.ConversationsRepositoryPort)
+    private readonly conversationsRepositoryPort: ConversationsRepositoryPort,
+    @Inject(TOKENS.EmbeddingsRepositoryPort)
+    private readonly embeddingsRepositoryPort: EmbeddingsRepositoryPort,
     @Inject(TOKENS.ProcessedConversationStageStorePort)
     private readonly processedConversationStageStorePort: ProcessedConversationStageStorePort,
     @Inject(TOKENS.IngestionRuntimeConfigPort)
@@ -133,6 +143,12 @@ export class KwoledgeIngestionUseCase {
       const currentPosition = index + 1;
       const conversationRawMessages = rawByConversation.get(conversationId) ?? [];
 
+      const rawStageMessages = conversationRawMessages.map((message) => this.toRawStageMessage(message));
+      await this.conversationsRepositoryPort.upsertRawMessages(
+        conversationId,
+        rawStageMessages,
+        this.buildConversationMetadata(conversationRawMessages)
+      );
       this.logConversationPhase(currentPosition, totalConversations, conversationId, 'raw');
 
       const conversationCleanedMessages = this.runCleaningStage(conversationRawMessages);
@@ -140,13 +156,25 @@ export class KwoledgeIngestionUseCase {
       skippedMessages += conversationCleanedMessages.filter(
         (message) => message.cleanedText.length === 0
       ).length;
+      await this.conversationsRepositoryPort.upsertCleanedMessages(
+        conversationId,
+        conversationCleanedMessages.map((message) => this.toCleanedStageMessage(message))
+      );
       this.logConversationPhase(currentPosition, totalConversations, conversationId, 'clean');
 
       const conversationStructuredTurns = this.runStructuringStage(conversationCleanedMessages);
+      await this.conversationsRepositoryPort.upsertStructuredMessages(
+        conversationId,
+        conversationStructuredTurns.map((turn) => this.toStructuredStageMessage(turn))
+      );
       this.logConversationPhase(currentPosition, totalConversations, conversationId, 'structure');
 
       const conversationSemanticChunks = this.runChunkingStage(conversationStructuredTurns);
       allSemanticChunks.push(...conversationSemanticChunks);
+      await this.conversationsRepositoryPort.upsertChunkedMessages(
+        conversationId,
+        conversationSemanticChunks.map((chunk) => this.toChunkStageMessage(chunk))
+      );
       this.logConversationPhase(currentPosition, totalConversations, conversationId, 'chunk');
 
       const conversationEmbeddedChunks = await this.runEmbeddingStage(
@@ -154,6 +182,7 @@ export class KwoledgeIngestionUseCase {
         conversationSemanticChunks
       );
       allEmbeddedChunks.push(...conversationEmbeddedChunks);
+      await this.persistEmbeddings(conversationEmbeddedChunks);
       this.logConversationPhase(currentPosition, totalConversations, conversationId, 'embed');
 
       await this.persistProcessedConversation(
@@ -218,11 +247,12 @@ export class KwoledgeIngestionUseCase {
     const rawMessagesByExternalId = this.buildRawMessagesIndex(rawMessages);
     const embeddedChunks: EmbeddedChunk[] = [];
 
-    for (const chunk of semanticChunks) {
+    for (const [chunkIndex, chunk] of semanticChunks.entries()) {
       const payload = this.buildEmbeddingPayload(chunk, rawMessagesByExternalId);
       const vector = await this.embeddingPort.generateEmbedding(payload.chunkMessage);
       embeddedChunks.push({
         semanticChunk: chunk,
+        chunkIndex,
         vector,
         payload
       });
@@ -294,27 +324,23 @@ export class KwoledgeIngestionUseCase {
     return {
       conversationId,
       rawMessages: rawMessages.map((message) => this.toRawStageMessage(message)),
-      cleanedMessages: cleanedMessages.map((message) => ({
-        externalId: message.externalId,
-        direction: this.toStageDirection(message.direction),
-        text: message.cleanedText
-      })),
-      structuredMessages: structuredTurns.map((turn) => ({
-        turnId: turn.turnId,
-        question: turn.question,
-        answer: turn.answer,
-        messageIds: turn.messageIds
-      })),
-      chunks: semanticChunks.map((chunk) => ({
-        chunkId: chunk.chunkId,
-        chunkMessage: chunk.content,
-        messageIds: this.extractChunkMessageIds(chunk)
-      })),
+      cleanedMessages: cleanedMessages.map((message) => this.toCleanedStageMessage(message)),
+      structuredMessages: structuredTurns.map((turn) => this.toStructuredStageMessage(turn)),
+      chunks: semanticChunks.map((chunk) => this.toChunkStageMessage(chunk)),
       embed: embeddedChunks.map((embeddedChunk) => ({
         chunkId: embeddedChunk.semanticChunk.chunkId,
         vector: embeddedChunk.vector
       }))
     };
+  }
+
+  private async persistEmbeddings(embeddedChunks: EmbeddedChunk[]): Promise<void> {
+    if (embeddedChunks.length === 0) {
+      return;
+    }
+
+    const records = embeddedChunks.map((embeddedChunk) => this.toEmbeddingRepositoryRecord(embeddedChunk));
+    await this.embeddingsRepositoryPort.upsertEmbeddings(records);
   }
 
   private logConversationPhase(
@@ -394,6 +420,31 @@ export class KwoledgeIngestionUseCase {
     };
   }
 
+  private toEmbeddingRepositoryRecord(embeddedChunk: EmbeddedChunk): EmbeddingRepositoryRecord {
+    return {
+      embeddingId: this.buildEmbeddingId(
+        embeddedChunk.semanticChunk.conversationId,
+        embeddedChunk.chunkIndex
+      ),
+      conversationId: embeddedChunk.semanticChunk.conversationId,
+      chunkIndex: embeddedChunk.chunkIndex,
+      chunkId: embeddedChunk.semanticChunk.chunkId,
+      text: embeddedChunk.semanticChunk.content,
+      vector: embeddedChunk.vector,
+      createdAt: new Date()
+    };
+  }
+
+  private buildConversationMetadata(rawMessages: RawConversationMessage[]): {
+    createdAt: Date;
+    source: string;
+  } {
+    return {
+      createdAt: new Date(),
+      source: rawMessages[0]?.sourceFile ?? 'unknown'
+    };
+  }
+
   private toRawStageMessage(rawMessage: RawConversationMessage): RawStageMessage {
     return {
       externalId: rawMessage.externalId,
@@ -407,13 +458,38 @@ export class KwoledgeIngestionUseCase {
     };
   }
 
+  private toCleanedStageMessage(message: CleanedConversationMessage): CleanedStageMessage {
+    return {
+      externalId: message.externalId,
+      direction: this.toStageDirection(message.direction),
+      text: message.cleanedText
+    };
+  }
+
+  private toStructuredStageMessage(turn: StructuredConversationTurn): StructuredStageMessage {
+    return {
+      turnId: turn.turnId,
+      question: turn.question,
+      answer: turn.answer,
+      messageIds: turn.messageIds
+    };
+  }
+
+  private toChunkStageMessage(chunk: SemanticConversationChunk): ChunkStageMessage {
+    return {
+      chunkId: chunk.chunkId,
+      chunkMessage: chunk.content,
+      messageIds: this.extractChunkMessageIds(chunk)
+    };
+  }
+
   private toStageDirection(direction: MessageDirection): RawStageDirection {
     if (direction === MessageDirection.Outgoing) {
-      return 'agent_to_user';
+      return 'agent_to_customer';
     }
 
     if (direction === MessageDirection.Incoming) {
-      return 'user_to_agent';
+      return 'customer_to_agent';
     }
 
     return 'whatsapAuto';
@@ -511,6 +587,14 @@ export class KwoledgeIngestionUseCase {
   private buildPointId(semanticChunk: SemanticConversationChunk, index: number): string {
     const hash = createHash('sha256')
       .update(`${semanticChunk.chunkId}|${semanticChunk.conversationId}|${index}`)
+      .digest('hex');
+
+    return this.toUuid(hash);
+  }
+
+  private buildEmbeddingId(conversationId: string, chunkIndex: number): string {
+    const hash = createHash('sha256')
+      .update(`${conversationId}|${chunkIndex}`)
       .digest('hex');
 
     return this.toUuid(hash);

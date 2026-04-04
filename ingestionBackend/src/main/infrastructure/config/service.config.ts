@@ -9,6 +9,14 @@ export type EmbeddingConfig = {
   port: number;
 };
 
+export type MongoConfig = {
+  host: string;
+  port: number;
+  database: string;
+  username: string;
+  password: string;
+};
+
 @Injectable()
 export class ServiceConfig {
   constructor(
@@ -53,6 +61,25 @@ export class ServiceConfig {
       provider,
       host,
       port
+    };
+  }
+
+  public get mongoConfig(): MongoConfig {
+    const host = process.env.MONGO_HOST?.trim() || this.secretsConfig.values.mongo.host;
+    const port = this.readPositiveInt('MONGO_PORT', this.secretsConfig.values.mongo.port);
+    const database =
+      process.env.MONGO_DATABASE?.trim() || this.secretsConfig.values.mongo.database;
+    const username =
+      process.env.MONGO_USERNAME?.trim() || this.secretsConfig.values.mongo.username;
+    const password =
+      process.env.MONGO_PASSWORD?.trim() || this.secretsConfig.values.mongo.password;
+
+    return {
+      host,
+      port,
+      database,
+      username,
+      password
     };
   }
 
