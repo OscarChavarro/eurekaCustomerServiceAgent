@@ -11,9 +11,31 @@ export type BackendConversationRawMessage = {
   sentAt: string;
 };
 
+export type BackendConversationCleanMessage = {
+  externalId: string;
+  direction: string;
+  text: string;
+};
+
+export type BackendConversationStructuredMessage = {
+  turnId: string;
+  question: string;
+  answer: string;
+  messageIds: string[];
+};
+
+export type BackendConversationChunkMessage = {
+  chunkId: string;
+  chunkMessage: string;
+  messageIds: string[];
+};
+
 export type BackendConversationDocument = {
   _id: string;
   rawMessages?: BackendConversationRawMessage[];
+  cleanedMessages?: BackendConversationCleanMessage[];
+  structuredMessages?: BackendConversationStructuredMessage[];
+  chunkedMessages?: BackendConversationChunkMessage[];
   [key: string]: unknown;
 };
 

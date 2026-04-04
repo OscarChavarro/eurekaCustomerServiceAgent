@@ -219,6 +219,21 @@
   gap: 0.5rem;
 }
 
+.stage-actions button {
+  width: auto;
+  height: 2rem;
+  min-width: 4.2rem;
+  padding: 0 0.55rem;
+  text-transform: lowercase;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.stage-actions button.is-active {
+  background: #d0f2e8;
+  color: #006f54;
+}
+
 .messages-area {
   min-height: 0;
   overflow: auto;
@@ -242,6 +257,10 @@
   background: var(--bubble-outgoing);
 }
 
+.message-bubble.has-group-color {
+  background: inherit;
+}
+
 .message-bubble.system {
   align-self: center;
   max-width: min(30rem, 82%);
@@ -259,6 +278,17 @@
   line-height: 1.3;
 }
 
+.message-text-raw {
+  text-decoration: line-through;
+  text-decoration-thickness: 1.3px;
+  color: #9aa7b1;
+  margin-bottom: 0.22rem;
+}
+
+.message-text-clean {
+  margin-top: 0;
+}
+
 .message-bubble.system p {
   color: #55616b;
   font-size: 0.78rem;
@@ -274,6 +304,19 @@
   gap: 0.3rem;
   color: var(--text-secondary);
   font-size: 0.68rem;
+}
+
+.message-bubble.system footer {
+  justify-content: center;
+}
+
+.message-stage {
+  color: #62727d;
+}
+
+.message-stage::before {
+  content: '·';
+  margin-right: 0.3rem;
 }
 
 .message-status {

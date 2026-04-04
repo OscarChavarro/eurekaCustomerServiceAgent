@@ -1,19 +1,19 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 
 import {
-  BackendConversationRawMessage,
+  BackendConversationDocument,
   ConversationsApiService
 } from '../../core/api/services/conversations-api.service';
+import { ChunkConversationStageRenderer } from './view-stages/chunk-conversation-stage.renderer';
+import { CleanConversationStageRenderer } from './view-stages/clean-conversation-stage.renderer';
+import type { ConversationStageRenderer } from './view-stages/conversation-stage-renderer.interface';
+import { formatSentAt } from './view-stages/conversation-stage-renderer.utils';
+import { EmbedConversationStageRenderer } from './view-stages/embed-conversation-stage.renderer';
+import { RawConversationStageRenderer } from './view-stages/raw-conversation-stage.renderer';
+import { StructureConversationStageRenderer } from './view-stages/structure-conversation-stage.renderer';
+import type { ChatMessage, ConversationViewMode } from './view-stages/conversation-view.types';
 
-export type ChatMessageDirection = 'incoming' | 'outgoing' | 'system';
-
-export interface ChatMessage {
-  id: string;
-  direction: ChatMessageDirection;
-  text: string;
-  sentAt: string;
-  status?: 'sent' | 'delivered' | 'read';
-}
+export type { ChatMessage, ConversationViewMode };
 
 export interface ChatConversation {
   id: string;
@@ -28,7 +28,23 @@ export interface ChatConversation {
 @Injectable({ providedIn: 'root' })
 export class ChatConversationService {
   private readonly conversationsApiService = inject(ConversationsApiService);
+  private readonly rawConversationStageRenderer = inject(RawConversationStageRenderer);
+  private readonly cleanConversationStageRenderer = inject(CleanConversationStageRenderer);
+  private readonly structureConversationStageRenderer = inject(StructureConversationStageRenderer);
+  private readonly chunkConversationStageRenderer = inject(ChunkConversationStageRenderer);
+  private readonly embedConversationStageRenderer = inject(EmbedConversationStageRenderer);
+
   private readonly loadedMessagesConversationIds = new Set<string>();
+  private readonly conversationDocumentsState = signal<Record<string, BackendConversationDocument>>({});
+  private readonly viewModeState = signal<ConversationViewMode>('raw');
+
+  private readonly stageRenderers: Record<ConversationViewMode, ConversationStageRenderer> = {
+    raw: this.rawConversationStageRenderer,
+    clean: this.cleanConversationStageRenderer,
+    structure: this.structureConversationStageRenderer,
+    chunk: this.chunkConversationStageRenderer,
+    embed: this.embedConversationStageRenderer
+  };
 
   private readonly mockConversationById: Record<string, ChatConversation> = {
     'conv-ana': {
@@ -51,58 +67,6 @@ export class ChatConversationService {
           text: 'Claro, te ayudo. Quieres revisar coberturas o fechas?',
           sentAt: '16:47',
           status: 'read'
-        },
-        {
-          id: 'ana-3',
-          direction: 'incoming',
-          text: 'Coberturas. Tambien necesito saber si incluye danos por agua.',
-          sentAt: '16:50'
-        }
-      ]
-    },
-    'conv-carlos': {
-      id: 'conv-carlos',
-      contactName: 'Carlos Lopez',
-      contactAvatar: 'CL',
-      lastMessagePreview: 'Gracias, quedo claro. Avanzamos con la visita.',
-      lastMessageAt: '15:31',
-      unreadCount: 0,
-      messages: [
-        {
-          id: 'carlos-1',
-          direction: 'incoming',
-          text: 'Tienes disponibilidad para una visita el sabado?',
-          sentAt: '15:10'
-        },
-        {
-          id: 'carlos-2',
-          direction: 'outgoing',
-          text: 'Si, tengo un hueco a las 12:30 y otro a las 17:00.',
-          sentAt: '15:17',
-          status: 'read'
-        }
-      ]
-    },
-    'conv-sofia': {
-      id: 'conv-sofia',
-      contactName: 'Sofia Martin',
-      contactAvatar: 'SM',
-      lastMessagePreview: 'Te acabo de pasar la ubicacion exacta.',
-      lastMessageAt: 'Ayer',
-      unreadCount: 1,
-      messages: [
-        {
-          id: 'sofia-1',
-          direction: 'incoming',
-          text: 'Nos vemos en oficina o en la propiedad?',
-          sentAt: 'Ayer 19:01'
-        },
-        {
-          id: 'sofia-2',
-          direction: 'outgoing',
-          text: 'En la propiedad para ahorrar tiempo.',
-          sentAt: 'Ayer 19:04',
-          status: 'read'
         }
       ]
     }
@@ -114,13 +78,6 @@ export class ChatConversationService {
       direction: 'incoming',
       text: 'Conversacion sincronizada desde backend.',
       sentAt: 'Ahora'
-    },
-    {
-      id: 'default-2',
-      direction: 'outgoing',
-      text: 'Panel de mensajes en modo mock temporal.',
-      sentAt: 'Ahora',
-      status: 'delivered'
     }
   ];
 
@@ -129,6 +86,7 @@ export class ChatConversationService {
 
   readonly conversations = this.conversationState.asReadonly();
   readonly activeConversationId = this.activeConversationIdState.asReadonly();
+  readonly viewMode = this.viewModeState.asReadonly();
 
   readonly activeConversation = computed(() => {
     const activeId = this.activeConversationIdState();
@@ -147,6 +105,15 @@ export class ChatConversationService {
   setActiveConversation(conversationId: string): void {
     this.activeConversationIdState.set(conversationId);
     this.loadConversationMessages(conversationId);
+  }
+
+  setViewMode(viewMode: ConversationViewMode): void {
+    if (this.viewModeState() === viewMode) {
+      return;
+    }
+
+    this.viewModeState.set(viewMode);
+    this.rerenderLoadedConversations();
   }
 
   private loadConversationIds(): void {
@@ -204,28 +171,13 @@ export class ChatConversationService {
 
     this.conversationsApiService.getConversationById(conversationId).subscribe({
       next: (conversationDocument) => {
-        const mappedMessages = this.mapRawMessagesToChatMessages(
-          conversationDocument.rawMessages ?? []
-        );
-
-        this.conversationState.update((conversations) =>
-          conversations.map((conversation) => {
-            if (conversation.id !== conversationId) {
-              return conversation;
-            }
-
-            const lastMessage = mappedMessages[mappedMessages.length - 1];
-
-            return {
-              ...conversation,
-              messages: mappedMessages.length > 0 ? mappedMessages : this.defaultMockMessages,
-              lastMessagePreview: lastMessage?.text ?? conversation.lastMessagePreview,
-              lastMessageAt: lastMessage?.sentAt ?? conversation.lastMessageAt
-            };
-          })
-        );
+        this.conversationDocumentsState.update((currentDocuments) => ({
+          ...currentDocuments,
+          [conversationId]: conversationDocument
+        }));
 
         this.loadedMessagesConversationIds.add(conversationId);
+        this.applyConversationDocumentToState(conversationId, conversationDocument);
       },
       error: (error: unknown) => {
         console.error(`Unable to load messages from backend /messages for id=${conversationId}`, error);
@@ -233,47 +185,51 @@ export class ChatConversationService {
     });
   }
 
-  private mapRawMessagesToChatMessages(rawMessages: BackendConversationRawMessage[]): ChatMessage[] {
-    return rawMessages.map((rawMessage) => ({
-      id: rawMessage.externalId,
-      direction: this.mapDirection(rawMessage.direction),
-      text: rawMessage.text,
-      sentAt: this.formatSentAt(rawMessage.sentAt)
-    }));
+  private applyConversationDocumentToState(
+    conversationId: string,
+    conversationDocument: BackendConversationDocument
+  ): void {
+    const renderer = this.stageRenderers[this.viewModeState()];
+    const renderedMessages = renderer.render(conversationDocument);
+    const fallbackMessages = renderedMessages.length > 0 ? renderedMessages : this.defaultMockMessages;
+    const lastRawMessage = conversationDocument.rawMessages?.[conversationDocument.rawMessages.length - 1];
+
+    this.conversationState.update((conversations) =>
+      conversations.map((conversation) => {
+        if (conversation.id !== conversationId) {
+          return conversation;
+        }
+
+        return {
+          ...conversation,
+          messages: fallbackMessages,
+          lastMessagePreview: lastRawMessage?.text ?? conversation.lastMessagePreview,
+          lastMessageAt: lastRawMessage?.sentAt ? formatSentAt(lastRawMessage.sentAt) : conversation.lastMessageAt
+        };
+      })
+    );
   }
 
-  private mapDirection(rawDirection: string): ChatMessageDirection {
-    const normalizedDirection = rawDirection.trim().toLowerCase();
+  private rerenderLoadedConversations(): void {
+    const conversationDocuments = this.conversationDocumentsState();
+    const renderer = this.stageRenderers[this.viewModeState()];
 
-    if (normalizedDirection === 'agent_to_customer') {
-      return 'outgoing';
-    }
+    this.conversationState.update((conversations) =>
+      conversations.map((conversation) => {
+        const conversationDocument = conversationDocuments[conversation.id];
 
-    if (
-      normalizedDirection === 'whatsapp' ||
-      normalizedDirection === 'whatsapauto' ||
-      normalizedDirection === 'whatsappauto' ||
-      normalizedDirection.startsWith('whatsapp_')
-    ) {
-      return 'system';
-    }
+        if (!conversationDocument) {
+          return conversation;
+        }
 
-    return 'incoming';
-  }
+        const renderedMessages = renderer.render(conversationDocument);
 
-  private formatSentAt(rawSentAt: string): string {
-    const sentAtDate = new Date(rawSentAt);
-
-    if (Number.isNaN(sentAtDate.getTime())) {
-      return rawSentAt;
-    }
-
-    return sentAtDate.toLocaleString('es-ES', {
-      day: '2-digit',
-      month: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+        return {
+          ...conversation,
+          messages: renderedMessages.length > 0 ? renderedMessages : this.defaultMockMessages
+        };
+      })
+    );
   }
 
   private buildAvatarFromId(conversationId: string): string {
