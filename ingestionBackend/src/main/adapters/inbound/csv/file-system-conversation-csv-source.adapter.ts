@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { parse } from 'csv-parse/sync';
 import { promises as fs } from 'node:fs';
 import { basename, extname, isAbsolute, join, resolve } from 'node:path';
@@ -9,6 +9,8 @@ import type {
 
 @Injectable()
 export class FileSystemConversationCsvSourceAdapter implements ConversationCsvSourcePort {
+  private readonly logger = new Logger(FileSystemConversationCsvSourceAdapter.name);
+
   public async readFromPath(path: string): Promise<ConversationCsvRawRecord[]> {
     const resolvedPath = this.resolveInputPath(path);
     const pathStats = await fs.stat(resolvedPath);
@@ -19,8 +21,10 @@ export class FileSystemConversationCsvSourceAdapter implements ConversationCsvSo
         throw new Error(`Path is a file but not a CSV file: ${resolvedPath}`);
       }
 
+      this.logger.log(`[1/1] Reading CSV file: ${basename(resolvedPath)}`);
       const csvRecords = await this.readCsvFile(resolvedPath, basename(resolvedPath));
       rawRecords.push(...csvRecords);
+      this.logger.log(`[1/1] Loaded rows: ${csvRecords.length} from ${basename(resolvedPath)}`);
       return rawRecords;
     }
 
@@ -34,10 +38,18 @@ export class FileSystemConversationCsvSourceAdapter implements ConversationCsvSo
       .map((entry) => entry.name)
       .sort((left, right) => left.localeCompare(right));
 
-    for (const csvFileName of csvFileNames) {
+    this.logger.log(
+      `Discovered ${csvFileNames.length} CSV files in ${resolvedPath}. Starting ingestion.`
+    );
+
+    for (const [index, csvFileName] of csvFileNames.entries()) {
+      const current = index + 1;
       const csvPath = join(resolvedPath, csvFileName);
       const csvRecords = await this.readCsvFile(csvPath, csvFileName);
       rawRecords.push(...csvRecords);
+      this.logger.log(
+        `[${current}/${csvFileNames.length}] Loaded rows: ${csvRecords.length} from ${csvFileName}`
+      );
     }
 
     return rawRecords;

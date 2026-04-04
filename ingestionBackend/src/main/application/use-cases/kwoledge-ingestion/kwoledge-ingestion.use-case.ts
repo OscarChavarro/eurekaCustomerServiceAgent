@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import type { IngestionRuntimeConfigPort } from '../../ports/config/ingestion-runtime-config.port';
 import type { ConversationCsvSourcePort } from '../../ports/inbound/conversation-csv-source.port';
 import type { EmbeddingPort } from '../../ports/outbound/embedding.port';
+import type { ProcessedConversationStageStorePort } from '../../ports/outbound/processed-conversation-stage-store.port';
 import type { VectorPoint, VectorStorePort } from '../../ports/outbound/vector-store.port';
 import { TOKENS } from '../../ports/tokens';
 import { ConversationChunkingService } from './conversation-chunking.service';
@@ -46,6 +47,53 @@ type EmbeddedChunk = {
   payload: EmbeddingChunkPayload;
 };
 
+type StageDirection = 'user_to_agent' | 'agent_to_user';
+type RawStageDirection = StageDirection | 'whatsapAuto';
+
+type RawStageMessage = {
+  externalId: string;
+  sentAt: string | null;
+  sender: string | null;
+  text: string;
+  sourceFile: string;
+  rowNumber: number;
+  direction: RawStageDirection;
+  normalizedFields: Record<string, unknown>;
+};
+
+type CleanedStageMessage = {
+  externalId: string;
+  direction: RawStageDirection;
+  text: string;
+};
+
+type StructuredStageMessage = {
+  turnId: string;
+  question: string;
+  answer: string;
+  messageIds: string[];
+};
+
+type ChunkStageMessage = {
+  chunkId: string;
+  chunkMessage: string;
+  messageIds: string[];
+};
+
+type EmbedStageMessage = {
+  chunkId: string;
+  vector: number[];
+};
+
+type ProcessedConversationStages = {
+  conversationId: string;
+  rawMessages: RawStageMessage[];
+  cleanedMessages: CleanedStageMessage[];
+  structuredMessages: StructuredStageMessage[];
+  chunks: ChunkStageMessage[];
+  embed: EmbedStageMessage[];
+};
+
 @Injectable()
 export class KwoledgeIngestionUseCase {
   private readonly logger = new Logger(KwoledgeIngestionUseCase.name);
@@ -57,6 +105,8 @@ export class KwoledgeIngestionUseCase {
     private readonly embeddingPort: EmbeddingPort,
     @Inject(TOKENS.VectorStorePort)
     private readonly vectorStorePort: VectorStorePort,
+    @Inject(TOKENS.ProcessedConversationStageStorePort)
+    private readonly processedConversationStageStorePort: ProcessedConversationStageStorePort,
     @Inject(TOKENS.IngestionRuntimeConfigPort)
     private readonly ingestionRuntimeConfigPort: IngestionRuntimeConfigPort,
     private readonly conversationCsvRecordTranslatorService: ConversationCsvRecordTranslatorService,
@@ -67,28 +117,62 @@ export class KwoledgeIngestionUseCase {
 
   public async execute(command: KwoledgeIngestionCommand): Promise<KwoledgeIngestionResult> {
     const rawMessages = await this.loadRawMessages(command.folderPath);
-    this.logStageAsJson('RAW', rawMessages);
+    const rawByConversation = this.groupByConversationId(rawMessages, (message) => message.conversationId);
+    const orderedConversationIds = Array.from(rawByConversation.keys()).sort((left, right) =>
+      left.localeCompare(right)
+    );
+    const totalConversations = orderedConversationIds.length;
+    const uniqueFiles = new Set(rawMessages.map((message) => message.sourceFile));
 
-    const cleanedMessages = this.runCleaningStage(rawMessages);
-    this.logStageAsJson('CLEAN', cleanedMessages);
+    const allCleanedMessages: CleanedConversationMessage[] = [];
+    const allSemanticChunks: SemanticConversationChunk[] = [];
+    const allEmbeddedChunks: EmbeddedChunk[] = [];
+    let skippedMessages = 0;
 
-    const structuredTurns = this.runStructuringStage(cleanedMessages);
-    this.logStageAsJson('STRUCTURE', structuredTurns);
+    for (const [index, conversationId] of orderedConversationIds.entries()) {
+      const currentPosition = index + 1;
+      const conversationRawMessages = rawByConversation.get(conversationId) ?? [];
 
-    const semanticChunks = this.runChunkingStage(structuredTurns);
-    this.logStageAsJson('CHUNK', semanticChunks);
+      this.logConversationPhase(currentPosition, totalConversations, conversationId, 'raw');
 
-    const uniqueFiles = new Set(cleanedMessages.map((message) => message.sourceFile));
-    const messagesBreakdown = this.buildMessagesBreakdown(cleanedMessages);
-    const limits = this.buildLimits(cleanedMessages);
-    const skippedMessages = cleanedMessages.filter((message) => message.cleanedText.length === 0).length;
+      const conversationCleanedMessages = this.runCleaningStage(conversationRawMessages);
+      allCleanedMessages.push(...conversationCleanedMessages);
+      skippedMessages += conversationCleanedMessages.filter(
+        (message) => message.cleanedText.length === 0
+      ).length;
+      this.logConversationPhase(currentPosition, totalConversations, conversationId, 'clean');
 
-    if (semanticChunks.length === 0) {
+      const conversationStructuredTurns = this.runStructuringStage(conversationCleanedMessages);
+      this.logConversationPhase(currentPosition, totalConversations, conversationId, 'structure');
+
+      const conversationSemanticChunks = this.runChunkingStage(conversationStructuredTurns);
+      allSemanticChunks.push(...conversationSemanticChunks);
+      this.logConversationPhase(currentPosition, totalConversations, conversationId, 'chunk');
+
+      const conversationEmbeddedChunks = await this.runEmbeddingStage(
+        conversationRawMessages,
+        conversationSemanticChunks
+      );
+      allEmbeddedChunks.push(...conversationEmbeddedChunks);
+      this.logConversationPhase(currentPosition, totalConversations, conversationId, 'embed');
+
+      await this.persistProcessedConversation(
+        conversationId,
+        conversationRawMessages,
+        conversationCleanedMessages,
+        conversationStructuredTurns,
+        conversationSemanticChunks,
+        conversationEmbeddedChunks
+      );
+    }
+
+    if (allSemanticChunks.length === 0) {
       this.logger.warn(`No semantic chunks found in folder ${command.folderPath}.`);
     }
 
-    const embeddedChunks = await this.runEmbeddingStage(rawMessages, semanticChunks);
-    const indexedChunks = await this.runStorageStage(embeddedChunks);
+    const indexedChunks = await this.runStorageStage(allEmbeddedChunks);
+    const messagesBreakdown = this.buildMessagesBreakdown(allCleanedMessages);
+    const limits = this.buildLimits(allCleanedMessages);
 
     return new KwoledgeIngestionResult(
       command.folderPath,
@@ -128,18 +212,11 @@ export class KwoledgeIngestionUseCase {
     semanticChunks: SemanticConversationChunk[]
   ): Promise<EmbeddedChunk[]> {
     if (semanticChunks.length === 0) {
-      this.logStageAsJson('EMBED', []);
       return [];
     }
 
     const rawMessagesByExternalId = this.buildRawMessagesIndex(rawMessages);
     const embeddedChunks: EmbeddedChunk[] = [];
-    const stagePayload: Array<{
-      chunkId: string;
-      payload: EmbeddingChunkPayload;
-      dimensions: number;
-      first10: number[];
-    }> = [];
 
     for (const chunk of semanticChunks) {
       const payload = this.buildEmbeddingPayload(chunk, rawMessagesByExternalId);
@@ -149,32 +226,17 @@ export class KwoledgeIngestionUseCase {
         vector,
         payload
       });
-
-      const first10Dimensions = vector.slice(0, 10);
-      stagePayload.push({
-        chunkId: chunk.chunkId,
-        payload,
-        dimensions: vector.length,
-        first10: first10Dimensions
-      });
     }
-
-    this.logStageAsJson('EMBED', stagePayload);
 
     return embeddedChunks;
   }
 
   private async runStorageStage(embeddedChunks: EmbeddedChunk[]): Promise<number> {
     if (!this.ingestionRuntimeConfigPort.isQdrantIngestionEnabled()) {
-      this.logStageAsJson('STORE', {
-        status: 'planned',
-        reason: 'Storage stage planned. Waiting for storage stage activation.'
-      });
       return 0;
     }
 
     if (embeddedChunks.length === 0) {
-      this.logStageAsJson('STORE', []);
       return 0;
     }
 
@@ -194,21 +256,90 @@ export class KwoledgeIngestionUseCase {
       };
     });
 
-    this.logStageAsJson(
-      'STORE',
-      points.map((point) => ({
-        id: point.id,
-        vectorDimensions: point.vector.length,
-        vectorFirst10: point.vector.slice(0, 10),
-        payload: point.payload
-      }))
-    );
-
     await this.vectorStorePort.upsert(points);
 
     this.logger.log(`Stored ${points.length} semantic chunks in vector storage.`);
 
     return points.length;
+  }
+
+  private async persistProcessedConversation(
+    conversationId: string,
+    rawMessages: RawConversationMessage[],
+    cleanedMessages: CleanedConversationMessage[],
+    structuredTurns: StructuredConversationTurn[],
+    semanticChunks: SemanticConversationChunk[],
+    embeddedChunks: EmbeddedChunk[]
+  ): Promise<void> {
+    const stages = this.buildProcessedConversationStages(
+      conversationId,
+      rawMessages,
+      cleanedMessages,
+      structuredTurns,
+      semanticChunks,
+      embeddedChunks
+    );
+
+    await this.processedConversationStageStorePort.saveConversationStages(conversationId, stages);
+  }
+
+  private buildProcessedConversationStages(
+    conversationId: string,
+    rawMessages: RawConversationMessage[],
+    cleanedMessages: CleanedConversationMessage[],
+    structuredTurns: StructuredConversationTurn[],
+    semanticChunks: SemanticConversationChunk[],
+    embeddedChunks: EmbeddedChunk[]
+  ): ProcessedConversationStages {
+    return {
+      conversationId,
+      rawMessages: rawMessages.map((message) => this.toRawStageMessage(message)),
+      cleanedMessages: cleanedMessages.map((message) => ({
+        externalId: message.externalId,
+        direction: this.toStageDirection(message.direction),
+        text: message.cleanedText
+      })),
+      structuredMessages: structuredTurns.map((turn) => ({
+        turnId: turn.turnId,
+        question: turn.question,
+        answer: turn.answer,
+        messageIds: turn.messageIds
+      })),
+      chunks: semanticChunks.map((chunk) => ({
+        chunkId: chunk.chunkId,
+        chunkMessage: chunk.content,
+        messageIds: this.extractChunkMessageIds(chunk)
+      })),
+      embed: embeddedChunks.map((embeddedChunk) => ({
+        chunkId: embeddedChunk.semanticChunk.chunkId,
+        vector: embeddedChunk.vector
+      }))
+    };
+  }
+
+  private logConversationPhase(
+    currentPosition: number,
+    totalConversations: number,
+    conversationId: string,
+    phase: string
+  ): void {
+    this.logger.log(`[${currentPosition}/${totalConversations}] ${conversationId} - ${phase}`);
+  }
+
+  private groupByConversationId<T>(
+    items: T[],
+    conversationIdSelector: (item: T) => string
+  ): Map<string, T[]> {
+    const grouped = new Map<string, T[]>();
+
+    for (const item of items) {
+      const conversationId = conversationIdSelector(item);
+      const current = grouped.get(conversationId) ?? [];
+      current.push(item);
+      grouped.set(conversationId, current);
+    }
+
+    return grouped;
   }
 
   private buildRawMessagesIndex(
@@ -263,9 +394,29 @@ export class KwoledgeIngestionUseCase {
     };
   }
 
-  private logStageAsJson(stage: string, payload: unknown): void {
-    this.logger.log(`= ${stage} ===================`);
-    this.logger.log(JSON.stringify(payload, null, 2));
+  private toRawStageMessage(rawMessage: RawConversationMessage): RawStageMessage {
+    return {
+      externalId: rawMessage.externalId,
+      sentAt: rawMessage.sentAt?.toISOString() ?? null,
+      sender: rawMessage.sender,
+      text: rawMessage.text,
+      sourceFile: rawMessage.sourceFile,
+      rowNumber: rawMessage.rowNumber,
+      direction: this.toStageDirection(rawMessage.direction),
+      normalizedFields: rawMessage.normalizedFields as unknown as Record<string, unknown>
+    };
+  }
+
+  private toStageDirection(direction: MessageDirection): RawStageDirection {
+    if (direction === MessageDirection.Outgoing) {
+      return 'agent_to_user';
+    }
+
+    if (direction === MessageDirection.Incoming) {
+      return 'user_to_agent';
+    }
+
+    return 'whatsapAuto';
   }
 
   private buildMessagesBreakdown(

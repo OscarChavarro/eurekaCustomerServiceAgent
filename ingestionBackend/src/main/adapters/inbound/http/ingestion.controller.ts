@@ -23,7 +23,7 @@ export class IngestionController {
   ): Promise<KwoledgeIngestionResult> {
     try {
       return await this.kwoledgeIngestionUseCase.execute(
-        new KwoledgeIngestionCommand(request.folderPath)
+        new KwoledgeIngestionCommand(request.path)
       );
     } catch (error) {
       if (error instanceof QdrantConnectionError) {
