@@ -1,0 +1,20 @@
+meta {
+  name: Get Messages By Conversation Id
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/messages?id={{conversationId}}
+  body: none
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+vars:pre-request {
+  conversationId: 10396 Paula Gil😜
+  baseUrl: http://localhost:3667
+}

@@ -1,0 +1,19 @@
+meta {
+  name: Get Conversation Ids
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/conversations
+  body: none
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+vars:pre-request {
+  baseUrl: http://localhost:3667
+}
