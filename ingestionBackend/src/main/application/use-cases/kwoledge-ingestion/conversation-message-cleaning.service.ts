@@ -9,8 +9,6 @@ export class ConversationMessageCleaningService {
   private readonly logger = new Logger(ConversationMessageCleaningService.name);
 
   public clean(rawMessages: RawConversationMessage[]): CleanedConversationMessage[] {
-    this.logger.log('PENDING TO PROCESS');
-
     return rawMessages.map((rawMessage) => {
       const cleanedText = this.cleanText(rawMessage.text);
 

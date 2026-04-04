@@ -2,6 +2,12 @@ import { Injectable } from '@nestjs/common';
 import { SecretsConfig } from './settings/secrets.config';
 import { SettingsConfig } from './settings/settings.config';
 
+export type EmbeddingConfig = {
+  provider: string;
+  host: string;
+  port: number;
+};
+
 @Injectable()
 export class ServiceConfig {
   constructor(
@@ -37,8 +43,16 @@ export class ServiceConfig {
     return this.settingsConfig.values.service.enableQdrantIngestion;
   }
 
-  public get embeddingDimension(): number {
-    return this.secretsConfig.values.embedding.dimension;
+  public get embeddingConfig(): EmbeddingConfig {
+    const provider = process.env.EMBEDDING_PROVIDER?.trim() || this.secretsConfig.values.embedding.provider;
+    const host = process.env.EMBEDDING_HOST?.trim() || this.secretsConfig.values.embedding.host;
+    const port = this.readPositiveInt('EMBEDDING_PORT', this.secretsConfig.values.embedding.port);
+
+    return {
+      provider,
+      host,
+      port
+    };
   }
 
   private readPositiveInt(name: string, fallback: number): number {

@@ -20,8 +20,8 @@ Current stage implementation:
 - `clean`: normalizes message text and removes common noise/artifacts.
 - `structure`: groups cleaned messages into conversational turns (customer -> agent).
 - `chunk`: converts turns into semantic chunks ready for embedding.
-- `embed`: BGE embedding service (planned extension point for this stage while cleaning rules are finalized).
-- `store`: wired as an extension point through `VectorStorePort`; currently kept as planned while embedding stage is disabled.
+- `embed`: BGE embedding service via HTTP (`/embed`) generating one vector per semantic chunk.
+- `store`: wired through `VectorStorePort`; can stay disabled with `service.enableQdrantIngestion=false` while validating embedding quality.
 
 ## Qdrant Installation
 
@@ -43,13 +43,19 @@ docker run -d \
 
 Qdrant integration is isolated behind `VectorStorePort`. Only the outbound adapter (`QdrantVectorStoreAdapter`) talks to Qdrant directly.
 
+## Embedding Integration
+
+- Provider: `bge`
+- Endpoint format: `http://<embedding.host>:<embedding.port>/embed`
+- Request payload: `{ "text": "<chunk_text>" }`
+- Expected response: `{ "vector": number[] }` with 1024 dimensions (`bge-m3`)
+
 ## BGE Installation
 
 Dependencies install
 ```bash
-apt update
-apt install python3 python3-pip -y
-apt install python3.10-venv
+apt-get update
+apt-get install python3 python3-pip python3.10-venv uvicorn
 pip3 install torch transformers sentence-transformers
 pip3 install torch --index-url https://download.pytorch.org/whl/cu121
 ```
@@ -59,15 +65,15 @@ If this fails due to conflicting operating system python installation, it is pos
 ```bash
 python3 -m venv venv
 source venv/bin/activate
-# Run everything inside this container, specific commands depends on you GPU/Driver/OS version
+# Run everything inside this container, specific commands depends on you GPU/Driver/OS versions
 pip install "numpy<2"
 pip install torch==1.13.1
-
 ```
 
 Test local installation. First usage downloads the embeddings model.
 
-```python3
+```bash
+cat > testBge.py << EOF
 from sentence_transformers import SentenceTransformer
 
 model = SentenceTransformer("BAAI/bge-m3")
@@ -76,9 +82,41 @@ text = "Client ask for chispita product. Answer: Yes, from 25USD."
 
 embedding = model.encode(text)
 
-print(len(embedding))  # dimensiones
-print(embedding[:5])   # primeros valores
+print(len(embedding))  # Number of dimensions
+print(embedding[:5])   # Will print just first 5 values
+EOF
+python3 testBge.py
 ```
+
+If this works (generates a 1024 vector), it can be wrapped with `fastapi` to turn it in to a REST api endpoint:
+
+```bash
+pip install fastapi uvicorn
+cat > main.py << EOF
+from fastapi import FastAPI
+from pydantic import BaseModel
+from sentence_transformers import SentenceTransformer
+
+app = FastAPI()
+
+model = SentenceTransformer("BAAI/bge-m3")
+
+class EmbedRequest(BaseModel):
+    text: str
+
+@app.post("/embed")
+def embed(req: EmbedRequest):
+    vector = model.encode(req.text).tolist()
+    return { "vector": vector }
+EOF
+python -m uvicorn main:app --host 0.0.0.0 --port 8000
+```
+
+This can be tested with
+```bash
+curl -X POST http://localhost:8000/embed   -H "Content-Type: application/json"   -d '{"text": "Client ask for chispita product. Answer: Yes, from 25USD."}'
+```
+or using the included Bruno endpoint.
 
 ## Main Endpoint
 
@@ -107,4 +145,5 @@ npm run start:dev
 
 - Non-secret settings: `src/main/infrastructure/config/settings/environment.json`
 - Secret/runtime settings: `secrets.json` (use `secrets-example.json` as template)
+- Embedding service secrets are configured under `embedding.provider`, `embedding.host`, and `embedding.port`.
 - Set `service.enableQdrantIngestion` to `false` to keep storage ingestion disabled while refining cleaning/structuring/chunking quality.
