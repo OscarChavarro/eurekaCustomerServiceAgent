@@ -8,7 +8,7 @@ export type BackendConversationRawMessage = {
   externalId: string;
   direction: string;
   text: string;
-  sentAt: string;
+  sentAt: string | null;
 };
 
 export type BackendConversationCleanMessage = {
@@ -30,6 +30,12 @@ export type BackendConversationChunkMessage = {
   messageIds: string[];
 };
 
+export type BackendConversationSummary = {
+  id: string;
+  msg: string | null;
+  date: string | null;
+};
+
 export type BackendConversationDocument = {
   _id: string;
   rawMessages?: BackendConversationRawMessage[];
@@ -44,8 +50,8 @@ export class ConversationsApiService {
   private readonly httpClient = inject(HttpClient);
   private readonly frontendSecretsService = inject(FrontendSecretsService);
 
-  public getConversationIds(): Observable<string[]> {
-    return this.httpClient.get<string[]>(
+  public getConversationIds(): Observable<BackendConversationSummary[]> {
+    return this.httpClient.get<BackendConversationSummary[]>(
       `${this.frontendSecretsService.backendBaseUrl}/conversations`
     );
   }
