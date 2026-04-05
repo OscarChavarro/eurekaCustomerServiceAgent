@@ -74,7 +74,7 @@
           [attr.aria-label]="timePanelAriaLabel()"
           [style.height]="timePaneTopHeight()"
         >
-          <app-time-panel></app-time-panel>
+          <app-time-panel (conversationSelected)="selectConversation($event)"></app-time-panel>
         </section>
         <button
           type="button"

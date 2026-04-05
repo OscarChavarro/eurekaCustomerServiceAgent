@@ -41,6 +41,14 @@ export const SHELL_TRANSLATIONS = {
     en: 'Resize time panel',
     es: 'Redimensionar panel de tiempo'
   },
+  TIME_PANEL_LOADING: {
+    en: 'Loading timeline...',
+    es: 'Cargando linea de tiempo...'
+  },
+  TIME_PANEL_ERROR: {
+    en: 'Unable to load timeline.',
+    es: 'No se pudo cargar la linea de tiempo.'
+  },
   NEW_CONVERSATION_ARIA: {
     en: 'New conversation',
     es: 'Nueva conversacion'
