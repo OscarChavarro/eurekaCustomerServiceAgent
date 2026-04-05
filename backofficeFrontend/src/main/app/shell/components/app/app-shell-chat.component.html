@@ -35,8 +35,80 @@
         </div>
       }
     </div>
+
+    <div class="mode-tabs" role="tablist" [attr.aria-label]="modeSwitchAriaLabel()">
+      <button
+        type="button"
+        role="tab"
+        class="mode-tab"
+        [class.is-active]="operationMode() === 'chat'"
+        [attr.aria-selected]="operationMode() === 'chat'"
+        [attr.aria-label]="chatModeAriaLabel()"
+        (click)="setOperationMode('chat')"
+      >
+        <span class="material-symbols-outlined" aria-hidden="true">chat_bubble</span>
+      </button>
+      <button
+        type="button"
+        role="tab"
+        class="mode-tab"
+        [class.is-active]="operationMode() === 'time'"
+        [attr.aria-selected]="operationMode() === 'time'"
+        [attr.aria-label]="timeModeAriaLabel()"
+        (click)="setOperationMode('time')"
+      >
+        <span class="material-symbols-outlined" aria-hidden="true">calendar_month</span>
+      </button>
+    </div>
   </aside>
 
+  <section class="workspace-panel">
+    @if (!isTimeMode()) {
+      <div class="chat-panels">
+        <ng-container [ngTemplateOutlet]="chatPanelsTemplate"></ng-container>
+      </div>
+    } @else {
+      <div class="time-mode-layout" #timeModeLayout>
+        <section
+          class="time-panel-host"
+          [attr.aria-label]="timePanelAriaLabel()"
+          [style.height]="timePaneTopHeight()"
+        >
+          <app-time-panel></app-time-panel>
+        </section>
+        <button
+          type="button"
+          class="time-splitter"
+          [attr.aria-label]="timeSplitterAriaLabel()"
+          (mousedown)="onTimeSplitDragStart($event)"
+        ></button>
+        <div class="chat-panels is-bottom" [style.height]="timePaneBottomHeight()">
+          <ng-container [ngTemplateOutlet]="chatPanelsTemplate"></ng-container>
+        </div>
+      </div>
+    }
+  </section>
+
+  @if (phoneTooltip(); as tooltip) {
+    <div
+      class="phone-tooltip"
+      [style.left.px]="tooltip.x + 12"
+      [style.top.px]="tooltip.y + 16"
+    >
+      @if (tooltip.countryCode) {
+        <img
+          class="flag-icon"
+          [src]="flagIconUrl(tooltip.countryCode)"
+          [alt]="tooltip.countryCode"
+          loading="lazy"
+        />
+      }
+      {{ tooltip.text }}
+    </div>
+  }
+</div>
+
+<ng-template #chatPanelsTemplate>
   <section class="conversation-list" [attr.aria-label]="conversationListAriaLabel()">
     <header class="panel-header">
       <h1>{{ conversationsTitle() }}</h1>
@@ -371,22 +443,4 @@
       </footer>
     }
   </section>
-
-  @if (phoneTooltip(); as tooltip) {
-    <div
-      class="phone-tooltip"
-      [style.left.px]="tooltip.x + 12"
-      [style.top.px]="tooltip.y + 16"
-    >
-      @if (tooltip.countryCode) {
-        <img
-          class="flag-icon"
-          [src]="flagIconUrl(tooltip.countryCode)"
-          [alt]="tooltip.countryCode"
-          loading="lazy"
-        />
-      }
-      {{ tooltip.text }}
-    </div>
-  }
-</div>
+</ng-template>

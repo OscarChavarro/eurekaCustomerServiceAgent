@@ -1,4 +1,13 @@
-import { Component, computed, effect, ElementRef, inject, signal, ViewChild } from '@angular/core';
+import {
+  Component,
+  computed,
+  effect,
+  ElementRef,
+  inject,
+  OnDestroy,
+  signal,
+  ViewChild
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { take } from 'rxjs/operators';
 
@@ -12,6 +21,7 @@ import { I18nStateService } from '../../../core/i18n/services/i18n-state.service
 import { PhoneCountryI18nService } from '../../../core/i18n/services/phone-country-i18n.service';
 import { I18N_KEYS } from '../../../core/i18n/translations/i18n-keys.const';
 import type { SupportedLanguage } from '../../../core/i18n/types/supported-language.type';
+import { TimePanelComponent } from '../time-panel/time-panel.component';
 import {
   ChatConversation,
   ChatConversationService,
@@ -21,11 +31,11 @@ import {
 
 @Component({
   selector: 'app-shell-chat',
-  imports: [CommonModule],
+  imports: [CommonModule, TimePanelComponent],
   templateUrl: './app-shell-chat.component.html',
   styleUrl: './app-shell-chat.component.sass',
 })
-export class AppShellChatComponent {
+export class AppShellChatComponent implements OnDestroy {
   private readonly chatConversationService = inject(ChatConversationService);
   private readonly conversationsApiService = inject(ConversationsApiService);
   private readonly i18nService = inject(I18nService);
@@ -40,8 +50,12 @@ export class AppShellChatComponent {
   private activeHoveredPhone: string | null = null;
   private readonly hoveredMessageKeyState = signal<string | null>(null);
   private readonly openReactionMenuKeyState = signal<string | null>(null);
+  private readonly operationModeState = signal<OperationMode>('chat');
+  private readonly timePaneTopRatioState = signal<number>(0.5);
+  private isDraggingTimeSplit = false;
   @ViewChild('messagesArea') private messagesAreaRef?: ElementRef<HTMLDivElement>;
   @ViewChild('composerInput') private composerInputRef?: ElementRef<HTMLInputElement>;
+  @ViewChild('timeModeLayout') private timeModeLayoutRef?: ElementRef<HTMLDivElement>;
 
   protected readonly conversations = this.chatConversationService.conversations;
   protected readonly activeConversation = this.chatConversationService.activeConversation;
@@ -59,6 +73,12 @@ export class AppShellChatComponent {
   protected readonly hoveredMessageKey = this.hoveredMessageKeyState.asReadonly();
   protected readonly openReactionMenuKey = this.openReactionMenuKeyState.asReadonly();
   protected readonly languageDropdownOpen = this.languageDropdownOpenState.asReadonly();
+  protected readonly operationMode = this.operationModeState.asReadonly();
+  protected readonly isTimeMode = computed(() => this.operationModeState() === 'time');
+  protected readonly timePaneTopHeight = computed(() => `${Math.round(this.timePaneTopRatioState() * 100)}%`);
+  protected readonly timePaneBottomHeight = computed(
+    () => `${Math.round((1 - this.timePaneTopRatioState()) * 100)}%`
+  );
   protected readonly availableViewModes: ConversationViewMode[] = [
     'raw',
     'clean',
@@ -114,6 +134,18 @@ export class AppShellChatComponent {
     return this.t(I18N_KEYS.shell.LANGUAGE_SELECTOR_ARIA);
   }
 
+  protected modeSwitchAriaLabel(): string {
+    return this.t(I18N_KEYS.shell.MODE_SWITCH_ARIA);
+  }
+
+  protected chatModeAriaLabel(): string {
+    return this.t(I18N_KEYS.shell.MODE_CHAT_TAB_ARIA);
+  }
+
+  protected timeModeAriaLabel(): string {
+    return this.t(I18N_KEYS.shell.MODE_TIME_TAB_ARIA);
+  }
+
   protected mainMenuAriaLabel(): string {
     return this.t(I18N_KEYS.shell.MAIN_MENU_ARIA);
   }
@@ -132,6 +164,14 @@ export class AppShellChatComponent {
 
   protected conversationMessagesAriaLabel(): string {
     return this.t(I18N_KEYS.shell.CONVERSATION_MESSAGES_ARIA);
+  }
+
+  protected timePanelAriaLabel(): string {
+    return this.t(I18N_KEYS.shell.TIME_PANEL_ARIA);
+  }
+
+  protected timeSplitterAriaLabel(): string {
+    return this.t(I18N_KEYS.shell.TIME_SPLITTER_ARIA);
   }
 
   protected reactionsAriaLabel(): string {
@@ -243,6 +283,17 @@ export class AppShellChatComponent {
     this.scheduleFocusComposerInput();
   }
 
+  protected setOperationMode(mode: OperationMode): void {
+    this.operationModeState.set(mode);
+  }
+
+  protected onTimeSplitDragStart(event: MouseEvent): void {
+    event.preventDefault();
+    this.isDraggingTimeSplit = true;
+    window.addEventListener('mousemove', this.onTimeSplitDragMove);
+    window.addEventListener('mouseup', this.onTimeSplitDragEnd);
+  }
+
   protected onComposerInput(value: string): void {
     this.composerMessageState.set(value);
   }
@@ -266,6 +317,10 @@ export class AppShellChatComponent {
 
   protected isAgentTyping(conversationId: string): boolean {
     return this.agentTyping()[conversationId] === true;
+  }
+
+  ngOnDestroy(): void {
+    this.removeTimeSplitDragListeners();
   }
 
   protected selectViewMode(viewMode: ConversationViewMode): void {
@@ -592,7 +647,38 @@ export class AppShellChatComponent {
       });
     });
   }
+
+  private readonly onTimeSplitDragMove = (event: MouseEvent): void => {
+    if (!this.isDraggingTimeSplit) {
+      return;
+    }
+
+    const layout = this.timeModeLayoutRef?.nativeElement;
+
+    if (!layout) {
+      return;
+    }
+
+    const bounds = layout.getBoundingClientRect();
+    const relativeY = event.clientY - bounds.top;
+    const rawRatio = relativeY / bounds.height;
+    const clampedRatio = Math.min(0.85, Math.max(0.15, rawRatio));
+
+    this.timePaneTopRatioState.set(clampedRatio);
+  };
+
+  private readonly onTimeSplitDragEnd = (): void => {
+    this.isDraggingTimeSplit = false;
+    this.removeTimeSplitDragListeners();
+  };
+
+  private removeTimeSplitDragListeners(): void {
+    window.removeEventListener('mousemove', this.onTimeSplitDragMove);
+    window.removeEventListener('mouseup', this.onTimeSplitDragEnd);
+  }
 }
+
+type OperationMode = 'chat' | 'time';
 
 type TextSegment =
   | { type: 'text'; value: string }

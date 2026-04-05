@@ -9,9 +9,37 @@ export const SHELL_TRANSLATIONS = {
     en: 'Main menu',
     es: 'Menu principal'
   },
+  MODE_SWITCH_ARIA: {
+    en: 'Toggle mode',
+    es: 'Cambiar modo'
+  },
+  MODE_CHAT_TAB_ARIA: {
+    en: 'modo chat',
+    es: 'modo chat'
+  },
+  MODE_TIME_TAB_ARIA: {
+    en: 'modo time',
+    es: 'modo time'
+  },
+  CHAT_MODE_LABEL: {
+    en: 'chat mode',
+    es: 'modo chat'
+  },
+  TIME_MODE_LABEL: {
+    en: 'time mode',
+    es: 'modo time'
+  },
   CONVERSATION_LIST_ARIA: {
     en: 'Conversation list',
     es: 'Lista de conversaciones'
+  },
+  TIME_PANEL_ARIA: {
+    en: 'Time panel',
+    es: 'Panel de tiempo'
+  },
+  TIME_SPLITTER_ARIA: {
+    en: 'Resize time panel',
+    es: 'Redimensionar panel de tiempo'
   },
   NEW_CONVERSATION_ARIA: {
     en: 'New conversation',
