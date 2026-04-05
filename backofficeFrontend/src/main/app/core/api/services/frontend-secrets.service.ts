@@ -17,10 +17,19 @@ export class FrontendSecretsService {
     if (!loadedSecrets.backend?.baseUrl?.trim()) {
       throw new Error('Missing backend.baseUrl in secrets.json');
     }
+    if (!loadedSecrets.staticAssets?.baseUrl?.trim()) {
+      throw new Error('Missing staticAssets.baseUrl in secrets.json');
+    }
 
     this.secrets = {
       backend: {
-        baseUrl: loadedSecrets.backend.baseUrl.trim().replace(/\/$/, '')
+        baseUrl: this.normalizeHttpBaseUrl(loadedSecrets.backend.baseUrl, 'backend.baseUrl')
+      },
+      staticAssets: {
+        baseUrl: this.normalizeHttpBaseUrl(
+          loadedSecrets.staticAssets.baseUrl,
+          'staticAssets.baseUrl'
+        )
       }
     };
   }
@@ -31,5 +40,24 @@ export class FrontendSecretsService {
     }
 
     return this.secrets.backend.baseUrl;
+  }
+
+  public get staticAssetsBaseUrl(): string {
+    if (!this.secrets) {
+      throw new Error('Frontend secrets not loaded yet.');
+    }
+
+    return this.secrets.staticAssets.baseUrl;
+  }
+
+  private normalizeHttpBaseUrl(urlValue: string, key: string): string {
+    const trimmed = urlValue.trim();
+    const parsed = new URL(trimmed);
+
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      throw new Error(`Invalid ${key} in secrets.json. It must use http:// or https://`);
+    }
+
+    return parsed.toString().replace(/\/+$/, '');
   }
 }

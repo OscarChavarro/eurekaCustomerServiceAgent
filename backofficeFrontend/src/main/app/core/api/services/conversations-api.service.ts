@@ -9,6 +9,11 @@ export type BackendConversationRawMessage = {
   direction: string;
   text: string;
   sentAt: string | null;
+  normalizedFields?: {
+    attachment?: string | null;
+    messageDate?: string | null;
+    [key: string]: unknown;
+  };
 };
 
 export type BackendConversationCleanMessage = {

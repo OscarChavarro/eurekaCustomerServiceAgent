@@ -12,6 +12,7 @@ import type { ChatMessage, MessageReviewStage } from './conversation-view.types'
 type CreateFromRawOverrides = {
   directionRaw?: string;
   text?: string;
+  imageUrl?: string;
   stageLabel?: string;
   backgroundColor?: string;
   rawText?: string;
@@ -49,6 +50,7 @@ export class MessageBubbleFactory {
       backgroundColor: overrides.backgroundColor,
       rawText: overrides.rawText,
       showRawStrikethrough: overrides.showRawStrikethrough,
+      imageUrl: overrides.imageUrl,
       reviewStage: overrides.reviewStage,
       reviewStageId: overrides.reviewStageId
     };

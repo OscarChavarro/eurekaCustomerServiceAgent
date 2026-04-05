@@ -223,6 +223,14 @@
                 </div>
               </div>
             }
+            @if (message.imageUrl) {
+              <img
+                class="message-image"
+                [src]="message.imageUrl"
+                alt="attachment image"
+                loading="lazy"
+              />
+            }
             @if (message.showRawStrikethrough) {
               <p class="message-text-raw">
                 @for (segment of getTextSegments(message.rawText); track trackByTextSegment($index)) {

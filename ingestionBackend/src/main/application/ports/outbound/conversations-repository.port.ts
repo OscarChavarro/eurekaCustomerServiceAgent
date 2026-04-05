@@ -5,7 +5,6 @@ export type RawConversationStageMessage = {
   sentAt: string | null;
   sender: string | null;
   text: string;
-  sourceFile: string;
   rowNumber: number;
   direction: RawConversationDirection;
   normalizedFields: Record<string, unknown>;

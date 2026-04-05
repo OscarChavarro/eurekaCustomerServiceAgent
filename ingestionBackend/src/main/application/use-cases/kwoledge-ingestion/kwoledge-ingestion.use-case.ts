@@ -2,7 +2,10 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import type { IngestionRuntimeConfigPort } from '../../ports/config/ingestion-runtime-config.port';
 import type { ConversationCsvSourcePort } from '../../ports/inbound/conversation-csv-source.port';
-import type { ConversationsRepositoryPort } from '../../ports/outbound/conversations-repository.port';
+import type {
+  ConversationsRepositoryPort,
+  RawConversationStageMessage
+} from '../../ports/outbound/conversations-repository.port';
 import type { EmbeddingPort } from '../../ports/outbound/embedding.port';
 import type {
   EmbeddingRepositoryRecord,
@@ -143,7 +146,9 @@ export class KwoledgeIngestionUseCase {
       const currentPosition = index + 1;
       const conversationRawMessages = rawByConversation.get(conversationId) ?? [];
 
-      const rawStageMessages = conversationRawMessages.map((message) => this.toRawStageMessage(message));
+      const rawStageMessages = conversationRawMessages.map((message) =>
+        this.toRepositoryRawStageMessage(message)
+      );
       await this.conversationsRepositoryPort.upsertRawMessages(
         conversationId,
         rawStageMessages,
@@ -416,7 +421,7 @@ export class KwoledgeIngestionUseCase {
       sourceFile: rawMessage.sourceFile,
       rowNumber: rawMessage.rowNumber,
       direction: rawMessage.direction,
-      normalizedFields: rawMessage.normalizedFields as unknown as Record<string, unknown>
+      normalizedFields: this.omitTextFromNormalizedFields(rawMessage.normalizedFields)
     };
   }
 
@@ -460,8 +465,30 @@ export class KwoledgeIngestionUseCase {
       sourceFile: rawMessage.sourceFile,
       rowNumber: rawMessage.rowNumber,
       direction: this.toStageDirection(rawMessage.direction),
-      normalizedFields: rawMessage.normalizedFields as unknown as Record<string, unknown>
+      normalizedFields: this.omitTextFromNormalizedFields(rawMessage.normalizedFields)
     };
+  }
+
+  private toRepositoryRawStageMessage(
+    rawMessage: RawConversationMessage
+  ): RawConversationStageMessage {
+    return {
+      externalId: rawMessage.externalId,
+      sentAt: rawMessage.sentAt?.toISOString() ?? null,
+      sender: rawMessage.sender,
+      text: rawMessage.text,
+      rowNumber: rawMessage.rowNumber,
+      direction: this.toStageDirection(rawMessage.direction),
+      normalizedFields: this.omitTextFromNormalizedFields(rawMessage.normalizedFields)
+    };
+  }
+
+  private omitTextFromNormalizedFields(
+    normalizedFields: RawConversationMessage['normalizedFields']
+  ): Record<string, unknown> {
+    const { text: _unusedText, ...remainingFields } =
+      normalizedFields as unknown as Record<string, unknown>;
+    return remainingFields;
   }
 
   private toCleanedStageMessage(message: CleanedConversationMessage): CleanedStageMessage {
