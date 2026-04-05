@@ -73,6 +73,14 @@ export const SHELL_TRANSLATIONS = {
     en: 'Open reactions menu',
     es: 'Abrir menu de reacciones'
   },
+  OPEN_CONVERSATION_ACTIONS_ARIA: {
+    en: 'Open conversation actions',
+    es: 'Abrir acciones de la conversacion'
+  },
+  DELETE_CONVERSATION_ARIA: {
+    en: 'Delete conversation',
+    es: 'Eliminar conversacion'
+  },
   ATTACH_FILE_ARIA: {
     en: 'Attach file',
     es: 'Adjuntar archivo'

@@ -111,6 +111,20 @@ export type ChatCompletionsStreamChunk = {
   [key: string]: unknown;
 };
 
+export type DeleteConversationRequest = {
+  conversationId: string;
+};
+
+export type DeleteConversationResponse = {
+  ok: true;
+  conversationId: string;
+  csvMoved: boolean;
+  csvFromPath: string | null;
+  csvToPath: string | null;
+  embeddingsDeleted: number;
+  conversationDeleted: boolean;
+};
+
 type StreamCallbacks = {
   onChunk: (chunk: ChatCompletionsStreamChunk) => void;
   onDone: () => void;
@@ -160,6 +174,17 @@ export class ConversationsApiService {
     return this.httpClient.get<MessageRatingsResponse>(
       `${this.frontendSecretsService.backendBaseUrl}/message-ratings`,
       { params }
+    );
+  }
+
+  public deleteConversation(
+    request: DeleteConversationRequest
+  ): Observable<DeleteConversationResponse> {
+    return this.httpClient.delete<DeleteConversationResponse>(
+      `${this.frontendSecretsService.backendBaseUrl}/conversation`,
+      {
+        body: request
+      }
     );
   }
 

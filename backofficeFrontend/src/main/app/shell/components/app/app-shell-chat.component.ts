@@ -51,6 +51,8 @@ export class AppShellChatComponent implements OnDestroy {
   private activeHoveredPhone: string | null = null;
   private readonly hoveredMessageKeyState = signal<string | null>(null);
   private readonly openReactionMenuKeyState = signal<string | null>(null);
+  private readonly hoveredConversationIdState = signal<string | null>(null);
+  private readonly openConversationDeleteMenuIdState = signal<string | null>(null);
   private readonly operationModeState = signal<OperationMode>('chat');
   private readonly timePaneTopRatioState = signal<number>(0.5);
   private isDraggingTimeSplit = false;
@@ -73,6 +75,8 @@ export class AppShellChatComponent implements OnDestroy {
   protected readonly agentTyping = this.chatConversationService.agentTyping;
   protected readonly hoveredMessageKey = this.hoveredMessageKeyState.asReadonly();
   protected readonly openReactionMenuKey = this.openReactionMenuKeyState.asReadonly();
+  protected readonly hoveredConversationId = this.hoveredConversationIdState.asReadonly();
+  protected readonly openConversationDeleteMenuId = this.openConversationDeleteMenuIdState.asReadonly();
   protected readonly languageDropdownOpen = this.languageDropdownOpenState.asReadonly();
   protected readonly operationMode = this.operationModeState.asReadonly();
   protected readonly isTimeMode = computed(() => this.operationModeState() === 'time');
@@ -208,6 +212,14 @@ export class AppShellChatComponent implements OnDestroy {
     return this.t(I18N_KEYS.shell.OPEN_REACTIONS_MENU_ARIA);
   }
 
+  protected conversationActionsAriaLabel(): string {
+    return this.t(I18N_KEYS.shell.OPEN_CONVERSATION_ACTIONS_ARIA);
+  }
+
+  protected deleteConversationAriaLabel(): string {
+    return this.t(I18N_KEYS.shell.DELETE_CONVERSATION_ARIA);
+  }
+
   protected attachFileAriaLabel(): string {
     return this.t(I18N_KEYS.shell.ATTACH_FILE_ARIA);
   }
@@ -302,6 +314,68 @@ export class AppShellChatComponent implements OnDestroy {
 
   protected selectConversation(conversationId: string): void {
     this.chatConversationService.setActiveConversation(conversationId);
+  }
+
+  protected onConversationMouseEnter(conversationId: string): void {
+    this.hoveredConversationIdState.set(conversationId);
+  }
+
+  protected onConversationMouseLeave(conversationId: string): void {
+    if (this.hoveredConversationIdState() === conversationId) {
+      this.hoveredConversationIdState.set(null);
+    }
+
+    if (this.openConversationDeleteMenuIdState() === conversationId) {
+      this.openConversationDeleteMenuIdState.set(null);
+    }
+  }
+
+  protected shouldShowConversationActions(conversationId: string): boolean {
+    if (conversationId === 'local-simulation') {
+      return false;
+    }
+
+    return (
+      this.hoveredConversationId() === conversationId ||
+      this.openConversationDeleteMenuId() === conversationId
+    );
+  }
+
+  protected toggleConversationDeleteMenu(event: MouseEvent, conversationId: string): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.openConversationDeleteMenuIdState.update((current) =>
+      current === conversationId ? null : conversationId
+    );
+  }
+
+  protected deleteConversation(event: MouseEvent, conversationId: string): void {
+    event.preventDefault();
+    event.stopPropagation();
+    const payloadConversationId = this.toDeletePayloadConversationId(conversationId);
+
+    this.conversationsApiService
+      .deleteConversation({ conversationId: payloadConversationId })
+      .pipe(take(1))
+      .subscribe({
+        next: () => {
+          this.chatConversationService.removeConversationFromState(conversationId);
+          this.hoveredConversationIdState.set(null);
+          this.openConversationDeleteMenuIdState.set(null);
+        },
+        error: (error: unknown) => {
+          console.error(`Unable to delete conversation id=${conversationId}`, error);
+        }
+      });
+  }
+
+  private toDeletePayloadConversationId(conversationId: string): string {
+    const prefix = 'WhatsApp - ';
+    const normalizedConversationId = conversationId.startsWith(prefix)
+      ? conversationId.slice(prefix.length)
+      : conversationId;
+
+    return `${prefix}${normalizedConversationId}`;
   }
 
   protected selectConversationFromTimePanel(conversationId: string): void {

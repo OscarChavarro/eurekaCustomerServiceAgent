@@ -1,0 +1,25 @@
+meta {
+  name: Delete Conversation
+  type: http
+  seq: 10
+}
+
+delete {
+  url: {{baseUrl}}/conversation
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "conversationId": "WhatsApp - +44 7710 173736"
+  }
+}
+
+vars:pre-request {
+  baseUrl: http://192.168.1.110:3667
+}

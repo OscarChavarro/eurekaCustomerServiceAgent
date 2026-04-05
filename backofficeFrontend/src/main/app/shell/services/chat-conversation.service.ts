@@ -270,6 +270,36 @@ export class ChatConversationService {
     this.ensureConversationDetailsLoaded(conversationId);
   }
 
+  removeConversationFromState(conversationId: string): void {
+    if (this.isSimulationConversationId(conversationId)) {
+      return;
+    }
+
+    this.loadedMessagesConversationIds.delete(conversationId);
+    this.loadedRatingsConversationIds.delete(conversationId);
+
+    this.conversationSummariesState.update((current) => this.omitRecordKey(current, conversationId));
+    this.conversationDocumentsState.update((current) => this.omitRecordKey(current, conversationId));
+    this.conversationRatingsState.update((current) => this.omitRecordKey(current, conversationId));
+    this.localRawMessagesState.update((current) => this.omitRecordKey(current, conversationId));
+    this.agentTypingState.update((current) => this.omitRecordKey(current, conversationId));
+
+    this.conversationState.update((conversations) =>
+      conversations.filter((conversation) => conversation.id !== conversationId)
+    );
+
+    if (this.activeConversationIdState() === conversationId) {
+      const nextConversationId = this.conversations()[0]?.id ?? null;
+      this.activeConversationIdState.set(nextConversationId);
+
+      if (nextConversationId && !this.isSimulationConversationId(nextConversationId)) {
+        this.ensureConversationDetailsLoaded(nextConversationId);
+      }
+    }
+
+    this.recomputeFilteredConversationIds();
+  }
+
   ensureConversationDetailsLoaded(conversationId: string): void {
     if (this.isSimulationConversationId(conversationId)) {
       return;
@@ -761,5 +791,15 @@ export class ChatConversationService {
     }
 
     return true;
+  }
+
+  private omitRecordKey<TValue>(record: Record<string, TValue>, keyToOmit: string): Record<string, TValue> {
+    if (!(keyToOmit in record)) {
+      return record;
+    }
+
+    const { [keyToOmit]: omittedValue, ...rest } = record;
+    void omittedValue;
+    return rest;
   }
 }

@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ChatCompletionsController } from './adapters/inbound/http/chat-completions.controller';
+import { ConversationController } from './adapters/inbound/http/conversation.controller';
 import { ConversationsController } from './adapters/inbound/http/conversations.controller';
+import { CsvConversationArchiveAdapter } from './adapters/outbound/fs/csv-conversation-archive.adapter';
 import { MessageRatingController } from './adapters/inbound/http/message-rating.controller';
 import { MessageRatingsController } from './adapters/inbound/http/message-ratings.controller';
 import { MessagesController } from './adapters/inbound/http/messages.controller';
@@ -8,8 +10,10 @@ import { PhonePrefixController } from './adapters/inbound/http/phone-prefix.cont
 import { HardcodedPhonePrefixCatalogAdapter } from './adapters/outbound/hardcoded/hardcoded-phone-prefix-catalog.adapter';
 import { FetchLlmChatCompletionsAdapter } from './adapters/outbound/http/fetch-llm-chat-completions.adapter';
 import { MongoClientProvider } from './adapters/outbound/mongo/mongo-client.provider';
+import { MongoConversationDeletionRepositoryAdapter } from './adapters/outbound/mongo/mongo-conversation-deletion.repository.adapter';
 import { MongoConversationsRepositoryAdapter } from './adapters/outbound/mongo/mongo-conversations.repository.adapter';
 import { MongoMessageRatingRepositoryAdapter } from './adapters/outbound/mongo/mongo-message-rating.repository.adapter';
+import { DeleteConversationUseCase } from './application/use-cases/delete-conversation/delete-conversation.use-case';
 import { StreamChatCompletionsUseCase } from './application/use-cases/chat-completions/stream-chat-completions.use-case';
 import { GetConversationIdsUseCase } from './application/use-cases/get-conversation-ids/get-conversation-ids.use-case';
 import { GetConversationMessagesUseCase } from './application/use-cases/get-conversation-messages/get-conversation-messages.use-case';
@@ -30,7 +34,8 @@ import { SettingsConfig } from './infrastructure/config/settings/settings.config
     PhonePrefixController,
     MessageRatingController,
     MessageRatingsController,
-    ChatCompletionsController
+    ChatCompletionsController,
+    ConversationController
   ],
   providers: [
     SettingsConfig,
@@ -45,6 +50,7 @@ import { SettingsConfig } from './infrastructure/config/settings/settings.config
     GetMessageRatingsUseCase,
     RateMessageUseCase,
     StreamChatCompletionsUseCase,
+    DeleteConversationUseCase,
     {
       provide: TOKENS.ConversationsReadRepositoryPort,
       useClass: MongoConversationsRepositoryAdapter
@@ -60,6 +66,14 @@ import { SettingsConfig } from './infrastructure/config/settings/settings.config
     {
       provide: TOKENS.LlmChatCompletionsPort,
       useClass: FetchLlmChatCompletionsAdapter
+    },
+    {
+      provide: TOKENS.ConversationDeletionRepositoryPort,
+      useClass: MongoConversationDeletionRepositoryAdapter
+    },
+    {
+      provide: TOKENS.ConversationCsvArchivePort,
+      useClass: CsvConversationArchiveAdapter
     }
   ]
 })
