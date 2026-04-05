@@ -1,6 +1,6 @@
 import { IsNotEmpty, IsString } from 'class-validator';
 
-export class ProcessFolderRequest {
+export class ProcessPathRequest {
   @IsString()
   @IsNotEmpty()
   path!: string;

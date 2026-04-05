@@ -1,7 +1,8 @@
 export type ConversationSummaryResult = {
   id: string;
   msg: string | null;
-  date: string | null;
+  firstMessageDate: string | null;
+  lastMessageDate: string | null;
 };
 
 export type GetConversationIdsResult = ConversationSummaryResult[];

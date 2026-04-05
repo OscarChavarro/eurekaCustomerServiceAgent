@@ -443,15 +443,20 @@ export class KwoledgeIngestionUseCase {
   private buildConversationMetadata(rawMessages: RawConversationMessage[]): {
     createdAt: Date;
     source: string;
+    firstMessageDate: string | null;
     lastMessageDate: string | null;
     lastMessageText: string | null;
   } {
+    const firstRawMessage = rawMessages[0];
     const lastRawMessage = rawMessages[rawMessages.length - 1];
+    const firstMessageDate = firstRawMessage?.sentAt?.toISOString() ?? null;
+    const lastMessageDate = lastRawMessage?.sentAt?.toISOString() ?? null;
 
     return {
       createdAt: new Date(),
       source: rawMessages[0]?.sourceFile ?? 'unknown',
-      lastMessageDate: lastRawMessage?.normalizedFields.messageDate ?? null,
+      firstMessageDate,
+      lastMessageDate,
       lastMessageText: lastRawMessage?.normalizedFields.text ?? null
     };
   }

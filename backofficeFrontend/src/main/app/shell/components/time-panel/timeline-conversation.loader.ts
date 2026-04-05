@@ -1,8 +1,7 @@
 import { firstValueFrom } from 'rxjs';
 import {
   ConversationsApiService,
-  type BackendConversationSummary,
-  type BackendConversationDocument
+  type BackendConversationSummary
 } from '../../../core/api/services/conversations-api.service';
 import type { TimelineConversationSegment } from './timeline.types';
 
@@ -14,32 +13,11 @@ export class TimelineConversationLoader {
   public async loadAll(progressCallback?: LoadProgressCallback): Promise<TimelineConversationSegment[]> {
     const summaries = await firstValueFrom(this.conversationsApiService.getConversationIds());
     const total = summaries.length;
-    const segments: TimelineConversationSegment[] = [];
-    const concurrency = Math.min(8, Math.max(1, total));
-    let nextIndex = 0;
-    let loadedCount = 0;
+    const segments = summaries.map((summary) => this.toSegment(summary));
 
-    const workers = Array.from({ length: concurrency }, async () => {
-      while (nextIndex < total) {
-        const index = nextIndex;
-        nextIndex += 1;
-        const summary = summaries[index];
-
-        if (!summary) {
-          continue;
-        }
-
-        const segment = await this.loadOneConversation(summary);
-        segments.push(segment);
-        loadedCount += 1;
-
-        if (progressCallback && (loadedCount % 25 === 0 || loadedCount === total)) {
-          progressCallback(loadedCount, total);
-        }
-      }
-    });
-
-    await Promise.all(workers);
+    if (progressCallback) {
+      progressCallback(total, total);
+    }
 
     return segments.sort((left, right) =>
       left.startMs === right.startMs
@@ -48,51 +26,18 @@ export class TimelineConversationLoader {
     );
   }
 
-  private async loadOneConversation(summary: BackendConversationSummary): Promise<TimelineConversationSegment> {
-    const fallbackTimestamp = this.parseDate(summary.date) ?? Date.now();
-
-    try {
-      const document = await firstValueFrom(this.conversationsApiService.getConversationById(summary.id));
-      const { startMs, endMs } = this.resolveConversationBounds(document, fallbackTimestamp);
-
-      return {
-        id: summary.id,
-        startMs,
-        endMs,
-        color: this.buildSegmentColor(summary.id)
-      };
-    } catch {
-      return {
-        id: summary.id,
-        startMs: fallbackTimestamp,
-        endMs: fallbackTimestamp + 60_000,
-        color: this.buildSegmentColor(summary.id)
-      };
-    }
-  }
-
-  private resolveConversationBounds(
-    document: BackendConversationDocument,
-    fallbackTimestamp: number
-  ): { startMs: number; endMs: number } {
-    const rawMessages = document.rawMessages ?? [];
-    const timestamps = rawMessages
-      .map((rawMessage) => this.parseDate(rawMessage.sentAt))
-      .filter((timestamp): timestamp is number => typeof timestamp === 'number');
-
-    if (timestamps.length === 0) {
-      return {
-        startMs: fallbackTimestamp,
-        endMs: fallbackTimestamp + 60_000
-      };
-    }
-
-    const startMs = Math.min(...timestamps);
-    const endMs = Math.max(...timestamps);
+  private toSegment(summary: BackendConversationSummary): TimelineConversationSegment {
+    const now = Date.now();
+    const firstDate = this.parseDate(summary.firstMessageDate);
+    const lastDate = this.parseDate(summary.lastMessageDate);
+    const startMs = firstDate ?? lastDate ?? now;
+    const endMs = Math.max(startMs + 1_000, lastDate ?? startMs + 60_000);
 
     return {
+      id: summary.id,
       startMs,
-      endMs: Math.max(startMs + 1_000, endMs)
+      endMs,
+      color: this.buildSegmentColor(summary.id)
     };
   }
 

@@ -158,16 +158,16 @@ or using the included Bruno endpoint.
 
 ## Main Endpoint
 
-- `POST /ingestion/process-folder`
+- `POST /ingestion/process-path`
 - Payload:
 
 ```json
 {
-  "folderPath": "./etc/_chatsEureka/csv"
+  "path": "./etc/_chatsEureka/csv"
 }
 ```
 
-`folderPath` accepts either:
+`path` accepts either:
 - A directory path: processes all `.csv` files in that directory.
 - A single `.csv` file path: processes only that file.
 

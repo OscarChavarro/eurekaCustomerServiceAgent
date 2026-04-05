@@ -38,7 +38,8 @@ export type BackendConversationChunkMessage = {
 export type BackendConversationSummary = {
   id: string;
   msg: string | null;
-  date: string | null;
+  firstMessageDate: string | null;
+  lastMessageDate: string | null;
 };
 
 export type BackendConversationDocument = {

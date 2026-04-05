@@ -6,4 +6,5 @@ export type WrapperChatMessage = {
 export type StreamChatCompletionsCommand = {
   messages: WrapperChatMessage[];
   maxTokens: number;
+  systemContextMessage: string;
 };

@@ -12,6 +12,7 @@ import { MongoClientProvider } from './mongo-client.provider';
 type MongoConversationDocument = {
   _id: string;
   sourceFile: string;
+  firstMessageDate: string | null;
   lastMessageDate: string | null;
   lastMessageText: string | null;
   rawMessages: RawConversationStageMessage[];
@@ -42,6 +43,7 @@ export class MongoConversationsRepositoryAdapter implements ConversationsReposit
         $set: {
           sourceFile: metadata.source,
           rawMessages,
+          firstMessageDate: metadata.firstMessageDate,
           lastMessageDate: metadata.lastMessageDate,
           lastMessageText: metadata.lastMessageText,
           'metadata.source': metadata.source
@@ -72,6 +74,7 @@ export class MongoConversationsRepositoryAdapter implements ConversationsReposit
         },
         $setOnInsert: {
           sourceFile: 'unknown',
+          firstMessageDate: null,
           lastMessageDate: null,
           lastMessageText: null,
           rawMessages: [],
@@ -102,6 +105,7 @@ export class MongoConversationsRepositoryAdapter implements ConversationsReposit
         },
         $setOnInsert: {
           sourceFile: 'unknown',
+          firstMessageDate: null,
           lastMessageDate: null,
           lastMessageText: null,
           rawMessages: [],
@@ -132,6 +136,7 @@ export class MongoConversationsRepositoryAdapter implements ConversationsReposit
         },
         $setOnInsert: {
           sourceFile: 'unknown',
+          firstMessageDate: null,
           lastMessageDate: null,
           lastMessageText: null,
           rawMessages: [],

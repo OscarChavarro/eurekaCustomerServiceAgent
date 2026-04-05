@@ -6,6 +6,7 @@ import { MongoClientProvider } from './mongo-client.provider';
 type MongoConversationDocument = {
   _id: string;
   lastMessageText?: unknown;
+  firstMessageDate?: unknown;
   lastMessageDate?: unknown;
 };
 
@@ -21,7 +22,7 @@ export class MongoConversationsRepositoryAdapter implements ConversationsReadRep
       .find(
         {},
         {
-          projection: { _id: 1, lastMessageText: 1, lastMessageDate: 1 }
+          projection: { _id: 1, lastMessageText: 1, firstMessageDate: 1, lastMessageDate: 1 }
         }
       )
       .toArray();
@@ -29,7 +30,10 @@ export class MongoConversationsRepositoryAdapter implements ConversationsReadRep
     return documents.map((document) => ({
       id: String(document._id),
       msg: typeof document.lastMessageText === 'string' ? document.lastMessageText : null,
-      date: typeof document.lastMessageDate === 'string' ? document.lastMessageDate : null
+      firstMessageDate:
+        typeof document.firstMessageDate === 'string' ? document.firstMessageDate : null,
+      lastMessageDate:
+        typeof document.lastMessageDate === 'string' ? document.lastMessageDate : null
     }));
   }
 

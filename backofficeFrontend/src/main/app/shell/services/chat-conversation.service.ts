@@ -331,7 +331,7 @@ export class ChatConversationService {
       contactName: conversationId,
       contactAvatar: avatar,
       lastMessagePreview: summary.msg ?? 'Conversacion cargada desde backend.',
-      lastMessageAt: formatDateLabel(summary.date, this.i18nStateService.selectedLanguage()),
+      lastMessageAt: formatDateLabel(summary.lastMessageDate, this.i18nStateService.selectedLanguage()),
       unreadCount: 0,
       messages: this.defaultMockMessages
     };
@@ -415,7 +415,7 @@ export class ChatConversationService {
             ? lastLocalRawMessage.sentAt
             : lastRawMessage?.sentAt
               ? formatSentAt(lastRawMessage.sentAt, language)
-            : formatDateLabel(summary?.date, language)
+            : formatDateLabel(summary?.lastMessageDate, language)
         };
       }))
     );
@@ -463,7 +463,8 @@ export class ChatConversationService {
           ...conversation,
           lastMessagePreview:
             lastLocalRawMessage?.text || summary.msg || conversation.lastMessagePreview,
-          lastMessageAt: lastLocalRawMessage?.sentAt || formatDateLabel(summary.date, language)
+          lastMessageAt:
+            lastLocalRawMessage?.sentAt || formatDateLabel(summary.lastMessageDate, language)
         };
       }))
     );
@@ -501,7 +502,7 @@ export class ChatConversationService {
       return this.toTimestamp(lastRawMessage.sentAt);
     }
 
-    const summaryDate = this.conversationSummariesState()[conversationId]?.date;
+    const summaryDate = this.conversationSummariesState()[conversationId]?.lastMessageDate;
     return summaryDate ? this.toTimestamp(summaryDate) : 0;
   }
 

@@ -10,16 +10,16 @@ import { QdrantConnectionError } from '../../../application/errors/qdrant-connec
 import { KwoledgeIngestionCommand } from '../../../application/use-cases/kwoledge-ingestion/kwoledge-ingestion.command';
 import type { KwoledgeIngestionResult } from '../../../application/use-cases/kwoledge-ingestion/kwoledge-ingestion.result';
 import { KwoledgeIngestionUseCase } from '../../../application/use-cases/kwoledge-ingestion/kwoledge-ingestion.use-case';
-import { ProcessFolderRequest } from './dto/process-folder.request';
+import { ProcessPathRequest } from './dto/process-path.request';
 
 @Controller('ingestion')
 export class IngestionController {
   constructor(private readonly kwoledgeIngestionUseCase: KwoledgeIngestionUseCase) {}
 
-  @Post('process-folder')
+  @Post('process-path')
   @HttpCode(HttpStatus.OK)
-  public async processFolder(
-    @Body() request: ProcessFolderRequest
+  public async processPath(
+    @Body() request: ProcessPathRequest
   ): Promise<KwoledgeIngestionResult> {
     try {
       return await this.kwoledgeIngestionUseCase.execute(

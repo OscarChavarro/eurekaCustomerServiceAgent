@@ -4,6 +4,7 @@ import type {
   WrapperChatMessage
 } from '../../../application/use-cases/chat-completions/stream-chat-completions.command';
 import { StreamChatCompletionsUseCase } from '../../../application/use-cases/chat-completions/stream-chat-completions.use-case';
+import { ServiceConfig } from '../../../infrastructure/config/service.config';
 
 const WRAPPER_RESTRICTION_USER_MESSAGE =
   'bad request: this endpoint is not a general-purpose LLM; it is a wrapper that restricts options and fills defaults.';
@@ -18,7 +19,10 @@ type HttpStreamResponse = {
 
 @Controller('v1/chat')
 export class ChatCompletionsController {
-  constructor(private readonly streamChatCompletionsUseCase: StreamChatCompletionsUseCase) {}
+  constructor(
+    private readonly streamChatCompletionsUseCase: StreamChatCompletionsUseCase,
+    private readonly serviceConfig: ServiceConfig
+  ) {}
 
   @Post('completions')
   public async streamChatCompletions(@Body() body: unknown, @Res() response: HttpStreamResponse): Promise<void> {
@@ -107,7 +111,8 @@ export class ChatCompletionsController {
 
     return {
       messages: normalizedMessages,
-      maxTokens: maxTokensRaw
+      maxTokens: maxTokensRaw,
+      systemContextMessage: this.serviceConfig.llmConfig.contextMessage
     };
   }
 
