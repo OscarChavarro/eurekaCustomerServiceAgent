@@ -54,6 +54,7 @@ export class AppShellChatComponent implements OnDestroy {
   private readonly hoveredConversationIdState = signal<string | null>(null);
   private readonly openConversationDeleteMenuIdState = signal<string | null>(null);
   private readonly operationModeState = signal<OperationMode>('chat');
+  private readonly chatHiddenInTimeModeState = signal<boolean>(false);
   private readonly timePaneTopRatioState = signal<number>(0.5);
   private isDraggingTimeSplit = false;
   @ViewChild('messagesArea') private messagesAreaRef?: ElementRef<HTMLDivElement>;
@@ -80,9 +81,13 @@ export class AppShellChatComponent implements OnDestroy {
   protected readonly languageDropdownOpen = this.languageDropdownOpenState.asReadonly();
   protected readonly operationMode = this.operationModeState.asReadonly();
   protected readonly isTimeMode = computed(() => this.operationModeState() === 'time');
+  protected readonly isTimeModeChatHidden = this.chatHiddenInTimeModeState.asReadonly();
   protected readonly timePaneTopHeight = computed(() => `${Math.round(this.timePaneTopRatioState() * 100)}%`);
   protected readonly timePaneBottomHeight = computed(
     () => `${Math.round((1 - this.timePaneTopRatioState()) * 100)}%`
+  );
+  protected readonly timePanelHeight = computed(() =>
+    this.chatHiddenInTimeModeState() ? '100%' : this.timePaneTopHeight()
   );
   protected readonly availableViewModes: ConversationViewMode[] = [
     'raw',
@@ -445,6 +450,12 @@ export class AppShellChatComponent implements OnDestroy {
     if (event.key.toLowerCase() === 'f') {
       event.preventDefault();
       void this.toggleFullScreenMode();
+      return;
+    }
+
+    if (event.key.toLowerCase() === 'g' && this.operationModeState() === 'time') {
+      event.preventDefault();
+      this.toggleTimeModeChatVisibility();
       return;
     }
 
@@ -836,6 +847,10 @@ export class AppShellChatComponent implements OnDestroy {
     }
 
     await document.exitFullscreen();
+  }
+
+  private toggleTimeModeChatVisibility(): void {
+    this.chatHiddenInTimeModeState.update((isHidden) => !isHidden);
   }
 
   private selectPreviousConversation(): void {

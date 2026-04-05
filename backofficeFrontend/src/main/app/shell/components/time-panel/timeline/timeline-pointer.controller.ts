@@ -2,6 +2,8 @@ import { TimelineModelStore } from './timeline-model.store';
 import type { TimelineRect, TimelineRenderMetrics } from './timeline.types';
 
 type MetricsGetter = () => TimelineRenderMetrics | null;
+type HorizontalZoomPivot = { anchorXPx: number; anchorTimeMs?: number };
+type HorizontalZoomAnchorResolver = (fallbackAnchorXPx: number, mainWidthPx: number) => HorizontalZoomPivot;
 
 export type DragMode = 'none' | 'pan' | 'v-scroll' | 'h-scroll' | 'v-zoom' | 'h-zoom';
 
@@ -16,7 +18,8 @@ export class TimelinePointerController {
   constructor(
     private readonly model: TimelineModelStore,
     private readonly getMetrics: MetricsGetter,
-    private readonly onConversationRowClick: (rowIndex: number) => void
+    private readonly onConversationRowClick: (rowIndex: number) => void,
+    private readonly resolveHorizontalZoomAnchorX?: HorizontalZoomAnchorResolver
   ) {}
 
   public onWheel(event: WheelEvent): void {
@@ -30,15 +33,17 @@ export class TimelinePointerController {
     const zoomFactor = Math.exp(-event.deltaY * 0.0015);
     const anchorX = event.offsetX - metrics.mainRect.x;
     const anchorY = event.offsetY - metrics.mainRect.y;
+    const resolvedPivot =
+      this.resolveHorizontalZoomAnchorX?.(anchorX, metrics.mainRect.width) ?? { anchorXPx: anchorX };
 
     if (event.ctrlKey || event.metaKey) {
-      this.model.zoomX(zoomFactor, anchorX, metrics.mainRect.width);
+      this.model.zoomX(zoomFactor, resolvedPivot.anchorXPx, metrics.mainRect.width, resolvedPivot.anchorTimeMs);
       this.model.zoomY(zoomFactor, anchorY, metrics.mainRect.height);
       return;
     }
 
     if (event.altKey) {
-      this.model.zoomX(zoomFactor, anchorX, metrics.mainRect.width);
+      this.model.zoomX(zoomFactor, resolvedPivot.anchorXPx, metrics.mainRect.width, resolvedPivot.anchorTimeMs);
       return;
     }
 
@@ -177,7 +182,10 @@ export class TimelinePointerController {
       const deltaX = event.movementX !== 0 ? event.movementX : point.x - this.dragOriginX;
       this.dragOriginX = point.x;
       const zoomFactor = Math.exp(deltaX * 0.015);
-      this.model.zoomX(zoomFactor, metrics.mainRect.width / 2, metrics.mainRect.width);
+      const centerAnchor = metrics.mainRect.width / 2;
+      const resolvedPivot =
+        this.resolveHorizontalZoomAnchorX?.(centerAnchor, metrics.mainRect.width) ?? { anchorXPx: centerAnchor };
+      this.model.zoomX(zoomFactor, resolvedPivot.anchorXPx, metrics.mainRect.width, resolvedPivot.anchorTimeMs);
     }
   }
 

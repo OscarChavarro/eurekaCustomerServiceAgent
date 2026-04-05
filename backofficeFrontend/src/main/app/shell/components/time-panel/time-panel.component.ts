@@ -60,15 +60,21 @@ export class TimePanelComponent implements AfterViewInit, OnDestroy {
         startMs: range.startTime.getTime(),
         endMs: range.endTime.getTime()
       };
-    }
+    },
+    () => this.timeCursorModel.getValue()?.conversationName ?? null
   );
   private readonly timeRangeRenderer = new CanvasTimeRangeRenderer(this.model, this.timeRangeModel);
   private readonly timeCursorRenderer = new CanvasTimeCursorRenderer(this.timeCursorModel);
-  private readonly keyboardController = new TimelineKeyboardController(this.model, () => this.getMainAreaMetrics());
+  private readonly keyboardController = new TimelineKeyboardController(
+    this.model,
+    () => this.getMainAreaMetrics(),
+    (fallbackAnchorXPx, mainWidthPx) => this.resolveTimeRangeAwareHorizontalZoomAnchor(fallbackAnchorXPx, mainWidthPx)
+  );
   private readonly pointerController = new TimelinePointerController(
     this.model,
     () => this.lastRenderMetrics,
-    (rowIndex) => this.onConversationRowClick(rowIndex)
+    (rowIndex) => this.onConversationRowClick(rowIndex),
+    (fallbackAnchorXPx, mainWidthPx) => this.resolveTimeRangeAwareHorizontalZoomAnchor(fallbackAnchorXPx, mainWidthPx)
   );
   private readonly timeRangeController = new TimeRangeController(this.timeRangeModel, () => this.lastTimeRangeGeometry);
   private readonly timeCursorController = new TimeCursorController(
@@ -444,5 +450,28 @@ export class TimePanelComponent implements AfterViewInit, OnDestroy {
       startMs: range.startTime.getTime(),
       endMs: range.endTime.getTime()
     });
+  }
+
+  private resolveTimeRangeAwareHorizontalZoomAnchor(
+    fallbackAnchorXPx: number,
+    mainWidthPx: number
+  ): { anchorXPx: number; anchorTimeMs?: number } {
+    const range = this.timeRangeModel.getValue();
+
+    if (!range || mainWidthPx <= 0) {
+      return { anchorXPx: fallbackAnchorXPx };
+    }
+
+    const rangeStartMs = range.startTime.getTime();
+    const rangeEndMs = range.endTime.getTime();
+    const rangeDurationMs = Math.max(1_000, rangeEndMs - rangeStartMs);
+    const rangeMidpointMs = rangeStartMs + rangeDurationMs / 2;
+
+    // Keep zoom focused on the selected time range by pinning its midpoint to the canvas center.
+    // This enforces that zoom translates toward the selected window instead of the current viewport center.
+    return {
+      anchorXPx: mainWidthPx / 2,
+      anchorTimeMs: rangeMidpointMs
+    };
   }
 }

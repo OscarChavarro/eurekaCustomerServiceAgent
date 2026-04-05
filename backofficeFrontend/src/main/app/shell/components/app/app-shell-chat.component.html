@@ -68,23 +68,25 @@
         <ng-container [ngTemplateOutlet]="chatPanelsTemplate"></ng-container>
       </div>
     } @else {
-      <div class="time-mode-layout" #timeModeLayout>
+      <div class="time-mode-layout" #timeModeLayout [class.is-chat-hidden]="isTimeModeChatHidden()">
         <section
           class="time-panel-host"
           [attr.aria-label]="timePanelAriaLabel()"
-          [style.height]="timePaneTopHeight()"
+          [style.height]="timePanelHeight()"
         >
           <app-time-panel (conversationSelected)="selectConversationFromTimePanel($event)"></app-time-panel>
         </section>
-        <button
-          type="button"
-          class="time-splitter"
-          [attr.aria-label]="timeSplitterAriaLabel()"
-          (mousedown)="onTimeSplitDragStart($event)"
-        ></button>
-        <div class="chat-panels is-bottom" [style.height]="timePaneBottomHeight()">
-          <ng-container [ngTemplateOutlet]="chatPanelsTemplate"></ng-container>
-        </div>
+        @if (!isTimeModeChatHidden()) {
+          <button
+            type="button"
+            class="time-splitter"
+            [attr.aria-label]="timeSplitterAriaLabel()"
+            (mousedown)="onTimeSplitDragStart($event)"
+          ></button>
+          <div class="chat-panels is-bottom" [style.height]="timePaneBottomHeight()">
+            <ng-container [ngTemplateOutlet]="chatPanelsTemplate"></ng-container>
+          </div>
+        }
       </div>
     }
   </section>

@@ -23,7 +23,8 @@ export class TimelineCanvasRenderer {
     private readonly model: TimelineModelStore,
     private readonly i18nService: I18nService,
     private readonly getLanguage: () => SupportedLanguage,
-    private readonly getActiveTimeRange: () => ActiveTimeRange | null
+    private readonly getActiveTimeRange: () => ActiveTimeRange | null,
+    private readonly getHoveredConversationId: () => string | null
   ) {}
 
   public render(context: CanvasRenderingContext2D, width: number, height: number): TimelineRenderMetrics {
@@ -103,6 +104,7 @@ export class TimelineCanvasRenderer {
   private drawSegments(context: CanvasRenderingContext2D, mainRect: TimelineRect): void {
     const state = this.model.getState();
     const activeTimeRange = this.getActiveTimeRange();
+    const hoveredConversationId = this.getHoveredConversationId();
     const firstVisibleRow = Math.floor(state.scrollY / state.rowHeightPx);
     const visibleRows = Math.ceil(mainRect.height / state.rowHeightPx) + 2;
     const rowStart = Math.max(0, firstVisibleRow);
@@ -119,18 +121,38 @@ export class TimelineCanvasRenderer {
       const xEnd = mainRect.x + ((segment.endMs - state.timeOffsetMs) / 1_000) * state.pixelsPerSecond;
       const clippedStart = Math.max(mainRect.x, xStart);
       const clippedEnd = Math.min(mainRect.x + mainRect.width, xEnd);
+      const isHovered = hoveredConversationId === segment.id;
+      const rowTop = Math.max(mainRect.y, y);
+      const rowHeight = Math.max(1, Math.min(state.rowHeightPx, mainRect.y + mainRect.height - rowTop));
+
+      if (isHovered && rowHeight > 0) {
+        context.fillStyle = '#edf1f5';
+        context.fillRect(mainRect.x, rowTop, mainRect.width, rowHeight);
+      }
 
       if (clippedEnd <= clippedStart) {
         continue;
       }
 
-      context.fillStyle = this.resolveSegmentColor(segment.startMs, segment.endMs, segment.color, activeTimeRange);
+      const resolvedColor = this.resolveSegmentColor(segment.startMs, segment.endMs, segment.color, activeTimeRange);
+      context.fillStyle = isHovered ? this.buildHoveredSegmentColor(resolvedColor) : resolvedColor;
       context.fillRect(
         clippedStart,
         Math.max(mainRect.y, y + 1),
         Math.max(1, clippedEnd - clippedStart),
         Math.max(1, state.rowHeightPx - 2)
       );
+
+      if (isHovered) {
+        context.strokeStyle = '#6f7f8f';
+        context.lineWidth = 1;
+        context.strokeRect(
+          clippedStart + 0.5,
+          Math.max(mainRect.y, y + 1) + 0.5,
+          Math.max(0, clippedEnd - clippedStart - 1),
+          Math.max(0, state.rowHeightPx - 3)
+        );
+      }
     }
   }
 
@@ -453,6 +475,24 @@ export class TimelineCanvasRenderer {
       segmentStartMs <= activeTimeRange.endMs && segmentEndMs >= activeTimeRange.startMs;
 
     return intersects ? defaultColor : OUT_OF_RANGE_COLOR;
+  }
+
+  private buildHoveredSegmentColor(baseColor: string): string {
+    const hslMatch = baseColor.match(
+      /^hsl\(\s*([\d.]+)\s+([\d.]+)%\s+([\d.]+)%\s*\)$/i
+    );
+
+    if (!hslMatch) {
+      return baseColor;
+    }
+
+    const hue = Number(hslMatch[1]);
+    const saturation = Number(hslMatch[2]);
+    const lightness = Number(hslMatch[3]);
+    const adjustedSaturation = this.clamp(saturation * 0.6, 20, 55);
+    const adjustedLightness = this.clamp(lightness - 6, 50, 82);
+
+    return `hsl(${hue} ${adjustedSaturation}% ${adjustedLightness}%)`;
   }
 
   private buildCenteredDayHeader(date: Date, locale: string): string {

@@ -152,12 +152,13 @@ export class TimelineModelStore {
     this.clampAndEmit(undefined, mainHeightPx);
   }
 
-  public zoomX(multiplier: number, anchorXPx: number, mainWidthPx: number): void {
+  public zoomX(multiplier: number, anchorXPx: number, mainWidthPx: number, anchorTimeMs?: number): void {
     const minScale = this.computeMinPixelsPerSecond(mainWidthPx);
     const maxScale = 1;
-    const anchorTimeMs = this.state.timeOffsetMs + (anchorXPx / this.state.pixelsPerSecond) * 1_000;
+    const effectiveAnchorTimeMs =
+      anchorTimeMs ?? this.state.timeOffsetMs + (anchorXPx / this.state.pixelsPerSecond) * 1_000;
     const nextScale = this.clamp(this.state.pixelsPerSecond * multiplier, minScale, maxScale);
-    const nextOffsetMs = anchorTimeMs - (anchorXPx / nextScale) * 1_000;
+    const nextOffsetMs = effectiveAnchorTimeMs - (anchorXPx / nextScale) * 1_000;
 
     this.state = {
       ...this.state,
