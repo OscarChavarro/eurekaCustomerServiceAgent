@@ -45,6 +45,16 @@ export type BackendConversationDocument = {
   [key: string]: unknown;
 };
 
+export type PhonePrefixLookupResponse = {
+  input: string;
+  normalizedDigits: string;
+  countryCode: string | null;
+  countryName: string | null;
+  dialCode: string | null;
+  subzone: string | null;
+  subzoneName: string | null;
+};
+
 @Injectable({ providedIn: 'root' })
 export class ConversationsApiService {
   private readonly httpClient = inject(HttpClient);
@@ -61,6 +71,15 @@ export class ConversationsApiService {
 
     return this.httpClient.get<BackendConversationDocument>(
       `${this.frontendSecretsService.backendBaseUrl}/messages`,
+      { params }
+    );
+  }
+
+  public getPhonePrefix(phone: string): Observable<PhonePrefixLookupResponse> {
+    const params = new HttpParams().set('phone', phone);
+
+    return this.httpClient.get<PhonePrefixLookupResponse>(
+      `${this.frontendSecretsService.backendBaseUrl}/phone-prefix`,
       { params }
     );
   }
