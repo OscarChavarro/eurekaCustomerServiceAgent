@@ -32,6 +32,42 @@
   background: var(--surface-sidebar);
 }
 
+.language-switcher {
+  position: relative;
+}
+
+.language-dropdown {
+  position: absolute;
+  left: 3.2rem;
+  top: 0;
+  min-width: 8.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.4rem;
+  border-radius: 0.65rem;
+  background: #2a3942;
+  border: 1px solid #3b4a54;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 25%);
+  z-index: 4;
+}
+
+.language-option {
+  border: 0;
+  border-radius: 0.45rem;
+  background: transparent;
+  color: #d1d7db;
+  text-align: left;
+  padding: 0.45rem 0.55rem;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.language-option:hover,
+.language-option.is-active {
+  background: #3a4b56;
+}
+
 .sidebar-button {
   width: 2.75rem;
   height: 2.75rem;
@@ -276,6 +312,8 @@
   color: var(--text-primary);
   font-size: 0.9rem;
   line-height: 1.3;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .message-text-raw {
@@ -287,6 +325,16 @@
 
 .message-text-clean {
   margin-top: 0;
+}
+
+.message-link {
+  color: #196ba8;
+  text-decoration: underline;
+  text-decoration-thickness: 1.2px;
+}
+
+.message-link:hover {
+  color: #0f4f7f;
 }
 
 .message-bubble.system p {

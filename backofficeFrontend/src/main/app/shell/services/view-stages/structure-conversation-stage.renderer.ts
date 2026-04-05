@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 
 import type {
   BackendConversationCleanMessage,
@@ -6,7 +6,8 @@ import type {
 } from '../../../core/api/services/conversations-api.service';
 import type { ConversationStageRenderer } from './conversation-stage-renderer.interface';
 import type { ChatMessage } from './conversation-view.types';
-import { formatSentAt, mapDirectionFromAgentPerspective } from './conversation-stage-renderer.utils';
+import { mapDirectionFromAgentPerspective } from './conversation-stage-renderer.utils';
+import { MessageBubbleFactory } from './message-bubble.factory';
 
 type GroupColors = {
   customer: string;
@@ -16,6 +17,7 @@ type GroupColors = {
 @Injectable({ providedIn: 'root' })
 export class StructureConversationStageRenderer implements ConversationStageRenderer {
   readonly mode = 'structure' as const;
+  private readonly messageBubbleFactory = inject(MessageBubbleFactory);
 
   private readonly palette: GroupColors[] = [
     { customer: '#ffb3b3', agent: '#ffe3e3' },
@@ -36,14 +38,12 @@ export class StructureConversationStageRenderer implements ConversationStageRend
       const direction = mapDirectionFromAgentPerspective(directionSource);
       const groupColors = messageIdToGroupColors.get(rawMessage.externalId);
 
-      return {
-        id: rawMessage.externalId,
-        direction,
+      return this.messageBubbleFactory.createFromRaw(rawMessage, {
+        directionRaw: directionSource,
         text: cleanMessage?.text ?? rawMessage.text,
-        sentAt: formatSentAt(rawMessage.sentAt),
-        stageLabel: 'Structure',
+        stageLabel: 'structure',
         backgroundColor: this.resolveBackgroundColor(direction, groupColors)
-      };
+      });
     });
   }
 

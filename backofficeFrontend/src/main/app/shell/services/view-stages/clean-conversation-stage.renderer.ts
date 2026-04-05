@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 
 import type {
   BackendConversationCleanMessage,
@@ -6,11 +6,12 @@ import type {
 } from '../../../core/api/services/conversations-api.service';
 import type { ConversationStageRenderer } from './conversation-stage-renderer.interface';
 import type { ChatMessage } from './conversation-view.types';
-import { formatSentAt, mapDirectionFromAgentPerspective } from './conversation-stage-renderer.utils';
+import { MessageBubbleFactory } from './message-bubble.factory';
 
 @Injectable({ providedIn: 'root' })
 export class CleanConversationStageRenderer implements ConversationStageRenderer {
   readonly mode = 'clean' as const;
+  private readonly messageBubbleFactory = inject(MessageBubbleFactory);
 
   render(document: BackendConversationDocument): ChatMessage[] {
     const cleanByExternalId = new Map<string, BackendConversationCleanMessage>();
@@ -28,15 +29,13 @@ export class CleanConversationStageRenderer implements ConversationStageRenderer
       const messageText = hasDifferentCleanText ? cleanMessage.text : rawMessage.text;
       const messageDirection = cleanMessage?.direction ?? rawMessage.direction;
 
-      return {
-        id: rawMessage.externalId,
-        direction: mapDirectionFromAgentPerspective(messageDirection),
+      return this.messageBubbleFactory.createFromRaw(rawMessage, {
+        directionRaw: messageDirection,
         text: messageText,
-        sentAt: formatSentAt(rawMessage.sentAt),
-        stageLabel: 'Clean',
+        stageLabel: 'clean',
         rawText: hasDifferentCleanText ? rawMessage.text : undefined,
         showRawStrikethrough: hasDifferentCleanText
-      };
+      });
     });
   }
 

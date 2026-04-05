@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 
 import type { BackendConversationDocument } from '../../../core/api/services/conversations-api.service';
 import type { ConversationStageRenderer } from './conversation-stage-renderer.interface';
@@ -7,10 +7,12 @@ import {
   buildRawSentAtMap,
   resolveSentAtFromMessageIds
 } from './conversation-stage-renderer.utils';
+import { MessageBubbleFactory } from './message-bubble.factory';
 
 @Injectable({ providedIn: 'root' })
 export class ChunkConversationStageRenderer implements ConversationStageRenderer {
   readonly mode = 'chunk' as const;
+  private readonly messageBubbleFactory = inject(MessageBubbleFactory);
 
   render(document: BackendConversationDocument): ChatMessage[] {
     const sentAtByMessageId = buildRawSentAtMap(document);
@@ -18,13 +20,12 @@ export class ChunkConversationStageRenderer implements ConversationStageRenderer
     return (document.chunkedMessages ?? []).map((chunkMessage) => {
       const sentAt = resolveSentAtFromMessageIds(sentAtByMessageId, chunkMessage.messageIds);
 
-      return {
+      return this.messageBubbleFactory.createSystem({
         id: chunkMessage.chunkId,
-        direction: 'system',
         text: chunkMessage.chunkMessage,
         sentAt,
-        stageLabel: 'Chunk'
-      };
+        stageLabel: 'chunk'
+      });
     });
   }
 }
