@@ -1,7 +1,9 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 
 import type { BackendConversationRawMessage } from '../../../core/api/services/conversations-api.service';
+import { I18nStateService } from '../../../core/i18n/services/i18n-state.service';
 import {
+  formatDateLabel,
   formatSentAt,
   mapDirectionFromAgentPerspective
 } from './conversation-stage-renderer.utils';
@@ -26,6 +28,8 @@ type CreateSystemParams = {
 
 @Injectable({ providedIn: 'root' })
 export class MessageBubbleFactory {
+  private readonly i18nStateService = inject(I18nStateService);
+
   createFromRaw(
     rawMessage: BackendConversationRawMessage,
     overrides: CreateFromRawOverrides = {}
@@ -34,7 +38,9 @@ export class MessageBubbleFactory {
       id: rawMessage.externalId,
       direction: mapDirectionFromAgentPerspective(overrides.directionRaw ?? rawMessage.direction),
       text: overrides.text ?? rawMessage.text,
-      sentAt: formatSentAt(rawMessage.sentAt),
+      sentAt: rawMessage.sentAt
+        ? formatSentAt(rawMessage.sentAt, this.i18nStateService.selectedLanguage())
+        : formatDateLabel(null, this.i18nStateService.selectedLanguage()),
       stageLabel: overrides.stageLabel,
       backgroundColor: overrides.backgroundColor,
       rawText: overrides.rawText,

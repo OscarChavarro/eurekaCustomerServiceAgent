@@ -1,13 +1,15 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { Injectable, computed, effect, inject, signal } from '@angular/core';
 
 import {
+  BackendConversationSummary,
   BackendConversationDocument,
   ConversationsApiService
 } from '../../core/api/services/conversations-api.service';
+import { I18nStateService } from '../../core/i18n/services/i18n-state.service';
 import { ChunkConversationStageRenderer } from './view-stages/chunk-conversation-stage.renderer';
 import { CleanConversationStageRenderer } from './view-stages/clean-conversation-stage.renderer';
 import type { ConversationStageRenderer } from './view-stages/conversation-stage-renderer.interface';
-import { formatSentAt } from './view-stages/conversation-stage-renderer.utils';
+import { formatDateLabel, formatSentAt } from './view-stages/conversation-stage-renderer.utils';
 import { EmbedConversationStageRenderer } from './view-stages/embed-conversation-stage.renderer';
 import { RawConversationStageRenderer } from './view-stages/raw-conversation-stage.renderer';
 import { StructureConversationStageRenderer } from './view-stages/structure-conversation-stage.renderer';
@@ -28,6 +30,7 @@ export interface ChatConversation {
 @Injectable({ providedIn: 'root' })
 export class ChatConversationService {
   private readonly conversationsApiService = inject(ConversationsApiService);
+  private readonly i18nStateService = inject(I18nStateService);
   private readonly rawConversationStageRenderer = inject(RawConversationStageRenderer);
   private readonly cleanConversationStageRenderer = inject(CleanConversationStageRenderer);
   private readonly structureConversationStageRenderer = inject(StructureConversationStageRenderer);
@@ -36,6 +39,7 @@ export class ChatConversationService {
 
   private readonly loadedMessagesConversationIds = new Set<string>();
   private readonly conversationDocumentsState = signal<Record<string, BackendConversationDocument>>({});
+  private readonly conversationSummariesState = signal<Record<string, BackendConversationSummary>>({});
   private readonly viewModeState = signal<ConversationViewMode>('raw');
 
   private readonly stageRenderers: Record<ConversationViewMode, ConversationStageRenderer> = {
@@ -52,20 +56,20 @@ export class ChatConversationService {
       contactName: 'Ana Ruiz',
       contactAvatar: 'AR',
       lastMessagePreview: 'Perfecto, hoy a las 17:00 te envio los documentos.',
-      lastMessageAt: '17:02',
+      lastMessageAt: formatSentAt('2026-04-05T17:02:00', this.i18nStateService.selectedLanguage()),
       unreadCount: 2,
       messages: [
         {
           id: 'ana-1',
           direction: 'incoming',
           text: 'Hola, tengo dudas con la poliza de mi vivienda.',
-          sentAt: '16:45'
+          sentAt: formatSentAt('2026-04-05T16:45:00', this.i18nStateService.selectedLanguage())
         },
         {
           id: 'ana-2',
           direction: 'outgoing',
           text: 'Claro, te ayudo. Quieres revisar coberturas o fechas?',
-          sentAt: '16:47',
+          sentAt: formatSentAt('2026-04-05T16:47:00', this.i18nStateService.selectedLanguage()),
           status: 'read'
         }
       ]
@@ -77,7 +81,7 @@ export class ChatConversationService {
       id: 'default-1',
       direction: 'incoming',
       text: 'Conversacion sincronizada desde backend.',
-      sentAt: 'Ahora'
+      sentAt: formatSentAt(new Date().toISOString(), this.i18nStateService.selectedLanguage())
     }
   ];
 
@@ -99,6 +103,15 @@ export class ChatConversationService {
   });
 
   constructor() {
+    effect(
+      () => {
+        this.i18nStateService.selectedLanguage();
+        this.refreshConversationSummaries();
+        this.rerenderLoadedConversations();
+      },
+      { allowSignalWrites: true }
+    );
+
     this.loadConversationIds();
   }
 
@@ -118,8 +131,13 @@ export class ChatConversationService {
 
   private loadConversationIds(): void {
     this.conversationsApiService.getConversationIds().subscribe({
-      next: (ids) => {
-        const normalizedConversations = ids.map((id) => this.buildConversation(id));
+      next: (summaries) => {
+        this.conversationSummariesState.set(
+          Object.fromEntries(summaries.map((summary) => [summary.id, summary]))
+        );
+        const normalizedConversations = this.sortConversationsByRecency(
+          summaries.map((summary) => this.buildConversation(summary))
+        );
 
         this.conversationState.set(normalizedConversations);
 
@@ -144,7 +162,8 @@ export class ChatConversationService {
     });
   }
 
-  private buildConversation(conversationId: string): ChatConversation {
+  private buildConversation(summary: BackendConversationSummary): ChatConversation {
+    const conversationId = summary.id;
     const predefinedMock = this.mockConversationById[conversationId];
 
     if (predefinedMock) {
@@ -157,8 +176,8 @@ export class ChatConversationService {
       id: conversationId,
       contactName: conversationId,
       contactAvatar: avatar,
-      lastMessagePreview: 'Conversacion cargada desde backend.',
-      lastMessageAt: 'Ahora',
+      lastMessagePreview: summary.msg ?? 'Conversacion cargada desde backend.',
+      lastMessageAt: formatDateLabel(summary.date, this.i18nStateService.selectedLanguage()),
       unreadCount: 0,
       messages: this.defaultMockMessages
     };
@@ -193,9 +212,11 @@ export class ChatConversationService {
     const renderedMessages = renderer.render(conversationDocument);
     const fallbackMessages = renderedMessages.length > 0 ? renderedMessages : this.defaultMockMessages;
     const lastRawMessage = conversationDocument.rawMessages?.[conversationDocument.rawMessages.length - 1];
+    const summary = this.conversationSummariesState()[conversationId];
+    const language = this.i18nStateService.selectedLanguage();
 
     this.conversationState.update((conversations) =>
-      conversations.map((conversation) => {
+      this.sortConversationsByRecency(conversations.map((conversation) => {
         if (conversation.id !== conversationId) {
           return conversation;
         }
@@ -203,10 +224,13 @@ export class ChatConversationService {
         return {
           ...conversation,
           messages: fallbackMessages,
-          lastMessagePreview: lastRawMessage?.text ?? conversation.lastMessagePreview,
-          lastMessageAt: lastRawMessage?.sentAt ? formatSentAt(lastRawMessage.sentAt) : conversation.lastMessageAt
+          lastMessagePreview:
+            lastRawMessage?.text ?? summary?.msg ?? conversation.lastMessagePreview,
+          lastMessageAt: lastRawMessage?.sentAt
+            ? formatSentAt(lastRawMessage.sentAt, language)
+            : formatDateLabel(summary?.date, language)
         };
-      })
+      }))
     );
   }
 
@@ -215,7 +239,7 @@ export class ChatConversationService {
     const renderer = this.stageRenderers[this.viewModeState()];
 
     this.conversationState.update((conversations) =>
-      conversations.map((conversation) => {
+      this.sortConversationsByRecency(conversations.map((conversation) => {
         const conversationDocument = conversationDocuments[conversation.id];
 
         if (!conversationDocument) {
@@ -228,8 +252,62 @@ export class ChatConversationService {
           ...conversation,
           messages: renderedMessages.length > 0 ? renderedMessages : this.defaultMockMessages
         };
-      })
+      }))
     );
+  }
+
+  private refreshConversationSummaries(): void {
+    const summaries = this.conversationSummariesState();
+    const language = this.i18nStateService.selectedLanguage();
+
+    this.conversationState.update((conversations) =>
+      this.sortConversationsByRecency(conversations.map((conversation) => {
+        const summary = summaries[conversation.id];
+
+        if (!summary) {
+          return conversation;
+        }
+
+        return {
+          ...conversation,
+          lastMessagePreview: summary.msg ?? conversation.lastMessagePreview,
+          lastMessageAt: formatDateLabel(summary.date, language)
+        };
+      }))
+    );
+  }
+
+  private sortConversationsByRecency(conversations: ChatConversation[]): ChatConversation[] {
+    return [...conversations].sort((left, right) => {
+      const leftTimestamp = this.getConversationRecencyTimestamp(left.id);
+      const rightTimestamp = this.getConversationRecencyTimestamp(right.id);
+
+      if (leftTimestamp === rightTimestamp) {
+        return left.id.localeCompare(right.id);
+      }
+
+      return rightTimestamp - leftTimestamp;
+    });
+  }
+
+  private getConversationRecencyTimestamp(conversationId: string): number {
+    const document = this.conversationDocumentsState()[conversationId];
+    const lastRawMessage = document?.rawMessages?.[document.rawMessages.length - 1];
+
+    if (lastRawMessage?.sentAt) {
+      return this.toTimestamp(lastRawMessage.sentAt);
+    }
+
+    const summaryDate = this.conversationSummariesState()[conversationId]?.date;
+    return summaryDate ? this.toTimestamp(summaryDate) : 0;
+  }
+
+  private toTimestamp(rawDate: string): number {
+    const normalizedDate =
+      rawDate.includes(' ') && !rawDate.includes('T') ? rawDate.replace(' ', 'T') : rawDate;
+    const timestamp = new Date(normalizedDate).getTime();
+
+    return Number.isNaN(timestamp) ? 0 : timestamp;
   }
 
   private buildAvatarFromId(conversationId: string): string {

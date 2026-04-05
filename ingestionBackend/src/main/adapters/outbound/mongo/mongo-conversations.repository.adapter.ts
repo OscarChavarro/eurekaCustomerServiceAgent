@@ -11,6 +11,8 @@ import { MongoClientProvider } from './mongo-client.provider';
 
 type MongoConversationDocument = {
   _id: string;
+  lastMessageDate: string | null;
+  lastMessageText: string | null;
   rawMessages: RawConversationStageMessage[];
   cleanedMessages: CleanedConversationStageMessage[];
   structuredMessages: StructuredConversationStageMessage[];
@@ -38,6 +40,8 @@ export class MongoConversationsRepositoryAdapter implements ConversationsReposit
       {
         $set: {
           rawMessages,
+          lastMessageDate: metadata.lastMessageDate,
+          lastMessageText: metadata.lastMessageText,
           'metadata.source': metadata.source
         },
         $setOnInsert: {
@@ -65,6 +69,8 @@ export class MongoConversationsRepositoryAdapter implements ConversationsReposit
           cleanedMessages
         },
         $setOnInsert: {
+          lastMessageDate: null,
+          lastMessageText: null,
           rawMessages: [],
           structuredMessages: [],
           chunkedMessages: [],
@@ -92,6 +98,8 @@ export class MongoConversationsRepositoryAdapter implements ConversationsReposit
           structuredMessages
         },
         $setOnInsert: {
+          lastMessageDate: null,
+          lastMessageText: null,
           rawMessages: [],
           cleanedMessages: [],
           chunkedMessages: [],
@@ -119,6 +127,8 @@ export class MongoConversationsRepositoryAdapter implements ConversationsReposit
           chunkedMessages
         },
         $setOnInsert: {
+          lastMessageDate: null,
+          lastMessageText: null,
           rawMessages: [],
           cleanedMessages: [],
           structuredMessages: [],

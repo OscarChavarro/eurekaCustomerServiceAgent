@@ -33,6 +33,8 @@ export type ChunkedConversationStageMessage = {
 export type ConversationMetadata = {
   createdAt: Date;
   source: string;
+  lastMessageDate: string | null;
+  lastMessageText: string | null;
 };
 
 export interface ConversationsRepositoryPort {

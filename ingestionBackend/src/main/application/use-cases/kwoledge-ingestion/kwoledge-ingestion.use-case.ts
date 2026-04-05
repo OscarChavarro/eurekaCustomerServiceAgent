@@ -438,10 +438,16 @@ export class KwoledgeIngestionUseCase {
   private buildConversationMetadata(rawMessages: RawConversationMessage[]): {
     createdAt: Date;
     source: string;
+    lastMessageDate: string | null;
+    lastMessageText: string | null;
   } {
+    const lastRawMessage = rawMessages[rawMessages.length - 1];
+
     return {
       createdAt: new Date(),
-      source: rawMessages[0]?.sourceFile ?? 'unknown'
+      source: rawMessages[0]?.sourceFile ?? 'unknown',
+      lastMessageDate: lastRawMessage?.normalizedFields.messageDate ?? null,
+      lastMessageText: lastRawMessage?.normalizedFields.text ?? null
     };
   }
 

@@ -1,17 +1,19 @@
 import { Injectable } from '@nestjs/common';
 import type { ConversationsReadRepositoryPort } from '../../../application/ports/outbound/conversations-read-repository.port';
+import type { ConversationSummaryResult } from '../../../application/use-cases/get-conversation-ids/get-conversation-ids.result';
 import { MongoClientProvider } from './mongo-client.provider';
 
 type MongoConversationDocument = {
   _id: string;
-  [key: string]: unknown;
+  lastMessageText?: unknown;
+  lastMessageDate?: unknown;
 };
 
 @Injectable()
 export class MongoConversationsRepositoryAdapter implements ConversationsReadRepositoryPort {
   constructor(private readonly mongoClientProvider: MongoClientProvider) {}
 
-  public async getConversationIds(): Promise<string[]> {
+  public async getConversationIds(): Promise<ConversationSummaryResult[]> {
     const collection =
       await this.mongoClientProvider.getConversationsCollection<MongoConversationDocument>();
 
@@ -19,12 +21,16 @@ export class MongoConversationsRepositoryAdapter implements ConversationsReadRep
       .find(
         {},
         {
-          projection: { _id: 1 }
+          projection: { _id: 1, lastMessageText: 1, lastMessageDate: 1 }
         }
       )
       .toArray();
 
-    return documents.map((document) => String(document._id));
+    return documents.map((document) => ({
+      id: String(document._id),
+      msg: typeof document.lastMessageText === 'string' ? document.lastMessageText : null,
+      date: typeof document.lastMessageDate === 'string' ? document.lastMessageDate : null
+    }));
   }
 
   public async getConversationById(conversationId: string): Promise<Record<string, unknown> | null> {
