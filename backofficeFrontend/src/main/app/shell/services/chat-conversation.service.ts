@@ -101,7 +101,7 @@ export class ChatConversationService {
     {
       id: 'default-1',
       direction: 'incoming',
-      text: 'Conversacion sincronizada desde backend.',
+      text: this.getConversationSyncedPlaceholder(this.i18nStateService.selectedLanguage()),
       sentAt: formatSentAt(new Date().toISOString(), this.i18nStateService.selectedLanguage())
     }
   ];
@@ -267,6 +267,14 @@ export class ChatConversationService {
       return;
     }
 
+    this.ensureConversationDetailsLoaded(conversationId);
+  }
+
+  ensureConversationDetailsLoaded(conversationId: string): void {
+    if (this.isSimulationConversationId(conversationId)) {
+      return;
+    }
+
     this.loadConversationMessages(conversationId);
   }
 
@@ -387,7 +395,8 @@ export class ChatConversationService {
       id: conversationId,
       contactName: conversationId,
       contactAvatar: avatar,
-      lastMessagePreview: summary.msg ?? 'Conversacion cargada desde backend.',
+      lastMessagePreview:
+        summary.msg ?? this.getConversationSyncedPlaceholder(this.i18nStateService.selectedLanguage()),
       lastMessageAt: formatDateLabel(summary.lastMessageDate, this.i18nStateService.selectedLanguage()),
       unreadCount: 0,
       messages: this.defaultMockMessages
@@ -677,6 +686,10 @@ export class ChatConversationService {
 
   private getSimulationConversationName(language: 'es' | 'en'): string {
     return this.i18nService.get(I18N_KEYS.shell.SIMULATION_CONVERSATION_NAME, language);
+  }
+
+  private getConversationSyncedPlaceholder(language: 'es' | 'en'): string {
+    return this.i18nService.get(I18N_KEYS.shell.CONVERSATION_SYNCED_PLACEHOLDER, language);
   }
 
   private isSimulationConversationId(conversationId: string): boolean {

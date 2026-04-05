@@ -49,7 +49,18 @@ export class TimePanelComponent implements AfterViewInit, OnDestroy {
   private readonly renderer = new TimelineCanvasRenderer(
     this.model,
     this.i18nService,
-    () => this.i18nStateService.selectedLanguage()
+    () => this.i18nStateService.selectedLanguage(),
+    () => {
+      const range = this.timeRangeModel.getValue();
+      if (!range) {
+        return null;
+      }
+
+      return {
+        startMs: range.startTime.getTime(),
+        endMs: range.endTime.getTime()
+      };
+    }
   );
   private readonly timeRangeRenderer = new CanvasTimeRangeRenderer(this.model, this.timeRangeModel);
   private readonly timeCursorRenderer = new CanvasTimeCursorRenderer(this.timeCursorModel);

@@ -456,9 +456,20 @@ export class KwoledgeIngestionUseCase {
     // and are not part of the real conversation timeline. We only use them when no customer/agent
     // messages exist in the conversation.
     const timelineMessages = conversationalMessages.length > 0 ? conversationalMessages : rawMessages;
+    const datedTimelineMessages = timelineMessages
+      .filter((rawMessage): rawMessage is RawConversationMessage & { sentAt: Date } => rawMessage.sentAt !== null)
+      .sort((left, right) => {
+        const delta = left.sentAt.getTime() - right.sentAt.getTime();
 
-    const firstRawMessage = timelineMessages[0];
-    const lastRawMessage = timelineMessages[timelineMessages.length - 1];
+        if (delta !== 0) {
+          return delta;
+        }
+
+        return left.rowNumber - right.rowNumber;
+      });
+
+    const firstRawMessage = datedTimelineMessages[0];
+    const lastRawMessage = datedTimelineMessages[datedTimelineMessages.length - 1];
     const firstMessageDate = firstRawMessage?.sentAt?.toISOString() ?? null;
     const lastMessageDate = lastRawMessage?.sentAt?.toISOString() ?? null;
 
@@ -467,7 +478,10 @@ export class KwoledgeIngestionUseCase {
       source: rawMessages[0]?.sourceFile ?? 'unknown',
       firstMessageDate,
       lastMessageDate,
-      lastMessageText: lastRawMessage?.normalizedFields.text ?? null
+      lastMessageText:
+        lastRawMessage?.normalizedFields.text ??
+        timelineMessages[timelineMessages.length - 1]?.normalizedFields.text ??
+        null
     };
   }
 

@@ -11,12 +11,19 @@ const BOTTOM_CONTROLS_HEIGHT = TRACK_THICKNESS;
 const MIN_THUMB_SIZE = 18;
 const HORIZONTAL_ZOOM_ZONE_RATIO = 0.1;
 const VERTICAL_ZOOM_ZONE_RATIO = 0.2;
+const OUT_OF_RANGE_COLOR = '#c4ccd4';
+
+type ActiveTimeRange = {
+  startMs: number;
+  endMs: number;
+};
 
 export class TimelineCanvasRenderer {
   constructor(
     private readonly model: TimelineModelStore,
     private readonly i18nService: I18nService,
-    private readonly getLanguage: () => SupportedLanguage
+    private readonly getLanguage: () => SupportedLanguage,
+    private readonly getActiveTimeRange: () => ActiveTimeRange | null
   ) {}
 
   public render(context: CanvasRenderingContext2D, width: number, height: number): TimelineRenderMetrics {
@@ -95,6 +102,7 @@ export class TimelineCanvasRenderer {
 
   private drawSegments(context: CanvasRenderingContext2D, mainRect: TimelineRect): void {
     const state = this.model.getState();
+    const activeTimeRange = this.getActiveTimeRange();
     const firstVisibleRow = Math.floor(state.scrollY / state.rowHeightPx);
     const visibleRows = Math.ceil(mainRect.height / state.rowHeightPx) + 2;
     const rowStart = Math.max(0, firstVisibleRow);
@@ -109,17 +117,18 @@ export class TimelineCanvasRenderer {
       const y = mainRect.y + rowIndex * state.rowHeightPx - state.scrollY;
       const xStart = mainRect.x + ((segment.startMs - state.timeOffsetMs) / 1_000) * state.pixelsPerSecond;
       const xEnd = mainRect.x + ((segment.endMs - state.timeOffsetMs) / 1_000) * state.pixelsPerSecond;
-      const width = Math.max(1, xEnd - xStart);
+      const clippedStart = Math.max(mainRect.x, xStart);
+      const clippedEnd = Math.min(mainRect.x + mainRect.width, xEnd);
 
-      if (xStart > mainRect.x + mainRect.width || xStart + width < mainRect.x) {
+      if (clippedEnd <= clippedStart) {
         continue;
       }
 
-      context.fillStyle = segment.color;
+      context.fillStyle = this.resolveSegmentColor(segment.startMs, segment.endMs, segment.color, activeTimeRange);
       context.fillRect(
-        Math.max(mainRect.x, xStart),
+        clippedStart,
         Math.max(mainRect.y, y + 1),
-        Math.min(width, mainRect.x + mainRect.width - xStart),
+        Math.max(1, clippedEnd - clippedStart),
         Math.max(1, state.rowHeightPx - 2)
       );
     }
@@ -428,6 +437,22 @@ export class TimelineCanvasRenderer {
 
   private shouldRenderLabel(labelX: number, labelWidth: number, viewportWidth: number): boolean {
     return labelX <= viewportWidth && labelX + labelWidth >= 0;
+  }
+
+  private resolveSegmentColor(
+    segmentStartMs: number,
+    segmentEndMs: number,
+    defaultColor: string,
+    activeTimeRange: ActiveTimeRange | null
+  ): string {
+    if (!activeTimeRange) {
+      return defaultColor;
+    }
+
+    const intersects =
+      segmentStartMs <= activeTimeRange.endMs && segmentEndMs >= activeTimeRange.startMs;
+
+    return intersects ? defaultColor : OUT_OF_RANGE_COLOR;
   }
 
   private buildCenteredDayHeader(date: Date, locale: string): string {

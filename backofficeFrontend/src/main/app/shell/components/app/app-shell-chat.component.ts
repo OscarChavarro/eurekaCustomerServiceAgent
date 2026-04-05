@@ -304,6 +304,11 @@ export class AppShellChatComponent implements OnDestroy {
     this.chatConversationService.setActiveConversation(conversationId);
   }
 
+  protected selectConversationFromTimePanel(conversationId: string): void {
+    this.chatConversationService.ensureConversationDetailsLoaded(conversationId);
+    this.chatConversationService.setActiveConversation(conversationId);
+  }
+
   protected activateSimulationConversation(): void {
     this.chatConversationService.activateSimulationConversation();
     this.scheduleFocusComposerInput();

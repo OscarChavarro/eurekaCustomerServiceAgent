@@ -31,8 +31,8 @@ export class CanvasTimeRangeRenderer {
     const startHitRect = this.expandRect(startHandleRect, HIT_PADDING_X, HIT_PADDING_Y);
     const endHitRect = this.expandRect(endHandleRect, HIT_PADDING_X, HIT_PADDING_Y);
 
-    this.drawRangeLine(context, startXPx, metrics.mainRect, '#2b6dd8');
-    this.drawRangeLine(context, endXPx, metrics.mainRect, '#2b6dd8');
+    this.drawRangeLine(context, startXPx, metrics.mainRect, '#2f9e44');
+    this.drawRangeLine(context, endXPx, metrics.mainRect, '#d94841');
     this.drawHandle(context, startHandleRect, '#1f5bb7');
     this.drawHandle(context, endHandleRect, '#1f5bb7');
 

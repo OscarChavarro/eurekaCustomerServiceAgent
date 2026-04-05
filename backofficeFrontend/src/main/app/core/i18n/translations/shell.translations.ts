@@ -113,6 +113,10 @@ export const SHELL_TRANSLATIONS = {
     en: 'Type a message',
     es: 'Escribe un mensaje'
   },
+  CONVERSATION_SYNCED_PLACEHOLDER: {
+    en: 'Conversation synced from backend.',
+    es: 'Conversacion sincronizada desde backend.'
+  },
   AI_LABEL: {
     en: 'AI',
     es: 'IA'

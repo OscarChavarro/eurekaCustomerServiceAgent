@@ -74,7 +74,7 @@
           [attr.aria-label]="timePanelAriaLabel()"
           [style.height]="timePaneTopHeight()"
         >
-          <app-time-panel (conversationSelected)="selectConversation($event)"></app-time-panel>
+          <app-time-panel (conversationSelected)="selectConversationFromTimePanel($event)"></app-time-panel>
         </section>
         <button
           type="button"
@@ -422,25 +422,27 @@
         }
       </div>
 
-      <footer class="composer-row">
-        <button type="button" [attr.aria-label]="attachFileAriaLabel()">+</button>
-        <input
-          #composerInput
-          type="text"
-          [placeholder]="writeMessagePlaceholder()"
-          [attr.aria-label]="writeMessageAriaLabel()"
-          [value]="composerMessage()"
-          (input)="onComposerInput($any($event.target).value)"
-          (keydown.enter)="sendComposerMessage()"
-        />
-        <button
-          type="button"
-          [attr.aria-label]="sendMessageAriaLabel()"
-          (click)="sendComposerMessage()"
-        >
-          &#9658;
-        </button>
-      </footer>
+      @if (!isTimeMode()) {
+        <footer class="composer-row">
+          <button type="button" [attr.aria-label]="attachFileAriaLabel()">+</button>
+          <input
+            #composerInput
+            type="text"
+            [placeholder]="writeMessagePlaceholder()"
+            [attr.aria-label]="writeMessageAriaLabel()"
+            [value]="composerMessage()"
+            (input)="onComposerInput($any($event.target).value)"
+            (keydown.enter)="sendComposerMessage()"
+          />
+          <button
+            type="button"
+            [attr.aria-label]="sendMessageAriaLabel()"
+            (click)="sendComposerMessage()"
+          >
+            &#9658;
+          </button>
+        </footer>
+      }
     }
   </section>
 </ng-template>

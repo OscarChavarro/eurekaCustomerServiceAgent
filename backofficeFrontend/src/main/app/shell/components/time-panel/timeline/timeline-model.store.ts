@@ -206,7 +206,8 @@ export class TimelineModelStore {
 
   private computeMinPixelsPerSecond(mainWidthPx: number): number {
     const fiveYearsInSeconds = 5 * 365 * 24 * 60 * 60;
-    return Math.max(0.0001, mainWidthPx / fiveYearsInSeconds);
+    const relaxedZoomOutSeconds = fiveYearsInSeconds * 10;
+    return Math.max(0.00001, mainWidthPx / relaxedZoomOutSeconds);
   }
 
   private clamp(value: number, min: number, max: number): number {
