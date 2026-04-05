@@ -1,0 +1,223 @@
+digraph EurekaArchitecture {
+  rankdir=TB;
+  ranksep=0.9;
+  nodesep=0.55;
+  splines=true;
+  fontname="Helvetica";
+  node [shape=box, style=rounded, fontname="Helvetica"];
+  edge [fontname="Helvetica", color="#4b5563"];
+
+  customer_service_agent [
+    label="Customer service agent",
+    shape=plaintext
+  ];
+
+  browser [
+    label=<
+      <TABLE BORDER="0" CELLBORDER="0" CELLPADDING="2" CELLSPACING="0">
+        <TR>
+          <TD><IMG SRC="doc/architecture/chrome.png"/></TD>
+          <TD ALIGN="LEFT">Web browser</TD>
+        </TR>
+      </TABLE>
+    >,
+    margin="0.08,0.05"
+  ];
+
+  backoffice_frontend [
+    label=<
+      <TABLE BORDER="0" CELLBORDER="0" CELLPADDING="2" CELLSPACING="0">
+        <TR>
+          <TD><IMG SRC="doc/architecture/backofficeFrontend.png"/></TD>
+          <TD ALIGN="LEFT">backofficeFrontend</TD>
+        </TR>
+      </TABLE>
+    >,
+    margin="0.08,0.05",
+    style="rounded,filled",
+    fillcolor="#e7f1ff"
+  ];
+
+  backoffice_backend [
+    label=<
+      <TABLE BORDER="0" CELLBORDER="0" CELLPADDING="2" CELLSPACING="0">
+        <TR>
+          <TD><IMG SRC="doc/architecture/backofficeBackend.png"/></TD>
+          <TD ALIGN="LEFT">backofficeBackend</TD>
+        </TR>
+      </TABLE>
+    >,
+    margin="0.08,0.05",
+    style="rounded,filled",
+    fillcolor="#e8f8ef"
+  ];
+
+  ingestion_backend [
+    label=<
+      <TABLE BORDER="0" CELLBORDER="0" CELLPADDING="2" CELLSPACING="0">
+        <TR>
+          <TD><IMG SRC="doc/architecture/ingestionBackend.png"/></TD>
+          <TD ALIGN="LEFT">ingestionBackend</TD>
+        </TR>
+      </TABLE>
+    >,
+    margin="0.08,0.05",
+    style="rounded,filled",
+    fillcolor="#e6fcf5"
+  ];
+
+  bge [
+    label=<
+      <TABLE BORDER="0" CELLBORDER="0" CELLPADDING="2" CELLSPACING="0">
+        <TR>
+          <TD><IMG SRC="doc/architecture/bge.png"/></TD>
+          <TD ALIGN="LEFT">bge embedding service</TD>
+        </TR>
+      </TABLE>
+    >,
+    margin="0.08,0.05"
+  ];
+
+  qdrant [
+    label=<
+      <TABLE BORDER="0" CELLBORDER="0" CELLPADDING="2" CELLSPACING="0">
+        <TR>
+          <TD><IMG SRC="doc/architecture/qdrant.png"/></TD>
+          <TD ALIGN="LEFT">Qdrant vector store</TD>
+        </TR>
+      </TABLE>
+    >,
+    margin="0.08,0.05",
+    shape=cylinder
+  ];
+
+  mongodb [
+    label=<
+      <TABLE BORDER="0" CELLBORDER="0" CELLPADDING="2" CELLSPACING="0">
+        <TR>
+          <TD><IMG SRC="doc/architecture/mongoDB.png"/></TD>
+          <TD ALIGN="LEFT">MongoDb</TD>
+        </TR>
+      </TABLE>
+    >,
+    margin="0.08,0.05",
+    shape=cylinder
+  ];
+
+  llama_cpp [
+    label=<
+      <TABLE BORDER="0" CELLBORDER="0" CELLPADDING="2" CELLSPACING="0">
+        <TR>
+          <TD><IMG SRC="doc/architecture/llama-cpp.png"/></TD>
+          <TD ALIGN="LEFT">llama.cpp</TD>
+        </TR>
+      </TABLE>
+    >,
+    margin="0.08,0.05"
+  ];
+
+  nginx [
+    label=<
+      <TABLE BORDER="0" CELLBORDER="0" CELLPADDING="2" CELLSPACING="0">
+        <TR>
+          <TD><IMG SRC="doc/architecture/nginx.png"/></TD>
+          <TD ALIGN="LEFT">nginx</TD>
+        </TR>
+      </TABLE>
+    >,
+    margin="0.08,0.05"
+  ];
+
+  imazing [
+    label=<
+      <TABLE BORDER="0" CELLBORDER="0" CELLPADDING="2" CELLSPACING="0">
+        <TR>
+          <TD><IMG SRC="doc/architecture/imazing.png"/></TD>
+          <TD ALIGN="LEFT">iMazing CSV exports</TD>
+        </TR>
+      </TABLE>
+    >,
+    margin="0.08,0.05"
+  ];
+
+  retrieval_service [
+    label="retrievalService (planned)",
+    style="rounded,dashed",
+    color="#0d6efd"
+  ];
+
+  context_builder [
+    label="contextBuilder (planned)",
+    style="rounded,dashed",
+    color="#0d6efd"
+  ];
+
+  wix [
+    label=<
+      <TABLE BORDER="0" CELLBORDER="0" CELLPADDING="2" CELLSPACING="0">
+        <TR>
+          <TD><IMG SRC="doc/architecture/wix.png"/></TD>
+          <TD ALIGN="LEFT">WIX e-commerce source (planned)</TD>
+        </TR>
+      </TABLE>
+    >,
+    margin="0.08,0.05",
+    style="rounded,dashed",
+    color="#0d6efd"
+  ];
+
+  catalog [
+    label="catalog service (planned)",
+    style="rounded,dashed",
+    color="#0d6efd"
+  ];
+
+  notification_message_sender [
+    label="notificationMessageSender",
+    style="rounded,filled",
+    fillcolor="#f3f4f6"
+  ];
+
+  whatsapp [
+    label=<
+      <TABLE BORDER="0" CELLBORDER="0" CELLPADDING="2" CELLSPACING="0">
+        <TR>
+          <TD><IMG SRC="doc/architecture/whatsapp.png"/></TD>
+          <TD ALIGN="LEFT">WhatsApp</TD>
+        </TR>
+      </TABLE>
+    >,
+    margin="0.08,0.05"
+  ];
+
+  { rank=same; customer_service_agent; browser; }
+  { rank=same; backoffice_frontend; nginx; }
+  { rank=same; backoffice_backend; notification_message_sender; }
+  { rank=same; ingestion_backend; retrieval_service; catalog; }
+  { rank=same; bge; qdrant; mongodb; llama_cpp; }
+  { rank=max; imazing; wix; }
+
+  customer_service_agent -> browser [dir=both, xlabel="uses"];
+  browser -> backoffice_frontend [xlabel="UI access"];
+  browser -> nginx [xlabel="static assets"];
+
+  backoffice_frontend -> backoffice_backend [xlabel="REST/WebSocket"];
+  backoffice_backend -> mongodb [xlabel="reads/writes"];
+  backoffice_backend -> qdrant [style=dashed, xlabel="semantic queries"];
+
+  imazing -> ingestion_backend [xlabel="CSV import"];
+  ingestion_backend -> bge [xlabel="embed text"];
+  ingestion_backend -> qdrant [xlabel="store vectors"];
+
+  backoffice_backend -> notification_message_sender [xlabel="enqueue notifications"];
+  notification_message_sender -> whatsapp [xlabel="send messages"];
+
+  retrieval_service -> context_builder [xlabel="builds context"];
+  context_builder -> qdrant [xlabel="retrieve chunks"];
+  context_builder -> llama_cpp [xlabel="prompt + inference"];
+  backoffice_backend -> retrieval_service [style=dashed, xlabel="next integration"];
+
+  wix -> catalog [style=dashed, xlabel="catalog feed"];
+  catalog -> mongodb [style=dashed, xlabel="persist product data"];
+  backoffice_backend -> catalog [style=dashed, xlabel="catalog APIs"];
+}
