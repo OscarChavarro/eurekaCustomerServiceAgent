@@ -1,6 +1,29 @@
 <div class="chat-workspace">
   <aside class="left-sidebar" aria-label="Menu principal">
-    <button class="sidebar-button is-active" type="button" aria-label="Chats">CH</button>
+    <div class="language-switcher">
+      <button
+        class="sidebar-button is-active"
+        type="button"
+        [attr.aria-label]="languageButtonAriaLabel()"
+        (click)="toggleLanguageDropdown()"
+      >
+        {{ selectedLanguageFlag() }}
+      </button>
+      @if (languageDropdownOpen()) {
+        <div class="language-dropdown">
+          @for (language of availableLanguages; track language) {
+            <button
+              type="button"
+              class="language-option"
+              [class.is-active]="selectedLanguage() === language"
+              (click)="selectLanguage(language)"
+            >
+              {{ languageOptionLabel(language) }}
+            </button>
+          }
+        </div>
+      }
+    </div>
     <button class="sidebar-button" type="button" aria-label="Estadisticas">ST</button>
     <button class="sidebar-button" type="button" aria-label="Clientes">CL</button>
     <button class="sidebar-button" type="button" aria-label="Calendario">CA</button>
@@ -9,7 +32,7 @@
 
   <section class="conversation-list" aria-label="Lista de conversaciones">
     <header class="panel-header">
-      <h1>Conversaciones</h1>
+      <h1>{{ conversationsTitle() }}</h1>
       <button type="button" class="panel-action" aria-label="Nueva conversacion">+</button>
     </header>
 
@@ -17,7 +40,7 @@
       <span>?</span>
       <input
         type="text"
-        placeholder="Buscar o iniciar un nuevo chat"
+        [placeholder]="searchOrNewChatPlaceholder()"
         (input)="setSearchTerm($any($event.target).value)"
       />
     </label>
@@ -58,7 +81,7 @@
           <span class="avatar">{{ currentConversation.contactAvatar }}</span>
           <div>
             <strong>{{ currentConversation.contactName }}</strong>
-            <p>En linea</p>
+            <p>{{ onlineStatusLabel() }}</p>
           </div>
         </div>
         <div class="header-actions stage-actions">
@@ -68,7 +91,7 @@
               [class.is-active]="mode === viewMode()"
               (click)="selectViewMode(mode)"
             >
-              {{ mode }}
+              {{ viewModeLabel(mode) }}
             </button>
           }
         </div>
@@ -84,15 +107,60 @@
             [style.background-color]="message.backgroundColor || null"
           >
             @if (message.showRawStrikethrough) {
-              <p class="message-text-raw">{{ message.rawText }}</p>
-              <p class="message-text-clean">{{ message.text }}</p>
+              <p class="message-text-raw">
+                @for (segment of getMessageTextSegments(message.rawText); track trackByTextSegment($index)) {
+                  @if (segment.type === 'link') {
+                    <a
+                      class="message-link"
+                      [href]="segment.href"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {{ segment.value }}
+                    </a>
+                  } @else {
+                    <span>{{ segment.value }}</span>
+                  }
+                }
+              </p>
+              <p class="message-text-clean">
+                @for (segment of getMessageTextSegments(message.text); track trackByTextSegment($index)) {
+                  @if (segment.type === 'link') {
+                    <a
+                      class="message-link"
+                      [href]="segment.href"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {{ segment.value }}
+                    </a>
+                  } @else {
+                    <span>{{ segment.value }}</span>
+                  }
+                }
+              </p>
             } @else {
-              <p>{{ message.text }}</p>
+              <p>
+                @for (segment of getMessageTextSegments(message.text); track trackByTextSegment($index)) {
+                  @if (segment.type === 'link') {
+                    <a
+                      class="message-link"
+                      [href]="segment.href"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {{ segment.value }}
+                    </a>
+                  } @else {
+                    <span>{{ segment.value }}</span>
+                  }
+                }
+              </p>
             }
             <footer>
               <time>{{ message.sentAt }}</time>
               @if (message.stageLabel) {
-                <span class="message-stage">{{ message.stageLabel }}</span>
+                <span class="message-stage">{{ stageLabel(message.stageLabel) }}</span>
               }
               @if (message.direction === 'outgoing' && message.status) {
                 <span class="message-status">{{ message.status }}</span>
@@ -104,7 +172,11 @@
 
       <footer class="composer-row">
         <button type="button" aria-label="Adjuntar archivo">+</button>
-        <input type="text" placeholder="Escribe un mensaje" aria-label="Escribe un mensaje" />
+        <input
+          type="text"
+          [placeholder]="writeMessagePlaceholder()"
+          [attr.aria-label]="writeMessagePlaceholder()"
+        />
         <button type="button" aria-label="Enviar mensaje">EN</button>
       </footer>
     }
