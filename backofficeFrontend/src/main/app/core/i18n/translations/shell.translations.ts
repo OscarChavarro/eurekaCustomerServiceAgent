@@ -49,6 +49,10 @@ export const SHELL_TRANSLATIONS = {
     en: 'Unable to load timeline.',
     es: 'No se pudo cargar la linea de tiempo.'
   },
+  TIME_PANEL_DATE_LOCALE: {
+    en: 'en-US',
+    es: 'es-ES'
+  },
   NEW_CONVERSATION_ARIA: {
     en: 'New conversation',
     es: 'Nueva conversacion'

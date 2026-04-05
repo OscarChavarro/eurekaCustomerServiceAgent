@@ -3,6 +3,7 @@ import {
   computed,
   effect,
   ElementRef,
+  HostListener,
   inject,
   OnDestroy,
   signal,
@@ -321,6 +322,38 @@ export class AppShellChatComponent implements OnDestroy {
 
   ngOnDestroy(): void {
     this.removeTimeSplitDragListeners();
+  }
+
+  @HostListener('window:keydown', ['$event'])
+  protected onWindowKeyDown(event: KeyboardEvent): void {
+    if (event.defaultPrevented) {
+      return;
+    }
+
+    if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) {
+      return;
+    }
+
+    if (this.hasEditableKeyboardFocus()) {
+      return;
+    }
+
+    if (event.key.toLowerCase() === 'f') {
+      event.preventDefault();
+      void this.toggleFullScreenMode();
+      return;
+    }
+
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      this.selectPreviousConversation();
+      return;
+    }
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      this.selectNextConversation();
+    }
   }
 
   protected selectViewMode(viewMode: ConversationViewMode): void {
@@ -675,6 +708,76 @@ export class AppShellChatComponent implements OnDestroy {
   private removeTimeSplitDragListeners(): void {
     window.removeEventListener('mousemove', this.onTimeSplitDragMove);
     window.removeEventListener('mouseup', this.onTimeSplitDragEnd);
+  }
+
+  private hasEditableKeyboardFocus(): boolean {
+    const activeElement = document.activeElement as HTMLElement | null;
+
+    if (!activeElement) {
+      return false;
+    }
+
+    if (activeElement.isContentEditable) {
+      return true;
+    }
+
+    const tagName = activeElement.tagName.toLowerCase();
+    return tagName === 'input' || tagName === 'textarea' || tagName === 'select';
+  }
+
+  private async toggleFullScreenMode(): Promise<void> {
+    if (!document.fullscreenElement) {
+      await document.documentElement.requestFullscreen();
+      return;
+    }
+
+    await document.exitFullscreen();
+  }
+
+  private selectPreviousConversation(): void {
+    const conversations = this.filteredConversations();
+
+    if (conversations.length === 0) {
+      return;
+    }
+
+    const activeConversationId = this.activeConversationId();
+    if (!activeConversationId) {
+      this.selectConversation(conversations[0]!.id);
+      return;
+    }
+
+    const activeIndex = conversations.findIndex((conversation) => conversation.id === activeConversationId);
+    const previousIndex =
+      activeIndex <= 0 ? conversations.length - 1 : activeIndex - 1;
+    const previousConversation = conversations[previousIndex];
+
+    if (previousConversation) {
+      this.selectConversation(previousConversation.id);
+    }
+  }
+
+  private selectNextConversation(): void {
+    const conversations = this.filteredConversations();
+
+    if (conversations.length === 0) {
+      return;
+    }
+
+    const activeConversationId = this.activeConversationId();
+    if (!activeConversationId) {
+      this.selectConversation(conversations[0]!.id);
+      return;
+    }
+
+    const activeIndex = conversations.findIndex((conversation) => conversation.id === activeConversationId);
+    const nextIndex =
+      activeIndex < 0 || activeIndex >= conversations.length - 1 ? 0 : activeIndex + 1;
+    const nextConversation = conversations[nextIndex];
+
+    if (nextConversation) {
+      this.selectConversation(nextConversation.id);
+    }
   }
 }
 

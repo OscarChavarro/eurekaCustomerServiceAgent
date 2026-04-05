@@ -152,11 +152,16 @@ export class TimelineCanvasRenderer {
     const stepMs = stepSeconds * 1_000;
     const firstTickMs = Math.floor(state.timeOffsetMs / stepMs) * stepMs;
     const visibleEndMs = state.timeOffsetMs + (mainRect.width / state.pixelsPerSecond) * 1_000;
+    const isHourScale = stepSeconds >= 60 && stepSeconds < 86_400;
 
     context.strokeStyle = '#bccad8';
     context.fillStyle = '#4e5d6d';
     context.font = '11px system-ui, sans-serif';
     context.textBaseline = 'middle';
+
+    if (isHourScale) {
+      this.drawCenteredDayHeader(context, rulerRect, state.timeOffsetMs, visibleEndMs);
+    }
 
     for (let tickMs = firstTickMs; tickMs <= visibleEndMs + stepMs; tickMs += stepMs) {
       const x = ((tickMs - state.timeOffsetMs) / 1_000) * state.pixelsPerSecond;
@@ -169,7 +174,13 @@ export class TimelineCanvasRenderer {
       context.lineTo(Math.round(x) + 0.5, rulerRect.height);
       context.stroke();
 
-      context.fillText(this.formatTickLabel(tickMs, stepSeconds), Math.round(x) + 4, 11);
+      const tickLabel = this.formatTickLabel(tickMs, stepSeconds);
+      const labelX = Math.round(x) + 4;
+      const labelWidth = context.measureText(tickLabel).width;
+      if (this.shouldRenderLabel(labelX, labelWidth, rulerRect.width)) {
+        const labelY = isHourScale ? 18 : 11;
+        context.fillText(tickLabel, labelX, labelY);
+      }
     }
   }
 
@@ -372,6 +383,13 @@ export class TimelineCanvasRenderer {
     const hours = String(date.getUTCHours()).padStart(2, '0');
     const minutes = String(date.getUTCMinutes()).padStart(2, '0');
 
+    if (stepSeconds >= 60 && stepSeconds < 86_400) {
+      const hour24 = date.getUTCHours();
+      const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
+      const amPm = hour24 >= 12 ? 'PM' : 'AM';
+      return `${hour12}:${minutes} ${amPm}`;
+    }
+
     if (stepSeconds >= 60) {
       return `${hours}:${minutes}`;
     }
@@ -382,5 +400,51 @@ export class TimelineCanvasRenderer {
 
   private clamp(value: number, min: number, max: number): number {
     return Math.min(max, Math.max(min, value));
+  }
+
+  private drawCenteredDayHeader(
+    context: CanvasRenderingContext2D,
+    rulerRect: TimelineRect,
+    visibleStartMs: number,
+    visibleEndMs: number
+  ): void {
+    const locale = this.i18nService.get(I18N_KEYS.shell.TIME_PANEL_DATE_LOCALE, this.getLanguage());
+    const centerMs = visibleStartMs + (visibleEndMs - visibleStartMs) / 2;
+    const centerDate = new Date(centerMs);
+    const headerText = this.buildCenteredDayHeader(centerDate, locale);
+
+    context.fillStyle = '#3f4e5d';
+    context.font = '10px system-ui, sans-serif';
+    context.textAlign = 'center';
+    context.fillText(headerText, rulerRect.x + rulerRect.width / 2, 7);
+    context.textAlign = 'start';
+    context.font = '11px system-ui, sans-serif';
+    context.fillStyle = '#4e5d6d';
+  }
+
+  private shouldRenderLabel(labelX: number, labelWidth: number, viewportWidth: number): boolean {
+    return labelX <= viewportWidth && labelX + labelWidth >= 0;
+  }
+
+  private buildCenteredDayHeader(date: Date, locale: string): string {
+    const weekday = new Intl.DateTimeFormat(locale, { weekday: 'long', timeZone: 'UTC' }).format(date);
+    const day = new Intl.DateTimeFormat(locale, { day: 'numeric', timeZone: 'UTC' }).format(date);
+    const month = new Intl.DateTimeFormat(locale, { month: 'long', timeZone: 'UTC' }).format(date);
+    const year = new Intl.DateTimeFormat(locale, { year: 'numeric', timeZone: 'UTC' }).format(date);
+    const language = this.getLanguage();
+
+    if (language === 'es') {
+      return `${this.capitalize(weekday)} ${day} de ${month} de ${year}`;
+    }
+
+    return `${this.capitalize(weekday)} ${month} ${day}, ${year}`;
+  }
+
+  private capitalize(value: string): string {
+    if (!value) {
+      return value;
+    }
+
+    return value.charAt(0).toUpperCase() + value.slice(1);
   }
 }

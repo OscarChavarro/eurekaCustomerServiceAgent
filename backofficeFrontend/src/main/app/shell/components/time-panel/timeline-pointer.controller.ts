@@ -3,7 +3,7 @@ import type { TimelineRect, TimelineRenderMetrics } from './timeline.types';
 
 type MetricsGetter = () => TimelineRenderMetrics | null;
 
-type DragMode = 'none' | 'pan' | 'v-scroll' | 'h-scroll' | 'v-zoom' | 'h-zoom';
+export type DragMode = 'none' | 'pan' | 'v-scroll' | 'h-scroll' | 'v-zoom' | 'h-zoom';
 
 export class TimelinePointerController {
   private dragMode: DragMode = 'none';
@@ -94,6 +94,40 @@ export class TimelinePointerController {
     }
   }
 
+  public getDragMode(): DragMode {
+    return this.dragMode;
+  }
+
+  public getCursor(event: MouseEvent): string {
+    const metrics = this.getMetrics();
+
+    if (!metrics) {
+      return 'default';
+    }
+
+    const point = { x: event.offsetX, y: event.offsetY };
+
+    if (
+      this.isInsideRect(metrics.horizontalZoomWheelRect, point) ||
+      this.isInsideRect(metrics.horizontalZoomKnobRect, point)
+    ) {
+      return 'ew-resize';
+    }
+
+    if (
+      this.isInsideRect(metrics.verticalZoomWheelRect, point) ||
+      this.isInsideRect(metrics.verticalZoomKnobRect, point)
+    ) {
+      return 'ns-resize';
+    }
+
+    if (this.isInsideRect(metrics.mainRect, point)) {
+      return 'grab';
+    }
+
+    return 'default';
+  }
+
   public onMouseMove(event: MouseEvent): void {
     if (this.dragMode === 'none') {
       return;
@@ -132,7 +166,7 @@ export class TimelinePointerController {
     }
 
     if (this.dragMode === 'v-zoom') {
-      const deltaY = point.y - this.dragOriginY;
+      const deltaY = event.movementY !== 0 ? event.movementY : point.y - this.dragOriginY;
       this.dragOriginY = point.y;
       const zoomFactor = Math.exp(-deltaY * 0.015);
       this.model.zoomY(zoomFactor, metrics.mainRect.height / 2, metrics.mainRect.height);
@@ -140,7 +174,7 @@ export class TimelinePointerController {
     }
 
     if (this.dragMode === 'h-zoom') {
-      const deltaX = point.x - this.dragOriginX;
+      const deltaX = event.movementX !== 0 ? event.movementX : point.x - this.dragOriginX;
       this.dragOriginX = point.x;
       const zoomFactor = Math.exp(deltaX * 0.015);
       this.model.zoomX(zoomFactor, metrics.mainRect.width / 2, metrics.mainRect.width);

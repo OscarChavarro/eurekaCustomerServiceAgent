@@ -17,6 +17,7 @@ import { TimelineConversationLoader } from './timeline-conversation.loader';
 import { TimelineKeyboardController } from './timeline-keyboard.controller';
 import { TimelineModelStore } from './timeline-model.store';
 import { TimelinePointerController } from './timeline-pointer.controller';
+import type { DragMode } from './timeline-pointer.controller';
 import type { TimelineRenderMetrics } from './timeline.types';
 
 @Component({
@@ -82,6 +83,8 @@ export class TimePanelComponent implements AfterViewInit, OnDestroy {
     canvas.addEventListener('mouseup', this.onMouseUp);
     canvas.addEventListener('mouseleave', this.onMouseLeave);
     panelRoot.addEventListener('keydown', this.onKeyDown);
+    document.addEventListener('mousemove', this.onDocumentMouseMove);
+    document.addEventListener('mouseup', this.onDocumentMouseUp);
 
     this.draw();
     void this.loadConversations();
@@ -99,6 +102,11 @@ export class TimePanelComponent implements AfterViewInit, OnDestroy {
     canvas?.removeEventListener('mouseup', this.onMouseUp);
     canvas?.removeEventListener('mouseleave', this.onMouseLeave);
     panelRoot?.removeEventListener('keydown', this.onKeyDown);
+    document.removeEventListener('mousemove', this.onDocumentMouseMove);
+    document.removeEventListener('mouseup', this.onDocumentMouseUp);
+    if (document.pointerLockElement === canvas) {
+      document.exitPointerLock();
+    }
   }
 
   private syncCanvasSize(): void {
@@ -184,22 +192,47 @@ export class TimePanelComponent implements AfterViewInit, OnDestroy {
 
   private readonly onMouseDown = (event: MouseEvent): void => {
     this.pointerController.onMouseDown(event);
+    this.applyCanvasCursor(event);
+    this.tryEnablePointerLockForZoom();
   };
 
   private readonly onMouseMove = (event: MouseEvent): void => {
+    this.applyCanvasCursor(event);
     this.pointerController.onMouseMove(event);
   };
 
   private readonly onMouseUp = (event: MouseEvent): void => {
     this.pointerController.onMouseUp(event);
+    this.releasePointerLockIfAny();
   };
 
   private readonly onMouseLeave = (event: MouseEvent): void => {
     this.pointerController.onMouseUp(event);
+    this.releasePointerLockIfAny();
   };
 
   private readonly onKeyDown = (event: KeyboardEvent): void => {
     this.keyboardController.onKeyDown(event);
+  };
+
+  private readonly onDocumentMouseMove = (event: MouseEvent): void => {
+    const canvas = this.timeCanvasRef?.nativeElement;
+
+    if (!canvas || document.pointerLockElement !== canvas) {
+      return;
+    }
+
+    this.pointerController.onMouseMove(event);
+  };
+
+  private readonly onDocumentMouseUp = (): void => {
+    const canvas = this.timeCanvasRef?.nativeElement;
+
+    if (!canvas || document.pointerLockElement !== canvas) {
+      return;
+    }
+
+    this.releasePointerLockIfAny();
   };
 
   private onConversationRowClick(rowIndex: number): void {
@@ -226,5 +259,54 @@ export class TimePanelComponent implements AfterViewInit, OnDestroy {
       mainWidth: metrics.mainRect.width,
       mainHeight: metrics.mainRect.height
     };
+  }
+
+  private tryEnablePointerLockForZoom(): void {
+    const canvas = this.timeCanvasRef?.nativeElement;
+
+    if (!canvas) {
+      return;
+    }
+
+    const dragMode = this.pointerController.getDragMode();
+
+    if (dragMode !== 'h-zoom' && dragMode !== 'v-zoom') {
+      return;
+    }
+
+    // Pointer Lock gives us effectively infinite drag for wheel-like zoom controls.
+    if (document.pointerLockElement !== canvas) {
+      void canvas.requestPointerLock();
+    }
+  }
+
+  private releasePointerLockIfAny(): void {
+    const canvas = this.timeCanvasRef?.nativeElement;
+
+    if (canvas && document.pointerLockElement === canvas) {
+      document.exitPointerLock();
+    }
+  }
+
+  private applyCanvasCursor(event: MouseEvent): void {
+    const canvas = this.timeCanvasRef?.nativeElement;
+
+    if (!canvas) {
+      return;
+    }
+
+    const dragMode: DragMode = this.pointerController.getDragMode();
+
+    if (dragMode === 'h-zoom') {
+      canvas.style.cursor = 'ew-resize';
+      return;
+    }
+
+    if (dragMode === 'v-zoom') {
+      canvas.style.cursor = 'ns-resize';
+      return;
+    }
+
+    canvas.style.cursor = this.pointerController.getCursor(event);
   }
 }
