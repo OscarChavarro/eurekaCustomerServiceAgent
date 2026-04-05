@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, effect, ElementRef, inject, signal, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { take } from 'rxjs/operators';
 
@@ -32,6 +32,7 @@ export class AppShellChatComponent {
   private readonly i18nStateService = inject(I18nStateService);
   private readonly phoneCountryI18nService = inject(PhoneCountryI18nService);
   private readonly searchTermState = signal<string>('');
+  private readonly composerMessageState = signal<string>('');
   private readonly languageDropdownOpenState = signal<boolean>(false);
   private readonly textSegmentsCache = new Map<string, TextSegment[]>();
   private readonly phoneLookupCache = new Map<string, PhonePrefixLookupResponse | null>();
@@ -39,6 +40,8 @@ export class AppShellChatComponent {
   private activeHoveredPhone: string | null = null;
   private readonly hoveredMessageKeyState = signal<string | null>(null);
   private readonly openReactionMenuKeyState = signal<string | null>(null);
+  @ViewChild('messagesArea') private messagesAreaRef?: ElementRef<HTMLDivElement>;
+  @ViewChild('composerInput') private composerInputRef?: ElementRef<HTMLInputElement>;
 
   protected readonly conversations = this.chatConversationService.conversations;
   protected readonly activeConversation = this.chatConversationService.activeConversation;
@@ -51,6 +54,8 @@ export class AppShellChatComponent {
     this.languageToCountryCode(this.selectedLanguage())
   );
   protected readonly phoneTooltip = signal<PhoneTooltipState | null>(null);
+  protected readonly composerMessage = this.composerMessageState.asReadonly();
+  protected readonly agentTyping = this.chatConversationService.agentTyping;
   protected readonly hoveredMessageKey = this.hoveredMessageKeyState.asReadonly();
   protected readonly openReactionMenuKey = this.openReactionMenuKeyState.asReadonly();
   protected readonly languageDropdownOpen = this.languageDropdownOpenState.asReadonly();
@@ -71,6 +76,25 @@ export class AppShellChatComponent {
     return this.conversations().filter((conversation) =>
       conversation.id.toLowerCase().includes(normalizedSearchTerm)
     );
+  });
+
+  private readonly autoScrollEffectRef = effect(() => {
+    const activeConversation = this.activeConversation();
+    const activeConversationId = this.activeConversationId();
+    const isTyping = activeConversationId ? this.agentTyping()[activeConversationId] === true : false;
+    const messagesSignature = activeConversation
+      ? activeConversation.messages
+        .map((message) => `${message.id}:${message.text.length}`)
+        .join('|')
+      : '';
+
+    if (!activeConversation) {
+      return;
+    }
+
+    void isTyping;
+    void messagesSignature;
+    this.scheduleScrollToBottom();
   });
 
   protected setSearchTerm(searchTerm: string): void {
@@ -134,6 +158,14 @@ export class AppShellChatComponent {
     return this.t(I18N_KEYS.shell.WRITE_MESSAGE_PLACEHOLDER);
   }
 
+  protected aiLabel(): string {
+    return this.t(I18N_KEYS.shell.AI_LABEL);
+  }
+
+  protected typingLabel(): string {
+    return this.t(I18N_KEYS.shell.TYPING_LABEL);
+  }
+
   protected stageLabel(stageLabel: string | undefined): string {
     if (!stageLabel) {
       return '';
@@ -164,6 +196,36 @@ export class AppShellChatComponent {
 
   protected selectConversation(conversationId: string): void {
     this.chatConversationService.setActiveConversation(conversationId);
+  }
+
+  protected activateSimulationConversation(): void {
+    this.chatConversationService.activateSimulationConversation();
+    this.scheduleFocusComposerInput();
+  }
+
+  protected onComposerInput(value: string): void {
+    this.composerMessageState.set(value);
+  }
+
+  protected async sendComposerMessage(): Promise<void> {
+    const conversationId = this.activeConversationId();
+
+    if (!conversationId) {
+      return;
+    }
+
+    const messageText = this.composerMessage();
+    if (!messageText.trim()) {
+      return;
+    }
+
+    this.composerMessageState.set('');
+    this.scheduleScrollToBottom();
+    await this.chatConversationService.sendCustomerMessageToLlm(conversationId, messageText);
+  }
+
+  protected isAgentTyping(conversationId: string): boolean {
+    return this.agentTyping()[conversationId] === true;
   }
 
   protected selectViewMode(viewMode: ConversationViewMode): void {
@@ -463,6 +525,32 @@ export class AppShellChatComponent {
         ? `${countryName} / ${lookup.subzoneName}`
         : countryName
     };
+  }
+
+  private scheduleScrollToBottom(): void {
+    queueMicrotask(() => {
+      requestAnimationFrame(() => {
+        this.scrollMessagesToBottom();
+      });
+    });
+  }
+
+  private scrollMessagesToBottom(): void {
+    const container = this.messagesAreaRef?.nativeElement;
+
+    if (!container) {
+      return;
+    }
+
+    container.scrollTop = container.scrollHeight;
+  }
+
+  private scheduleFocusComposerInput(): void {
+    queueMicrotask(() => {
+      requestAnimationFrame(() => {
+        this.composerInputRef?.nativeElement.focus();
+      });
+    });
   }
 }
 

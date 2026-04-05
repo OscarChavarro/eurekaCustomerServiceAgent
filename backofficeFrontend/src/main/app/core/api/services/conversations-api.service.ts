@@ -89,6 +89,32 @@ export type MessageRatingsResponse = {
   };
 };
 
+export type ChatCompletionRequestMessage = {
+  role: 'user';
+  content: string;
+};
+
+export type ChatCompletionsRequest = {
+  messages: ChatCompletionRequestMessage[];
+  maxTokens: number;
+};
+
+export type ChatCompletionsStreamChunk = {
+  choices?: Array<{
+    delta?: {
+      content?: string;
+      [key: string]: unknown;
+    };
+    [key: string]: unknown;
+  }>;
+  [key: string]: unknown;
+};
+
+type StreamCallbacks = {
+  onChunk: (chunk: ChatCompletionsStreamChunk) => void;
+  onDone: () => void;
+};
+
 @Injectable({ providedIn: 'root' })
 export class ConversationsApiService {
   private readonly httpClient = inject(HttpClient);
@@ -134,5 +160,86 @@ export class ConversationsApiService {
       `${this.frontendSecretsService.backendBaseUrl}/message-ratings`,
       { params }
     );
+  }
+
+  public async streamChatCompletions(
+    request: ChatCompletionsRequest,
+    callbacks: StreamCallbacks
+  ): Promise<void> {
+    const response = await fetch(`${this.frontendSecretsService.backendBaseUrl}/v1/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        messages: request.messages,
+        max_tokens: request.maxTokens
+      })
+    });
+
+    if (!response.ok || !response.body) {
+      const errorBody = await response.text();
+      throw new Error(errorBody || `Chat completion stream failed with status ${response.status}`);
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+
+      if (value) {
+        buffer += decoder.decode(value, { stream: true });
+        buffer = this.processSseEvents(buffer, callbacks);
+      }
+
+      if (done) {
+        buffer += decoder.decode();
+        this.processSseEvents(buffer, callbacks);
+        break;
+      }
+    }
+  }
+
+  private processSseEvents(buffer: string, callbacks: StreamCallbacks): string {
+    const eventSeparator = '\n\n';
+    let workingBuffer = buffer;
+
+    while (true) {
+      const separatorIndex = workingBuffer.indexOf(eventSeparator);
+
+      if (separatorIndex < 0) {
+        return workingBuffer;
+      }
+
+      const rawEvent = workingBuffer.slice(0, separatorIndex);
+      this.handleSseEvent(rawEvent, callbacks);
+      workingBuffer = workingBuffer.slice(separatorIndex + eventSeparator.length);
+    }
+  }
+
+  private handleSseEvent(rawEvent: string, callbacks: StreamCallbacks): void {
+    const payload = rawEvent
+      .split('\n')
+      .filter((line) => line.startsWith('data:'))
+      .map((line) => line.slice('data:'.length).trim())
+      .join('\n');
+
+    if (!payload) {
+      return;
+    }
+
+    if (payload === '[DONE]') {
+      callbacks.onDone();
+      return;
+    }
+
+    try {
+      const parsedChunk = JSON.parse(payload) as ChatCompletionsStreamChunk;
+      callbacks.onChunk(parsedChunk);
+    } catch {
+      // Ignore malformed or partial non-JSON events.
+    }
   }
 }

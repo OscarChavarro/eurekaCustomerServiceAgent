@@ -487,6 +487,12 @@
   font-size: 0.78rem
   margin-right: 0.2rem
 
+.message-ai-label
+  font-size: 0.62rem
+  font-weight: 700
+  letter-spacing: 0.02em
+  color: #4b5d69
+
 .message-status
   text-transform: capitalize
 
@@ -505,6 +511,40 @@
   padding: 0.68rem 0.85rem
   outline: 0
   font-size: 0.92rem
+
+.typing-indicator-bubble
+  display: inline-flex
+  align-items: center
+  gap: 0.35rem
+  padding-right: 0.75rem
+
+.typing-indicator-text
+  margin: 0
+
+.typing-indicator-dots
+  display: inline-flex
+  gap: 0.16rem
+
+.typing-indicator-dots span
+  width: 0.32rem
+  height: 0.32rem
+  border-radius: 50%
+  background: rgb(62 74 82 / 55%)
+  animation: typing-pulse 1s infinite ease-in-out
+
+.typing-indicator-dots span:nth-child(2)
+  animation-delay: 0.18s
+
+.typing-indicator-dots span:nth-child(3)
+  animation-delay: 0.36s
+
+@keyframes typing-pulse
+  0%, 80%, 100%
+    opacity: 0.25
+    transform: translateY(0)
+  40%
+    opacity: 1
+    transform: translateY(-1px)
 
 @media (max-width: 1024px)
   .chat-workspace

@@ -17,6 +17,10 @@ export const SHELL_TRANSLATIONS = {
     en: 'Conversations',
     es: 'Conversaciones'
   },
+  SIMULATION_CONVERSATION_NAME: {
+    en: 'Simulation',
+    es: 'Simulación'
+  },
   ONLINE_STATUS: {
     en: 'Online',
     es: 'En linea'
@@ -28,6 +32,14 @@ export const SHELL_TRANSLATIONS = {
   WRITE_MESSAGE_PLACEHOLDER: {
     en: 'Type a message',
     es: 'Escribe un mensaje'
+  },
+  AI_LABEL: {
+    en: 'AI',
+    es: 'IA'
+  },
+  TYPING_LABEL: {
+    en: 'writting',
+    es: 'escribiendo'
   },
   STAGE_RAW: {
     en: 'Raw',

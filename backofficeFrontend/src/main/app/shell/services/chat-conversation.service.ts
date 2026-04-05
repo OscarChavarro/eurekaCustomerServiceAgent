@@ -3,11 +3,14 @@ import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import {
   BackendConversationSummary,
   BackendConversationDocument,
+  ChatCompletionsStreamChunk,
   MessageRatingValue,
   RevisionStage,
   MessageRatingsResponse,
   ConversationsApiService
 } from '../../core/api/services/conversations-api.service';
+import { I18nService } from '../../core/i18n/services/i18n.service';
+import { I18N_KEYS } from '../../core/i18n/translations/i18n-keys.const';
 import { I18nStateService } from '../../core/i18n/services/i18n-state.service';
 import { ChunkConversationStageRenderer } from './view-stages/chunk-conversation-stage.renderer';
 import { CleanConversationStageRenderer } from './view-stages/clean-conversation-stage.renderer';
@@ -32,7 +35,9 @@ export interface ChatConversation {
 
 @Injectable({ providedIn: 'root' })
 export class ChatConversationService {
+  private static readonly SIMULATION_CONVERSATION_ID = 'local-simulation';
   private readonly conversationsApiService = inject(ConversationsApiService);
+  private readonly i18nService = inject(I18nService);
   private readonly i18nStateService = inject(I18nStateService);
   private readonly rawConversationStageRenderer = inject(RawConversationStageRenderer);
   private readonly cleanConversationStageRenderer = inject(CleanConversationStageRenderer);
@@ -47,6 +52,8 @@ export class ChatConversationService {
   private readonly conversationRatingsState = signal<
     Record<string, MessageRatingsResponse['ratings']>
   >({});
+  private readonly localRawMessagesState = signal<Record<string, ChatMessage[]>>({});
+  private readonly agentTypingState = signal<Record<string, boolean>>({});
   private readonly viewModeState = signal<ConversationViewMode>('raw');
 
   private readonly stageRenderers: Record<ConversationViewMode, ConversationStageRenderer> = {
@@ -98,7 +105,72 @@ export class ChatConversationService {
   readonly conversations = this.conversationState.asReadonly();
   readonly activeConversationId = this.activeConversationIdState.asReadonly();
   readonly conversationRatings = this.conversationRatingsState.asReadonly();
+  readonly agentTyping = this.agentTypingState.asReadonly();
   readonly viewMode = this.viewModeState.asReadonly();
+
+  async sendCustomerMessageToLlm(conversationId: string, rawText: string): Promise<void> {
+    const trimmedText = rawText.trim();
+
+    if (!trimmedText) {
+      return;
+    }
+
+    const userMessage = this.createLocalRawMessage({
+      direction: 'incoming',
+      text: trimmedText
+    });
+    this.pushLocalRawMessage(conversationId, userMessage);
+    this.setAgentTyping(conversationId, true);
+    let aggregatedAgentText = '';
+    let doneReceived = false;
+
+    try {
+      await this.conversationsApiService.streamChatCompletions(
+        {
+          messages: [
+            {
+              role: 'user',
+              content: trimmedText
+            }
+          ],
+          maxTokens: 1000
+        },
+        {
+          onChunk: (chunk) => {
+            const token = this.extractTextToken(chunk);
+
+            if (!token) {
+              return;
+            }
+
+            aggregatedAgentText += token;
+          },
+          onDone: () => {
+            doneReceived = true;
+            const finalAgentText = aggregatedAgentText.trim();
+
+            if (finalAgentText) {
+              const agentMessage = this.createLocalRawMessage({
+                direction: 'outgoing',
+                text: finalAgentText,
+                isAiGenerated: true
+              });
+              this.pushLocalRawMessage(conversationId, agentMessage);
+            }
+
+            this.setAgentTyping(conversationId, false);
+          }
+        }
+      );
+    } catch (error: unknown) {
+      console.error('Unable to stream chat completion', error);
+      this.setAgentTyping(conversationId, false);
+    } finally {
+      if (!doneReceived) {
+        this.setAgentTyping(conversationId, false);
+      }
+    }
+  }
 
   applyConversationRating(
     conversationId: string,
@@ -145,6 +217,7 @@ export class ChatConversationService {
     effect(
       () => {
         this.i18nStateService.selectedLanguage();
+        this.refreshSimulationConversationLabel();
         this.refreshConversationSummaries();
         this.rerenderLoadedConversations();
       },
@@ -156,7 +229,49 @@ export class ChatConversationService {
 
   setActiveConversation(conversationId: string): void {
     this.activeConversationIdState.set(conversationId);
+
+    if (this.isSimulationConversationId(conversationId)) {
+      return;
+    }
+
     this.loadConversationMessages(conversationId);
+  }
+
+  activateSimulationConversation(): void {
+    const language = this.i18nStateService.selectedLanguage();
+    const simulationConversationId = ChatConversationService.SIMULATION_CONVERSATION_ID;
+
+    this.conversationState.update((conversations) => {
+      const existingConversation = conversations.find(
+        (conversation) => conversation.id === simulationConversationId
+      );
+
+      if (existingConversation) {
+        const updatedConversation: ChatConversation = {
+          ...existingConversation,
+          contactName: this.getSimulationConversationName(language)
+        };
+
+        return [
+          updatedConversation,
+          ...conversations.filter((conversation) => conversation.id !== simulationConversationId)
+        ];
+      }
+
+      const simulationConversation: ChatConversation = {
+        id: simulationConversationId,
+        contactName: this.getSimulationConversationName(language),
+        contactAvatar: 'LL',
+        lastMessagePreview: '',
+        lastMessageAt: formatSentAt(new Date().toISOString(), language),
+        unreadCount: 0,
+        messages: []
+      };
+
+      return [simulationConversation, ...conversations];
+    });
+
+    this.activeConversationIdState.set(simulationConversationId);
   }
 
   setViewMode(viewMode: ConversationViewMode): void {
@@ -271,8 +386,13 @@ export class ChatConversationService {
     conversationDocument: BackendConversationDocument
   ): void {
     const renderer = this.stageRenderers[this.viewModeState()];
-    const renderedMessages = renderer.render(conversationDocument);
+    const renderedMessages = this.mergeWithLocalRawMessages(
+      conversationId,
+      renderer.render(conversationDocument)
+    );
     const fallbackMessages = renderedMessages.length > 0 ? renderedMessages : this.defaultMockMessages;
+    const localRawMessages = this.localRawMessagesState()[conversationId] ?? [];
+    const lastLocalRawMessage = localRawMessages[localRawMessages.length - 1];
     const lastRawMessage = conversationDocument.rawMessages?.[conversationDocument.rawMessages.length - 1];
     const summary = this.conversationSummariesState()[conversationId];
     const language = this.i18nStateService.selectedLanguage();
@@ -287,9 +407,14 @@ export class ChatConversationService {
           ...conversation,
           messages: fallbackMessages,
           lastMessagePreview:
-            lastRawMessage?.text ?? summary?.msg ?? conversation.lastMessagePreview,
-          lastMessageAt: lastRawMessage?.sentAt
-            ? formatSentAt(lastRawMessage.sentAt, language)
+            lastLocalRawMessage?.text ||
+            lastRawMessage?.text ||
+            summary?.msg ||
+            conversation.lastMessagePreview,
+          lastMessageAt: lastLocalRawMessage?.sentAt
+            ? lastLocalRawMessage.sentAt
+            : lastRawMessage?.sentAt
+              ? formatSentAt(lastRawMessage.sentAt, language)
             : formatDateLabel(summary?.date, language)
         };
       }))
@@ -309,10 +434,11 @@ export class ChatConversationService {
         }
 
         const renderedMessages = renderer.render(conversationDocument);
+        const mergedMessages = this.mergeWithLocalRawMessages(conversation.id, renderedMessages);
 
         return {
           ...conversation,
-          messages: renderedMessages.length > 0 ? renderedMessages : this.defaultMockMessages
+          messages: mergedMessages.length > 0 ? mergedMessages : this.defaultMockMessages
         };
       }))
     );
@@ -330,10 +456,14 @@ export class ChatConversationService {
           return conversation;
         }
 
+        const localRawMessages = this.localRawMessagesState()[conversation.id] ?? [];
+        const lastLocalRawMessage = localRawMessages[localRawMessages.length - 1];
+
         return {
           ...conversation,
-          lastMessagePreview: summary.msg ?? conversation.lastMessagePreview,
-          lastMessageAt: formatDateLabel(summary.date, language)
+          lastMessagePreview:
+            lastLocalRawMessage?.text || summary.msg || conversation.lastMessagePreview,
+          lastMessageAt: lastLocalRawMessage?.sentAt || formatDateLabel(summary.date, language)
         };
       }))
     );
@@ -353,6 +483,17 @@ export class ChatConversationService {
   }
 
   private getConversationRecencyTimestamp(conversationId: string): number {
+    if (this.isSimulationConversationId(conversationId)) {
+      return Number.MAX_SAFE_INTEGER;
+    }
+
+    const localRawMessages = this.localRawMessagesState()[conversationId] ?? [];
+    const lastLocalRawMessage = localRawMessages[localRawMessages.length - 1];
+
+    if (lastLocalRawMessage?.sentAt) {
+      return this.toTimestamp(lastLocalRawMessage.sentAt);
+    }
+
     const document = this.conversationDocumentsState()[conversationId];
     const lastRawMessage = document?.rawMessages?.[document.rawMessages.length - 1];
 
@@ -384,5 +525,103 @@ export class ChatConversationService {
     }
 
     return 'ID';
+  }
+
+  private mergeWithLocalRawMessages(conversationId: string, renderedMessages: ChatMessage[]): ChatMessage[] {
+    if (this.viewModeState() !== 'raw') {
+      return renderedMessages;
+    }
+
+    const localMessages = this.localRawMessagesState()[conversationId] ?? [];
+
+    if (localMessages.length === 0) {
+      return renderedMessages;
+    }
+
+    return [...renderedMessages, ...localMessages];
+  }
+
+  private createLocalRawMessage(params: {
+    direction: ChatMessage['direction'];
+    text: string;
+    id?: string;
+    isAiGenerated?: boolean;
+  }): ChatMessage {
+    const nowIso = new Date().toISOString();
+
+    return {
+      id: params.id ?? `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      direction: params.direction,
+      text: params.text,
+      sentAt: formatSentAt(nowIso, this.i18nStateService.selectedLanguage()),
+      stageLabel: 'raw',
+      isAiGenerated: params.isAiGenerated
+    };
+  }
+
+  private pushLocalRawMessage(conversationId: string, message: ChatMessage): void {
+    this.localRawMessagesState.update((current) => ({
+      ...current,
+      [conversationId]: [...(current[conversationId] ?? []), message]
+    }));
+
+    const conversationDocument = this.conversationDocumentsState()[conversationId];
+    if (conversationDocument) {
+      this.applyConversationDocumentToState(conversationId, conversationDocument);
+      return;
+    }
+
+    this.conversationState.update((conversations) =>
+      this.sortConversationsByRecency(conversations.map((conversation) => {
+        if (conversation.id !== conversationId) {
+          return conversation;
+        }
+
+        return {
+          ...conversation,
+          messages: [...conversation.messages, message],
+          lastMessagePreview: message.text || conversation.lastMessagePreview,
+          lastMessageAt: message.sentAt
+        };
+      }))
+    );
+  }
+
+  private setAgentTyping(conversationId: string, isTyping: boolean): void {
+    this.agentTypingState.update((current) => ({
+      ...current,
+      [conversationId]: isTyping
+    }));
+  }
+
+  private extractTextToken(chunk: ChatCompletionsStreamChunk): string {
+    const token = chunk.choices?.[0]?.delta?.content;
+    return typeof token === 'string' ? token : '';
+  }
+
+  private refreshSimulationConversationLabel(): void {
+    const language = this.i18nStateService.selectedLanguage();
+    const simulationConversationId = ChatConversationService.SIMULATION_CONVERSATION_ID;
+
+    this.conversationState.update((conversations) =>
+      conversations.map((conversation) => {
+        if (conversation.id !== simulationConversationId) {
+          return conversation;
+        }
+
+        return {
+          ...conversation,
+          contactName: this.getSimulationConversationName(language)
+        };
+      })
+    );
+  }
+
+  private getSimulationConversationName(language: 'es' | 'en'): string {
+    return this.i18nService.get(I18N_KEYS.shell.SIMULATION_CONVERSATION_NAME, language);
+  }
+
+  private isSimulationConversationId(conversationId: string): boolean {
+    return conversationId === ChatConversationService.SIMULATION_CONVERSATION_ID;
   }
 }

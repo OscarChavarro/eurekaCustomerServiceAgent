@@ -40,7 +40,14 @@
   <section class="conversation-list" aria-label="Lista de conversaciones">
     <header class="panel-header">
       <h1>{{ conversationsTitle() }}</h1>
-      <button type="button" class="panel-action" aria-label="Nueva conversacion">+</button>
+      <button
+        type="button"
+        class="panel-action"
+        aria-label="Nueva conversacion"
+        (click)="activateSimulationConversation()"
+      >
+        +
+      </button>
     </header>
 
     <label class="search-box" aria-label="Buscar conversacion">
@@ -152,7 +159,7 @@
         </div>
       </header>
 
-      <div class="messages-area">
+      <div class="messages-area" #messagesArea>
         @for (message of currentConversation.messages; track trackByMessage($index, message)) {
           <article
             class="message-bubble"
@@ -310,6 +317,9 @@
               </p>
             }
             <footer>
+              @if (message.isAiGenerated) {
+                <span class="message-ai-label">{{ aiLabel() }}</span>
+              }
               @if (selectedReaction(currentConversation.id, message); as reaction) {
                 <span class="message-reaction">{{ reaction }}</span>
               }
@@ -323,15 +333,31 @@
             </footer>
           </article>
         }
+
+        @if (isAgentTyping(currentConversation.id)) {
+          <article class="message-bubble outgoing typing-indicator-bubble">
+            <p class="typing-indicator-text">{{ typingLabel() }}</p>
+            <span class="typing-indicator-dots" aria-hidden="true">
+              <span></span>
+              <span></span>
+              <span></span>
+            </span>
+          </article>
+        }
       </div>
 
       <footer class="composer-row">
         <button type="button" aria-label="Adjuntar archivo">+</button>
         <input
+          #composerInput
           type="text"
           [placeholder]="writeMessagePlaceholder()"
           [attr.aria-label]="writeMessagePlaceholder()"
+          [value]="composerMessage()"
+          (input)="onComposerInput($any($event.target).value)"
+          (keydown.enter)="sendComposerMessage()"
         />
+        <button type="button" aria-label="Send message" (click)="sendComposerMessage()">&#9658;</button>
       </footer>
     }
   </section>
