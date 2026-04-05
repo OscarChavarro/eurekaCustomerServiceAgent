@@ -114,6 +114,46 @@ export class AppShellChatComponent {
     return this.t(I18N_KEYS.shell.LANGUAGE_SELECTOR_ARIA);
   }
 
+  protected mainMenuAriaLabel(): string {
+    return this.t(I18N_KEYS.shell.MAIN_MENU_ARIA);
+  }
+
+  protected conversationListAriaLabel(): string {
+    return this.t(I18N_KEYS.shell.CONVERSATION_LIST_ARIA);
+  }
+
+  protected newConversationAriaLabel(): string {
+    return this.t(I18N_KEYS.shell.NEW_CONVERSATION_ARIA);
+  }
+
+  protected searchConversationAriaLabel(): string {
+    return this.t(I18N_KEYS.shell.SEARCH_CONVERSATION_ARIA);
+  }
+
+  protected conversationMessagesAriaLabel(): string {
+    return this.t(I18N_KEYS.shell.CONVERSATION_MESSAGES_ARIA);
+  }
+
+  protected reactionsAriaLabel(): string {
+    return this.t(I18N_KEYS.shell.REACTIONS_ARIA);
+  }
+
+  protected openReactionsMenuAriaLabel(): string {
+    return this.t(I18N_KEYS.shell.OPEN_REACTIONS_MENU_ARIA);
+  }
+
+  protected attachFileAriaLabel(): string {
+    return this.t(I18N_KEYS.shell.ATTACH_FILE_ARIA);
+  }
+
+  protected sendMessageAriaLabel(): string {
+    return this.t(I18N_KEYS.shell.SEND_MESSAGE_ARIA);
+  }
+
+  protected writeMessageAriaLabel(): string {
+    return this.t(I18N_KEYS.shell.WRITE_MESSAGE_ARIA);
+  }
+
   protected languageOptionLabel(language: SupportedLanguage): string {
     if (language === 'es') {
       return this.t(I18N_KEYS.shell.LANGUAGE_ES);

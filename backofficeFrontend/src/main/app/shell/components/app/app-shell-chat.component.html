@@ -1,5 +1,5 @@
 <div class="chat-workspace">
-  <aside class="left-sidebar" aria-label="Menu principal">
+  <aside class="left-sidebar" [attr.aria-label]="mainMenuAriaLabel()">
     <div class="language-switcher">
       <button
         class="sidebar-button is-active"
@@ -37,20 +37,20 @@
     </div>
   </aside>
 
-  <section class="conversation-list" aria-label="Lista de conversaciones">
+  <section class="conversation-list" [attr.aria-label]="conversationListAriaLabel()">
     <header class="panel-header">
       <h1>{{ conversationsTitle() }}</h1>
       <button
         type="button"
         class="panel-action"
-        aria-label="Nueva conversacion"
+        [attr.aria-label]="newConversationAriaLabel()"
         (click)="activateSimulationConversation()"
       >
         +
       </button>
     </header>
 
-    <label class="search-box" aria-label="Buscar conversacion">
+    <label class="search-box" [attr.aria-label]="searchConversationAriaLabel()">
       <span aria-hidden="true">&#128269;</span>
       <input
         type="text"
@@ -136,7 +136,7 @@
     </div>
   </section>
 
-  <section class="conversation-panel" aria-label="Mensajes de la conversacion">
+  <section class="conversation-panel" [attr.aria-label]="conversationMessagesAriaLabel()">
     @if (activeConversation(); as currentConversation) {
       <header class="panel-header conversation-header">
         <div class="profile-pill">
@@ -179,14 +179,18 @@
           >
             @if (shouldShowReactionControls(currentConversation.id, message)) {
               <div class="message-hover-tools">
-                <button type="button" class="message-hover-icon left" aria-label="Reactions">
+                <button
+                  type="button"
+                  class="message-hover-icon left"
+                  [attr.aria-label]="reactionsAriaLabel()"
+                >
                   🙂
                 </button>
                 <div class="reaction-menu-wrapper">
                   <button
                     type="button"
                     class="message-hover-icon right"
-                    aria-label="Open reactions menu"
+                    [attr.aria-label]="openReactionsMenuAriaLabel()"
                     (click)="toggleReactionMenu($event, currentConversation.id, message.id)"
                   >
                     <span class="material-symbols-outlined">expand_more</span>
@@ -347,17 +351,23 @@
       </div>
 
       <footer class="composer-row">
-        <button type="button" aria-label="Adjuntar archivo">+</button>
+        <button type="button" [attr.aria-label]="attachFileAriaLabel()">+</button>
         <input
           #composerInput
           type="text"
           [placeholder]="writeMessagePlaceholder()"
-          [attr.aria-label]="writeMessagePlaceholder()"
+          [attr.aria-label]="writeMessageAriaLabel()"
           [value]="composerMessage()"
           (input)="onComposerInput($any($event.target).value)"
           (keydown.enter)="sendComposerMessage()"
         />
-        <button type="button" aria-label="Send message" (click)="sendComposerMessage()">&#9658;</button>
+        <button
+          type="button"
+          [attr.aria-label]="sendMessageAriaLabel()"
+          (click)="sendComposerMessage()"
+        >
+          &#9658;
+        </button>
       </footer>
     }
   </section>

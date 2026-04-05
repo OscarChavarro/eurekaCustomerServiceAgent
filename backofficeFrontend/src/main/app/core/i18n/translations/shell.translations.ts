@@ -5,6 +5,46 @@ export const SHELL_TRANSLATIONS = {
     en: 'Language selector',
     es: 'Selector de idioma'
   },
+  MAIN_MENU_ARIA: {
+    en: 'Main menu',
+    es: 'Menu principal'
+  },
+  CONVERSATION_LIST_ARIA: {
+    en: 'Conversation list',
+    es: 'Lista de conversaciones'
+  },
+  NEW_CONVERSATION_ARIA: {
+    en: 'New conversation',
+    es: 'Nueva conversacion'
+  },
+  SEARCH_CONVERSATION_ARIA: {
+    en: 'Search conversation',
+    es: 'Buscar conversacion'
+  },
+  CONVERSATION_MESSAGES_ARIA: {
+    en: 'Conversation messages',
+    es: 'Mensajes de la conversacion'
+  },
+  REACTIONS_ARIA: {
+    en: 'Reactions',
+    es: 'Reacciones'
+  },
+  OPEN_REACTIONS_MENU_ARIA: {
+    en: 'Open reactions menu',
+    es: 'Abrir menu de reacciones'
+  },
+  ATTACH_FILE_ARIA: {
+    en: 'Attach file',
+    es: 'Adjuntar archivo'
+  },
+  SEND_MESSAGE_ARIA: {
+    en: 'Send message',
+    es: 'Enviar mensaje'
+  },
+  WRITE_MESSAGE_ARIA: {
+    en: 'Type a message',
+    es: 'Escribe un mensaje'
+  },
   LANGUAGE_EN: {
     en: 'English',
     es: 'Ingles'
