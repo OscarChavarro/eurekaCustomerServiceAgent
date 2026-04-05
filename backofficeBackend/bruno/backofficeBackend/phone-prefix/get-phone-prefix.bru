@@ -1,0 +1,24 @@
+meta {
+  name: Get Phone Prefix
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/phone-prefix?phone={{phone}}
+  body: none
+  auth: none
+}
+
+params:query {
+  phone: {{phone}}
+}
+
+headers {
+  Content-Type: application/json
+}
+
+vars:pre-request {
+  baseUrl: http://localhost:3667
+  phone: +1 (555) 010-9999
+}

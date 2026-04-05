@@ -1,10 +1,13 @@
 import { Module } from '@nestjs/common';
 import { ConversationsController } from './adapters/inbound/http/conversations.controller';
 import { MessagesController } from './adapters/inbound/http/messages.controller';
+import { PhonePrefixController } from './adapters/inbound/http/phone-prefix.controller';
+import { HardcodedPhonePrefixCatalogAdapter } from './adapters/outbound/hardcoded/hardcoded-phone-prefix-catalog.adapter';
 import { MongoClientProvider } from './adapters/outbound/mongo/mongo-client.provider';
 import { MongoConversationsRepositoryAdapter } from './adapters/outbound/mongo/mongo-conversations.repository.adapter';
 import { GetConversationIdsUseCase } from './application/use-cases/get-conversation-ids/get-conversation-ids.use-case';
 import { GetConversationMessagesUseCase } from './application/use-cases/get-conversation-messages/get-conversation-messages.use-case';
+import { GetPhonePrefixUseCase } from './application/use-cases/get-phone-prefix/get-phone-prefix.use-case';
 import { TOKENS } from './application/ports/tokens';
 import { StartupValidationOrchestrator } from './infrastructure/bootstrap/startup-validation.orchestrator';
 import { MongoConnectivityStartupValidator } from './infrastructure/bootstrap/validators/mongo-connectivity-startup.validator';
@@ -13,7 +16,7 @@ import { SecretsConfig } from './infrastructure/config/settings/secrets.config';
 import { SettingsConfig } from './infrastructure/config/settings/settings.config';
 
 @Module({
-  controllers: [ConversationsController, MessagesController],
+  controllers: [ConversationsController, MessagesController, PhonePrefixController],
   providers: [
     SettingsConfig,
     SecretsConfig,
@@ -23,9 +26,14 @@ import { SettingsConfig } from './infrastructure/config/settings/settings.config
     StartupValidationOrchestrator,
     GetConversationIdsUseCase,
     GetConversationMessagesUseCase,
+    GetPhonePrefixUseCase,
     {
       provide: TOKENS.ConversationsReadRepositoryPort,
       useClass: MongoConversationsRepositoryAdapter
+    },
+    {
+      provide: TOKENS.PhonePrefixCatalogPort,
+      useClass: HardcodedPhonePrefixCatalogAdapter
     }
   ]
 })

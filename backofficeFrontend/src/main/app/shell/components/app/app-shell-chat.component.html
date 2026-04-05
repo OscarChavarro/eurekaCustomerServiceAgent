@@ -24,10 +24,6 @@
         </div>
       }
     </div>
-    <button class="sidebar-button" type="button" aria-label="Estadisticas">ST</button>
-    <button class="sidebar-button" type="button" aria-label="Clientes">CL</button>
-    <button class="sidebar-button" type="button" aria-label="Calendario">CA</button>
-    <button class="sidebar-button" type="button" aria-label="Configuracion">CF</button>
   </aside>
 
   <section class="conversation-list" aria-label="Lista de conversaciones">
@@ -37,7 +33,7 @@
     </header>
 
     <label class="search-box" aria-label="Buscar conversacion">
-      <span>?</span>
+      <span aria-hidden="true">&#128269;</span>
       <input
         type="text"
         [placeholder]="searchOrNewChatPlaceholder()"
@@ -59,11 +55,59 @@
           <span class="avatar">{{ conversation.contactAvatar }}</span>
           <span class="conversation-main">
             <span class="conversation-top-row">
-              <span class="contact-name">{{ conversation.contactName }}</span>
+              <span class="contact-name">
+                @for (segment of getTextSegments(conversation.contactName); track trackByTextSegment($index)) {
+                  @if (segment.type === 'link') {
+                    <a
+                      class="message-link"
+                      [href]="segment.href"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {{ segment.value }}
+                    </a>
+                  } @else if (segment.type === 'phone') {
+                    <span
+                      class="phone-token"
+                      (mouseenter)="onPhoneMouseEnter($event, segment.value)"
+                      (mousemove)="onPhoneMouseMove($event, segment.value)"
+                      (mouseleave)="onPhoneMouseLeave(segment.value)"
+                    >
+                      {{ segment.value }}
+                    </span>
+                  } @else {
+                    <span>{{ segment.value }}</span>
+                  }
+                }
+              </span>
               <span class="message-time">{{ conversation.lastMessageAt }}</span>
             </span>
             <span class="conversation-bottom-row">
-              <span class="message-preview">{{ conversation.lastMessagePreview }}</span>
+              <span class="message-preview">
+                @for (segment of getTextSegments(conversation.lastMessagePreview); track trackByTextSegment($index)) {
+                  @if (segment.type === 'link') {
+                    <a
+                      class="message-link"
+                      [href]="segment.href"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {{ segment.value }}
+                    </a>
+                  } @else if (segment.type === 'phone') {
+                    <span
+                      class="phone-token"
+                      (mouseenter)="onPhoneMouseEnter($event, segment.value)"
+                      (mousemove)="onPhoneMouseMove($event, segment.value)"
+                      (mouseleave)="onPhoneMouseLeave(segment.value)"
+                    >
+                      {{ segment.value }}
+                    </span>
+                  } @else {
+                    <span>{{ segment.value }}</span>
+                  }
+                }
+              </span>
               @if (conversation.unreadCount > 0) {
                 <span class="unread-pill">{{ conversation.unreadCount }}</span>
               }
@@ -101,14 +145,20 @@
         @for (message of currentConversation.messages; track trackByMessage($index, message)) {
           <article
             class="message-bubble"
+            [class.incoming]="message.direction === 'incoming'"
             [class.outgoing]="message.direction === 'outgoing'"
             [class.system]="message.direction === 'system'"
-            [class.has-group-color]="!!message.backgroundColor"
-            [style.background-color]="message.backgroundColor || null"
+            [class.group-start]="isGroupStart(currentConversation.messages, $index)"
+            [class.group-end]="isGroupEnd(currentConversation.messages, $index)"
+            [class.group-middle]="
+              !isGroupStart(currentConversation.messages, $index) &&
+              !isGroupEnd(currentConversation.messages, $index)
+            "
+            [style.--bubble-bg]="message.backgroundColor || null"
           >
             @if (message.showRawStrikethrough) {
               <p class="message-text-raw">
-                @for (segment of getMessageTextSegments(message.rawText); track trackByTextSegment($index)) {
+                @for (segment of getTextSegments(message.rawText); track trackByTextSegment($index)) {
                   @if (segment.type === 'link') {
                     <a
                       class="message-link"
@@ -118,13 +168,22 @@
                     >
                       {{ segment.value }}
                     </a>
+                  } @else if (segment.type === 'phone') {
+                    <span
+                      class="phone-token"
+                      (mouseenter)="onPhoneMouseEnter($event, segment.value)"
+                      (mousemove)="onPhoneMouseMove($event, segment.value)"
+                      (mouseleave)="onPhoneMouseLeave(segment.value)"
+                    >
+                      {{ segment.value }}
+                    </span>
                   } @else {
                     <span>{{ segment.value }}</span>
                   }
                 }
               </p>
               <p class="message-text-clean">
-                @for (segment of getMessageTextSegments(message.text); track trackByTextSegment($index)) {
+                @for (segment of getTextSegments(message.text); track trackByTextSegment($index)) {
                   @if (segment.type === 'link') {
                     <a
                       class="message-link"
@@ -134,6 +193,15 @@
                     >
                       {{ segment.value }}
                     </a>
+                  } @else if (segment.type === 'phone') {
+                    <span
+                      class="phone-token"
+                      (mouseenter)="onPhoneMouseEnter($event, segment.value)"
+                      (mousemove)="onPhoneMouseMove($event, segment.value)"
+                      (mouseleave)="onPhoneMouseLeave(segment.value)"
+                    >
+                      {{ segment.value }}
+                    </span>
                   } @else {
                     <span>{{ segment.value }}</span>
                   }
@@ -141,7 +209,7 @@
               </p>
             } @else {
               <p>
-                @for (segment of getMessageTextSegments(message.text); track trackByTextSegment($index)) {
+                @for (segment of getTextSegments(message.text); track trackByTextSegment($index)) {
                   @if (segment.type === 'link') {
                     <a
                       class="message-link"
@@ -151,6 +219,15 @@
                     >
                       {{ segment.value }}
                     </a>
+                  } @else if (segment.type === 'phone') {
+                    <span
+                      class="phone-token"
+                      (mouseenter)="onPhoneMouseEnter($event, segment.value)"
+                      (mousemove)="onPhoneMouseMove($event, segment.value)"
+                      (mouseleave)="onPhoneMouseLeave(segment.value)"
+                    >
+                      {{ segment.value }}
+                    </span>
                   } @else {
                     <span>{{ segment.value }}</span>
                   }
@@ -177,8 +254,17 @@
           [placeholder]="writeMessagePlaceholder()"
           [attr.aria-label]="writeMessagePlaceholder()"
         />
-        <button type="button" aria-label="Enviar mensaje">EN</button>
       </footer>
     }
   </section>
+
+  @if (phoneTooltip(); as tooltip) {
+    <div
+      class="phone-tooltip"
+      [style.left.px]="tooltip.x + 12"
+      [style.top.px]="tooltip.y + 16"
+    >
+      {{ tooltip.text }}
+    </div>
+  }
 </div>

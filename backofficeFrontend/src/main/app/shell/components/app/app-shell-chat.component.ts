@@ -1,8 +1,14 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { take } from 'rxjs/operators';
 
+import {
+  ConversationsApiService,
+  type PhonePrefixLookupResponse
+} from '../../../core/api/services/conversations-api.service';
 import { I18nService } from '../../../core/i18n/services/i18n.service';
 import { I18nStateService } from '../../../core/i18n/services/i18n-state.service';
+import { PhoneCountryI18nService } from '../../../core/i18n/services/phone-country-i18n.service';
 import { I18N_KEYS } from '../../../core/i18n/translations/i18n-keys.const';
 import type { SupportedLanguage } from '../../../core/i18n/types/supported-language.type';
 import {
@@ -20,11 +26,16 @@ import {
 })
 export class AppShellChatComponent {
   private readonly chatConversationService = inject(ChatConversationService);
+  private readonly conversationsApiService = inject(ConversationsApiService);
   private readonly i18nService = inject(I18nService);
   private readonly i18nStateService = inject(I18nStateService);
+  private readonly phoneCountryI18nService = inject(PhoneCountryI18nService);
   private readonly searchTermState = signal<string>('');
   private readonly languageDropdownOpenState = signal<boolean>(false);
-  private readonly messageTextSegmentsCache = new Map<string, MessageTextSegment[]>();
+  private readonly textSegmentsCache = new Map<string, TextSegment[]>();
+  private readonly phoneLookupCache = new Map<string, PhonePrefixLookupResponse | null>();
+  private hoverIntentTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  private activeHoveredPhone: string | null = null;
 
   protected readonly conversations = this.chatConversationService.conversations;
   protected readonly activeConversation = this.chatConversationService.activeConversation;
@@ -35,6 +46,7 @@ export class AppShellChatComponent {
   protected readonly selectedLanguageFlag = computed(() =>
     this.getLanguageFlag(this.selectedLanguage())
   );
+  protected readonly phoneTooltip = signal<PhoneTooltipState | null>(null);
   protected readonly languageDropdownOpen = this.languageDropdownOpenState.asReadonly();
   protected readonly availableViewModes: ConversationViewMode[] = [
     'raw',
@@ -160,25 +172,88 @@ export class AppShellChatComponent {
     return message.id;
   }
 
-  protected getMessageTextSegments(text: string | undefined): MessageTextSegment[] {
+  protected isGroupStart(messages: ChatMessage[], index: number): boolean {
+    const current = messages[index];
+
+    if (!current || current.direction === 'system' || index === 0) {
+      return true;
+    }
+
+    const previous = messages[index - 1];
+
+    if (!previous || previous.direction === 'system') {
+      return true;
+    }
+
+    return previous.direction !== current.direction;
+  }
+
+  protected isGroupEnd(messages: ChatMessage[], index: number): boolean {
+    const current = messages[index];
+
+    if (!current || current.direction === 'system' || index === messages.length - 1) {
+      return true;
+    }
+
+    const next = messages[index + 1];
+
+    if (!next || next.direction === 'system') {
+      return true;
+    }
+
+    return next.direction !== current.direction;
+  }
+
+  protected getTextSegments(text: string | undefined): TextSegment[] {
     if (!text) {
       return [];
     }
 
-    const cached = this.messageTextSegmentsCache.get(text);
+    const cached = this.textSegmentsCache.get(text);
 
     if (cached) {
       return cached;
     }
 
-    const segments = splitMessageTextIntoSegments(text);
-    this.messageTextSegmentsCache.set(text, segments);
+    const segments = splitTextIntoSegments(text);
+    this.textSegmentsCache.set(text, segments);
 
     return segments;
   }
 
   protected trackByTextSegment(index: number): number {
     return index;
+  }
+
+  protected onPhoneMouseEnter(event: MouseEvent, phone: string): void {
+    this.activeHoveredPhone = phone;
+    this.schedulePhoneLookup(event, phone);
+  }
+
+  protected onPhoneMouseMove(event: MouseEvent, phone: string): void {
+    if (this.activeHoveredPhone !== phone) {
+      this.activeHoveredPhone = phone;
+    }
+
+    if (this.phoneTooltip()?.phone === phone) {
+      this.phoneTooltip.set({
+        ...this.phoneTooltip()!,
+        x: event.clientX,
+        y: event.clientY
+      });
+      return;
+    }
+
+    this.schedulePhoneLookup(event, phone);
+  }
+
+  protected onPhoneMouseLeave(phone: string): void {
+    if (this.activeHoveredPhone === phone) {
+      this.activeHoveredPhone = null;
+    }
+
+    this.clearPhoneLookupTimer();
+    this.phoneTooltip.set(null);
   }
 
   private t(key: (typeof I18N_KEYS)['shell'][keyof (typeof I18N_KEYS)['shell']]): string {
@@ -188,15 +263,101 @@ export class AppShellChatComponent {
   private getLanguageFlag(language: SupportedLanguage): string {
     return language === 'es' ? '🇪🇸' : '🇺🇸';
   }
+
+  private schedulePhoneLookup(event: MouseEvent, phone: string): void {
+    this.clearPhoneLookupTimer();
+
+    this.hoverIntentTimeoutId = setTimeout(() => {
+      if (this.activeHoveredPhone !== phone) {
+        return;
+      }
+
+      const cachedLookup = this.phoneLookupCache.get(phone);
+
+      if (cachedLookup !== undefined) {
+        const cachedTooltipLabel = this.formatPhoneTooltipLabel(cachedLookup);
+
+        if (cachedTooltipLabel) {
+          this.phoneTooltip.set({
+            phone,
+            text: cachedTooltipLabel,
+            x: event.clientX,
+            y: event.clientY
+          });
+        }
+        return;
+      }
+
+      this.conversationsApiService
+        .getPhonePrefix(phone)
+        .pipe(take(1))
+        .subscribe({
+          next: (response) => {
+            this.phoneLookupCache.set(phone, response);
+            const tooltipLabel = this.formatPhoneTooltipLabel(response);
+
+            if (!tooltipLabel || this.activeHoveredPhone !== phone) {
+              return;
+            }
+
+            this.phoneTooltip.set({
+              phone,
+              text: tooltipLabel,
+              x: event.clientX,
+              y: event.clientY
+            });
+          },
+          error: () => {
+            this.phoneLookupCache.set(phone, null);
+          }
+        });
+    }, 1000);
+  }
+
+  private clearPhoneLookupTimer(): void {
+    if (this.hoverIntentTimeoutId !== null) {
+      clearTimeout(this.hoverIntentTimeoutId);
+      this.hoverIntentTimeoutId = null;
+    }
+  }
+
+  private formatPhoneTooltipLabel(
+    lookup: PhonePrefixLookupResponse | null
+  ): string | null {
+    if (!lookup) {
+      return null;
+    }
+
+    const countryLabel = this.phoneCountryI18nService.getCountryLabel(
+      lookup.countryCode,
+      this.selectedLanguage()
+    );
+
+    if (!countryLabel) {
+      return null;
+    }
+
+    return lookup.subzoneName
+      ? `${countryLabel} / ${lookup.subzoneName}`
+      : countryLabel;
+  }
 }
 
-type MessageTextSegment =
+type TextSegment =
   | { type: 'text'; value: string }
-  | { type: 'link'; value: string; href: string };
+  | { type: 'link'; value: string; href: string }
+  | { type: 'phone'; value: string };
 
-function splitMessageTextIntoSegments(text: string): MessageTextSegment[] {
-  const pattern = /\b((?:https?:\/\/|www\.)[^\s<]+)/gi;
-  const segments: MessageTextSegment[] = [];
+type PhoneTooltipState = {
+  phone: string;
+  text: string;
+  x: number;
+  y: number;
+};
+
+function splitTextIntoSegments(text: string): TextSegment[] {
+  const pattern = /\b((?:https?:\/\/|www\.)[^\s<]+)|(\+\d[\d\s().-]{4,}\d)/gi;
+  const segments: TextSegment[] = [];
   let currentIndex = 0;
 
   for (const match of text.matchAll(pattern)) {
@@ -210,20 +371,30 @@ function splitMessageTextIntoSegments(text: string): MessageTextSegment[] {
       });
     }
 
-    const normalizedUrl = normalizeMatchedUrl(fullMatch);
-    const trailingSuffix = fullMatch.slice(normalizedUrl.length);
-    const href = normalizedUrl.startsWith('http') ? normalizedUrl : `https://${normalizedUrl}`;
+    const urlCandidate = match[1];
+    const phoneCandidate = match[2];
 
-    segments.push({
-      type: 'link',
-      value: normalizedUrl,
-      href
-    });
+    if (urlCandidate) {
+      const normalizedUrl = normalizeMatchedUrl(urlCandidate);
+      const trailingSuffix = urlCandidate.slice(normalizedUrl.length);
+      const href = normalizedUrl.startsWith('http') ? normalizedUrl : `https://${normalizedUrl}`;
 
-    if (trailingSuffix) {
       segments.push({
-        type: 'text',
-        value: trailingSuffix
+        type: 'link',
+        value: normalizedUrl,
+        href
+      });
+
+      if (trailingSuffix) {
+        segments.push({
+          type: 'text',
+          value: trailingSuffix
+        });
+      }
+    } else if (phoneCandidate) {
+      segments.push({
+        type: 'phone',
+        value: normalizeMatchedPhone(phoneCandidate)
       });
     }
 
@@ -242,4 +413,8 @@ function splitMessageTextIntoSegments(text: string): MessageTextSegment[] {
 
 function normalizeMatchedUrl(matchedUrl: string): string {
   return matchedUrl.replace(/[),.;!?]+$/, '');
+}
+
+function normalizeMatchedPhone(matchedPhone: string): string {
+  return matchedPhone.replace(/[),.;!?]+$/, '');
 }
