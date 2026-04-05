@@ -25,6 +25,7 @@ export type TimelineRect = {
 };
 
 export type TimelineRenderMetrics = {
+  rulerRect: TimelineRect;
   mainRect: TimelineRect;
   horizontalScrollTrackRect: TimelineRect;
   horizontalScrollThumbRect: TimelineRect;

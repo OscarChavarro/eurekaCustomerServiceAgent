@@ -32,8 +32,8 @@ export class TimelineCanvasRenderer {
     this.drawMainAreaBackground(context, mainRect);
     this.drawTimeGrid(context, mainRect);
     this.drawSegments(context, mainRect);
-    this.drawTopRuler(context, width, mainRect);
-    const metrics = this.drawControls(context, width, height, mainRect);
+    const rulerRect = this.drawTopRuler(context, width, mainRect);
+    const metrics = this.drawControls(context, width, height, rulerRect, mainRect);
 
     if (state.segments.length === 0) {
       this.drawCenteredStatus(
@@ -129,7 +129,7 @@ export class TimelineCanvasRenderer {
     context: CanvasRenderingContext2D,
     width: number,
     mainRect: TimelineRect
-  ): void {
+  ): TimelineRect {
     const state = this.model.getState();
     const rulerRect: TimelineRect = {
       x: 0,
@@ -182,12 +182,15 @@ export class TimelineCanvasRenderer {
         context.fillText(tickLabel, labelX, labelY);
       }
     }
+
+    return rulerRect;
   }
 
   private drawControls(
     context: CanvasRenderingContext2D,
     width: number,
     height: number,
+    rulerRect: TimelineRect,
     mainRect: TimelineRect
   ): TimelineRenderMetrics {
     const state = this.model.getState();
@@ -283,6 +286,7 @@ export class TimelineCanvasRenderer {
     this.drawThumb(context, horizontalZoomKnobRect, '#2f3d4a');
 
     return {
+      rulerRect,
       mainRect,
       horizontalScrollTrackRect,
       horizontalScrollThumbRect,

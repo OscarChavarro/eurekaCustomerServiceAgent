@@ -118,6 +118,31 @@ export class AppShellChatComponent implements OnDestroy {
     this.scheduleScrollToBottom();
   });
 
+  private readonly keepActiveConversationWithinFilterEffectRef = effect(
+    () => {
+      const conversations = this.filteredConversations();
+      const activeConversationId = this.activeConversationId();
+
+      if (conversations.length === 0 || !activeConversationId) {
+        return;
+      }
+
+      const activeConversationStillVisible = conversations.some(
+        (conversation) => conversation.id === activeConversationId
+      );
+
+      if (activeConversationStillVisible) {
+        return;
+      }
+
+      const firstVisibleConversation = conversations[0];
+      if (firstVisibleConversation) {
+        this.chatConversationService.setActiveConversation(firstVisibleConversation.id);
+      }
+    },
+    { allowSignalWrites: true }
+  );
+
   protected setSearchTerm(searchTerm: string): void {
     this.searchTermState.set(searchTerm);
   }

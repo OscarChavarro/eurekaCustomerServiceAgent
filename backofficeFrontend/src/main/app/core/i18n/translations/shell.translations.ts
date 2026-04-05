@@ -123,7 +123,7 @@ export const SHELL_TRANSLATIONS = {
   },
   STAGE_RAW: {
     en: 'Raw',
-    es: 'Bruto'
+    es: 'Crudo'
   },
   STAGE_CLEAN: {
     en: 'Clean',

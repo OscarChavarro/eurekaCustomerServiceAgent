@@ -51,12 +51,13 @@ export class TimelineModelStore {
     );
     const safeMinTimeMs = Number.isFinite(minTimeMs) ? minTimeMs : Date.now();
     const safeMaxTimeMs = Number.isFinite(maxTimeMs) ? maxTimeMs : safeMinTimeMs + 60_000;
+    const futureLimitMs = Date.now() + 24 * 60 * 60 * 1_000;
 
     this.state = {
       ...this.state,
       segments: sortedSegments,
       minTimeMs: safeMinTimeMs,
-      maxTimeMs: Math.max(safeMinTimeMs + 1_000, safeMaxTimeMs),
+      maxTimeMs: Math.max(safeMinTimeMs + 1_000, safeMaxTimeMs, futureLimitMs),
       timeOffsetMs: safeMinTimeMs
     };
     const maxOffset = this.computeMaxTimeOffset(this.state.viewportWidth);
@@ -97,6 +98,23 @@ export class TimelineModelStore {
       timeOffsetMs: this.state.minTimeMs + span * this.clamp(offsetRatio, 0, 1)
     };
     this.clampAndEmit(mainWidthPx);
+  }
+
+  public setHorizontalWindow(startMs: number, endMs: number, mainWidthPx: number): void {
+    const width = Math.max(1, mainWidthPx);
+    const minScale = this.computeMinPixelsPerSecond(width);
+    const maxScale = 1;
+    const normalizedStart = Math.min(startMs, endMs);
+    const normalizedEnd = Math.max(startMs, endMs);
+    const spanMs = Math.max(1_000, normalizedEnd - normalizedStart);
+    const desiredPixelsPerSecond = width / (spanMs / 1_000);
+
+    this.state = {
+      ...this.state,
+      pixelsPerSecond: this.clamp(desiredPixelsPerSecond, minScale, maxScale),
+      timeOffsetMs: normalizedStart
+    };
+    this.clampAndEmit(width);
   }
 
   public setRowHeightFromRatio(zoomRatio: number): void {

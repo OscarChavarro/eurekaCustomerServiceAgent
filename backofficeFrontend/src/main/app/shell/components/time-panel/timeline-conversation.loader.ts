@@ -1,6 +1,4 @@
-import { firstValueFrom } from 'rxjs';
 import {
-  ConversationsApiService,
   type BackendConversationSummary
 } from '../../../core/api/services/conversations-api.service';
 import type { TimelineConversationSegment } from './timeline.types';
@@ -8,10 +6,10 @@ import type { TimelineConversationSegment } from './timeline.types';
 type LoadProgressCallback = (loaded: number, total: number) => void;
 
 export class TimelineConversationLoader {
-  constructor(private readonly conversationsApiService: ConversationsApiService) {}
-
-  public async loadAll(progressCallback?: LoadProgressCallback): Promise<TimelineConversationSegment[]> {
-    const summaries = await firstValueFrom(this.conversationsApiService.getConversationIds());
+  public loadAll(
+    summaries: BackendConversationSummary[],
+    progressCallback?: LoadProgressCallback
+  ): TimelineConversationSegment[] {
     const total = summaries.length;
     const segments = summaries.map((summary) => this.toSegment(summary));
 

@@ -33,6 +33,11 @@ export interface ChatConversation {
   messages: ChatMessage[];
 }
 
+export type TimeRangeFilter = {
+  startMs: number;
+  endMs: number;
+};
+
 @Injectable({ providedIn: 'root' })
 export class ChatConversationService {
   private static readonly SIMULATION_CONVERSATION_ID = 'local-simulation';
@@ -55,6 +60,8 @@ export class ChatConversationService {
   private readonly localRawMessagesState = signal<Record<string, ChatMessage[]>>({});
   private readonly agentTypingState = signal<Record<string, boolean>>({});
   private readonly viewModeState = signal<ConversationViewMode>('raw');
+  private readonly timeRangeFilterState = signal<TimeRangeFilter | null>(null);
+  private readonly filteredConversationIdsState = signal<Set<string> | null>(null);
 
   private readonly stageRenderers: Record<ConversationViewMode, ConversationStageRenderer> = {
     raw: this.rawConversationStageRenderer,
@@ -102,7 +109,33 @@ export class ChatConversationService {
   private readonly conversationState = signal<ChatConversation[]>([]);
   private readonly activeConversationIdState = signal<string | null>(null);
 
-  readonly conversations = this.conversationState.asReadonly();
+  readonly conversations = computed(() => {
+    const filteredConversationIds = this.filteredConversationIdsState();
+
+    if (!filteredConversationIds) {
+      return this.conversationState();
+    }
+
+    return this.conversationState().filter((conversation) => {
+      if (this.isSimulationConversationId(conversation.id)) {
+        return true;
+      }
+
+      return filteredConversationIds.has(conversation.id);
+    });
+  });
+  readonly conversationSummaries = this.conversationSummariesState.asReadonly();
+  readonly totalConversationIds = computed(() => Object.keys(this.conversationSummariesState()));
+  readonly filteredConversationIds = computed(() => {
+    const filteredConversationIds = this.filteredConversationIdsState();
+
+    if (!filteredConversationIds) {
+      return this.totalConversationIds();
+    }
+
+    return [...filteredConversationIds];
+  });
+  readonly timeRangeFilter = this.timeRangeFilterState.asReadonly();
   readonly activeConversationId = this.activeConversationIdState.asReadonly();
   readonly conversationRatings = this.conversationRatingsState.asReadonly();
   readonly agentTyping = this.agentTypingState.asReadonly();
@@ -237,6 +270,29 @@ export class ChatConversationService {
     this.loadConversationMessages(conversationId);
   }
 
+  setTimeRangeFilter(range: TimeRangeFilter | null): void {
+    const currentRange = this.timeRangeFilterState();
+
+    if (!range) {
+      if (!currentRange) {
+        return;
+      }
+      this.timeRangeFilterState.set(null);
+      this.filteredConversationIdsState.set(null);
+      return;
+    }
+
+    const startMs = Math.min(range.startMs, range.endMs);
+    const endMs = Math.max(range.startMs, range.endMs);
+
+    if (currentRange && currentRange.startMs === startMs && currentRange.endMs === endMs) {
+      return;
+    }
+
+    this.timeRangeFilterState.set({ startMs, endMs });
+    this.recomputeFilteredConversationIds();
+  }
+
   activateSimulationConversation(): void {
     const language = this.i18nStateService.selectedLanguage();
     const simulationConversationId = ChatConversationService.SIMULATION_CONVERSATION_ID;
@@ -294,6 +350,7 @@ export class ChatConversationService {
         );
 
         this.conversationState.set(normalizedConversations);
+        this.recomputeFilteredConversationIds();
 
         const currentActiveId = this.activeConversationIdState();
         const hasCurrentActiveConversation =
@@ -624,5 +681,72 @@ export class ChatConversationService {
 
   private isSimulationConversationId(conversationId: string): boolean {
     return conversationId === ChatConversationService.SIMULATION_CONVERSATION_ID;
+  }
+
+  private recomputeFilteredConversationIds(): void {
+    const range = this.timeRangeFilterState();
+    const currentFilteredIds = this.filteredConversationIdsState();
+
+    if (!range) {
+      if (currentFilteredIds !== null) {
+        this.filteredConversationIdsState.set(null);
+      }
+      return;
+    }
+
+    const summaries = this.conversationSummariesState();
+    const filteredIds = Object.values(summaries)
+      .filter((summary) => this.summaryOverlapsRange(summary, range))
+      .map((summary) => summary.id);
+
+    const nextFilteredIds = new Set(filteredIds);
+    if (this.areIdSetsEqual(currentFilteredIds, nextFilteredIds)) {
+      return;
+    }
+
+    this.filteredConversationIdsState.set(nextFilteredIds);
+  }
+
+  private summaryOverlapsRange(summary: BackendConversationSummary, range: TimeRangeFilter): boolean {
+    const start = this.toTimestampOrNull(summary.firstMessageDate);
+    const end = this.toTimestampOrNull(summary.lastMessageDate);
+
+    if (start === null && end === null) {
+      return true;
+    }
+
+    const safeStart = start ?? end!;
+    const safeEnd = Math.max(safeStart, end ?? safeStart);
+    return safeStart <= range.endMs && safeEnd >= range.startMs;
+  }
+
+  private toTimestampOrNull(rawDate: string | null | undefined): number | null {
+    if (!rawDate) {
+      return null;
+    }
+
+    const normalizedDate =
+      rawDate.includes(' ') && !rawDate.includes('T') ? rawDate.replace(' ', 'T') : rawDate;
+    const timestamp = new Date(normalizedDate).getTime();
+
+    return Number.isNaN(timestamp) ? null : timestamp;
+  }
+
+  private areIdSetsEqual(left: Set<string> | null, right: Set<string> | null): boolean {
+    if (left === right) {
+      return true;
+    }
+
+    if (!left || !right || left.size !== right.size) {
+      return false;
+    }
+
+    for (const id of left) {
+      if (!right.has(id)) {
+        return false;
+      }
+    }
+
+    return true;
   }
 }
