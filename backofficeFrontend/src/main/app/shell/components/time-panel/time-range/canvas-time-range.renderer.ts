@@ -1,7 +1,7 @@
-import { TimelineModelStore } from './timeline-model.store';
+import { TimelineModelStore } from '../timeline/timeline-model.store';
 import { TimeRangeModel } from './time-range.model';
 import type { TimeRangeRenderGeometry } from './time-range.types';
-import type { TimelineRect, TimelineRenderMetrics } from './timeline.types';
+import type { TimelineRect, TimelineRenderMetrics } from '../timeline/timeline.types';
 
 const HANDLE_HALF_WIDTH = 6;
 const HANDLE_HEIGHT = 8;

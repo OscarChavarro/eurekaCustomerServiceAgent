@@ -1,4 +1,4 @@
-import type { TimelineRect } from './timeline.types';
+import type { TimelineRect } from '../timeline/timeline.types';
 
 export type TimeRangeValue = {
   startTime: Date;

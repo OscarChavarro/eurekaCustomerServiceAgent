@@ -447,8 +447,18 @@ export class KwoledgeIngestionUseCase {
     lastMessageDate: string | null;
     lastMessageText: string | null;
   } {
-    const firstRawMessage = rawMessages[0];
-    const lastRawMessage = rawMessages[rawMessages.length - 1];
+    const conversationalMessages = rawMessages.filter(
+      (rawMessage) =>
+        rawMessage.direction === MessageDirection.Incoming ||
+        rawMessage.direction === MessageDirection.Outgoing
+    );
+    // Business reason: WhatsApp Business notifications and number-change events are auto-generated
+    // and are not part of the real conversation timeline. We only use them when no customer/agent
+    // messages exist in the conversation.
+    const timelineMessages = conversationalMessages.length > 0 ? conversationalMessages : rawMessages;
+
+    const firstRawMessage = timelineMessages[0];
+    const lastRawMessage = timelineMessages[timelineMessages.length - 1];
     const firstMessageDate = firstRawMessage?.sentAt?.toISOString() ?? null;
     const lastMessageDate = lastRawMessage?.sentAt?.toISOString() ?? null;
 

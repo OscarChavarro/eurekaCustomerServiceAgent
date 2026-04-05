@@ -1,6 +1,6 @@
-import { I18nService } from '../../../core/i18n/services/i18n.service';
-import { I18N_KEYS } from '../../../core/i18n/translations/i18n-keys.const';
-import type { SupportedLanguage } from '../../../core/i18n/types/supported-language.type';
+import { I18nService } from '../../../../core/i18n/services/i18n.service';
+import { I18N_KEYS } from '../../../../core/i18n/translations/i18n-keys.const';
+import type { SupportedLanguage } from '../../../../core/i18n/types/supported-language.type';
 import { TimelineModelStore } from './timeline-model.store';
 import type { TimelineRect, TimelineRenderMetrics } from './timeline.types';
 

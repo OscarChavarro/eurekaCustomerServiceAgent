@@ -1,6 +1,6 @@
 import {
   type BackendConversationSummary
-} from '../../../core/api/services/conversations-api.service';
+} from '../../../../core/api/services/conversations-api.service';
 import type { TimelineConversationSegment } from './timeline.types';
 
 type LoadProgressCallback = (loaded: number, total: number) => void;

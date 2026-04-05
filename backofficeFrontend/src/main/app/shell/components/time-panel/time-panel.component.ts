@@ -14,17 +14,20 @@ import { I18nService } from '../../../core/i18n/services/i18n.service';
 import { I18nStateService } from '../../../core/i18n/services/i18n-state.service';
 import { I18N_KEYS } from '../../../core/i18n/translations/i18n-keys.const';
 import { ChatConversationService } from '../../services/chat-conversation.service';
-import { CanvasTimeRangeRenderer } from './canvas-time-range.renderer';
-import { TimelineCanvasRenderer } from './timeline-canvas.renderer';
-import { TimelineConversationLoader } from './timeline-conversation.loader';
-import { TimelineKeyboardController } from './timeline-keyboard.controller';
-import { TimelineModelStore } from './timeline-model.store';
-import { TimelinePointerController } from './timeline-pointer.controller';
-import { TimeRangeController } from './time-range.controller';
-import { TimeRangeModel } from './time-range.model';
-import type { DragMode } from './timeline-pointer.controller';
-import type { TimeRangeRenderGeometry } from './time-range.types';
-import type { TimelineRenderMetrics } from './timeline.types';
+import { CanvasTimeCursorRenderer } from './time-cursor/canvas-time-cursor.renderer';
+import { TimeCursorController } from './time-cursor/time-cursor.controller';
+import { TimeCursorModel } from './time-cursor/time-cursor.model';
+import { CanvasTimeRangeRenderer } from './time-range/canvas-time-range.renderer';
+import { TimeRangeController } from './time-range/time-range.controller';
+import { TimeRangeModel } from './time-range/time-range.model';
+import type { TimeRangeRenderGeometry } from './time-range/time-range.types';
+import { TimelineCanvasRenderer } from './timeline/timeline-canvas.renderer';
+import { TimelineConversationLoader } from './timeline/timeline-conversation.loader';
+import { TimelineKeyboardController } from './timeline/timeline-keyboard.controller';
+import { TimelineModelStore } from './timeline/timeline-model.store';
+import { TimelinePointerController } from './timeline/timeline-pointer.controller';
+import type { DragMode } from './timeline/timeline-pointer.controller';
+import type { TimelineRenderMetrics } from './timeline/timeline.types';
 
 @Component({
   selector: 'app-time-panel',
@@ -42,12 +45,14 @@ export class TimePanelComponent implements AfterViewInit, OnDestroy {
   private resizeObserver?: ResizeObserver;
   private readonly model = new TimelineModelStore();
   private readonly timeRangeModel = new TimeRangeModel();
+  private readonly timeCursorModel = new TimeCursorModel();
   private readonly renderer = new TimelineCanvasRenderer(
     this.model,
     this.i18nService,
     () => this.i18nStateService.selectedLanguage()
   );
   private readonly timeRangeRenderer = new CanvasTimeRangeRenderer(this.model, this.timeRangeModel);
+  private readonly timeCursorRenderer = new CanvasTimeCursorRenderer(this.timeCursorModel);
   private readonly keyboardController = new TimelineKeyboardController(this.model, () => this.getMainAreaMetrics());
   private readonly pointerController = new TimelinePointerController(
     this.model,
@@ -55,9 +60,15 @@ export class TimePanelComponent implements AfterViewInit, OnDestroy {
     (rowIndex) => this.onConversationRowClick(rowIndex)
   );
   private readonly timeRangeController = new TimeRangeController(this.timeRangeModel, () => this.lastTimeRangeGeometry);
+  private readonly timeCursorController = new TimeCursorController(
+    this.timeCursorModel,
+    this.model,
+    () => this.lastRenderMetrics
+  );
   private readonly conversationLoader = new TimelineConversationLoader();
   private cleanupModelSubscription?: () => void;
   private cleanupTimeRangeSubscription?: () => void;
+  private cleanupTimeCursorSubscription?: () => void;
   private lastRenderMetrics: TimelineRenderMetrics | null = null;
   private lastTimeRangeGeometry: TimeRangeRenderGeometry | null = null;
   private loadingStatus = '';
@@ -90,6 +101,9 @@ export class TimePanelComponent implements AfterViewInit, OnDestroy {
     this.cleanupTimeRangeSubscription = this.timeRangeModel.subscribe(() => {
       this.draw();
     });
+    this.cleanupTimeCursorSubscription = this.timeCursorModel.subscribe(() => {
+      this.draw();
+    });
 
     this.resizeObserver = new ResizeObserver(() => {
       this.syncCanvasSize();
@@ -118,6 +132,7 @@ export class TimePanelComponent implements AfterViewInit, OnDestroy {
     this.resizeObserver?.disconnect();
     this.cleanupModelSubscription?.();
     this.cleanupTimeRangeSubscription?.();
+    this.cleanupTimeCursorSubscription?.();
 
     const canvas = this.timeCanvasRef?.nativeElement;
     const panelRoot = this.timePanelRootRef?.nativeElement;
@@ -182,6 +197,9 @@ export class TimePanelComponent implements AfterViewInit, OnDestroy {
     this.lastTimeRangeGeometry = this.lastRenderMetrics
       ? this.timeRangeRenderer.render(context, this.lastRenderMetrics)
       : null;
+    if (this.lastRenderMetrics) {
+      this.timeCursorRenderer.render(context, this.lastRenderMetrics);
+    }
 
     if (this.isLoading || this.hasLoadError) {
       context.fillStyle = 'rgba(255, 255, 255, 0.82)';
@@ -243,6 +261,7 @@ export class TimePanelComponent implements AfterViewInit, OnDestroy {
   };
 
   private readonly onMouseMove = (event: MouseEvent): void => {
+    this.timeCursorController.onMouseMove(event);
     this.applyCanvasCursor(event);
     if (this.timeRangeController.onMouseMove(event)) {
       this.syncSharedTimeRangeFilter();
@@ -258,6 +277,7 @@ export class TimePanelComponent implements AfterViewInit, OnDestroy {
   };
 
   private readonly onMouseLeave = (event: MouseEvent): void => {
+    this.timeCursorController.onMouseLeave();
     this.timeRangeController.onMouseUp();
     this.pointerController.onMouseUp(event);
     this.releasePointerLockIfAny();
