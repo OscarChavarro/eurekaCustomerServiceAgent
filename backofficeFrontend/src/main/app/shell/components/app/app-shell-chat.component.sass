@@ -53,6 +53,9 @@
   background: transparent
   color: #d1d7db
   text-align: left
+  display: flex
+  align-items: center
+  gap: 0.45rem
   padding: 0.45rem 0.55rem
   font-size: 0.82rem
   cursor: pointer
@@ -70,10 +73,25 @@
   color: #d1d7db
   cursor: pointer
   font-size: 1.1rem
+  display: inline-flex
+  align-items: center
+  justify-content: center
 
 .sidebar-button.is-active,
 .sidebar-button:hover
   background: #2a3942
+
+.flag-icon
+  width: 1.2rem
+  height: 0.9rem
+  border-radius: 0.1rem
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 18%)
+  object-fit: cover
+  flex-shrink: 0
+
+.language-flag
+  width: 1.5rem
+  height: 1.1rem
 
 .conversation-list
   display: grid
@@ -416,6 +434,9 @@
   text-decoration: none
 
 .phone-tooltip
+  display: inline-flex
+  align-items: center
+  gap: 0.45rem
   position: fixed
   z-index: 20
   pointer-events: none

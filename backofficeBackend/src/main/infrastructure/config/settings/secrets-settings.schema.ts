@@ -7,5 +7,9 @@ export const secretsSettingsSchema = z.object({
     database: z.string().trim().min(1),
     username: z.string().trim().min(1),
     password: z.string().trim().min(1)
+  }),
+  cors: z.object({
+    allowedOrigins: z.array(z.string().trim().min(1)).default([]),
+    allowedNetworkCidr: z.string().trim().min(1).optional()
   })
 });

@@ -10,6 +10,11 @@ export type MongoConfig = {
   password: string;
 };
 
+export type CorsConfig = {
+  allowedOrigins: string[];
+  allowedNetworkCidr?: string;
+};
+
 @Injectable()
 export class ServiceConfig {
   constructor(
@@ -38,6 +43,13 @@ export class ServiceConfig {
       database,
       username,
       password
+    };
+  }
+
+  public get corsConfig(): CorsConfig {
+    return {
+      allowedOrigins: this.secretsConfig.values.cors.allowedOrigins.map((origin) => origin.trim()),
+      allowedNetworkCidr: this.secretsConfig.values.cors.allowedNetworkCidr?.trim()
     };
   }
 

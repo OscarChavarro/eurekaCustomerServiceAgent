@@ -47,8 +47,8 @@ export class AppShellChatComponent {
   protected readonly viewMode = this.chatConversationService.viewMode;
   protected readonly selectedLanguage = this.i18nStateService.selectedLanguage;
   protected readonly availableLanguages: SupportedLanguage[] = ['es', 'en'];
-  protected readonly selectedLanguageFlag = computed(() =>
-    this.getLanguageFlag(this.selectedLanguage())
+  protected readonly selectedLanguageCountryCode = computed(() =>
+    this.languageToCountryCode(this.selectedLanguage())
   );
   protected readonly phoneTooltip = signal<PhoneTooltipState | null>(null);
   protected readonly hoveredMessageKey = this.hoveredMessageKeyState.asReadonly();
@@ -92,10 +92,10 @@ export class AppShellChatComponent {
 
   protected languageOptionLabel(language: SupportedLanguage): string {
     if (language === 'es') {
-      return `${this.t(I18N_KEYS.shell.LANGUAGE_ES)} ${this.getLanguageFlag(language)}`;
+      return this.t(I18N_KEYS.shell.LANGUAGE_ES);
     }
 
-    return `${this.t(I18N_KEYS.shell.LANGUAGE_EN)} ${this.getLanguageFlag(language)}`;
+    return this.t(I18N_KEYS.shell.LANGUAGE_EN);
   }
 
   protected viewModeLabel(viewMode: ConversationViewMode): string {
@@ -372,8 +372,14 @@ export class AppShellChatComponent {
     return this.i18nService.get(key, this.selectedLanguage());
   }
 
-  private getLanguageFlag(language: SupportedLanguage): string {
-    return language === 'es' ? '🇪🇸' : '🇺🇸';
+  protected flagIconUrl(countryCode: string | null | undefined): string {
+    const normalizedCountryCode = (countryCode ?? '').trim().toLowerCase();
+    const safeCountryCode = normalizedCountryCode || 'xx';
+    return `assets/flags/4x3/${safeCountryCode}.svg`;
+  }
+
+  private languageToCountryCode(language: SupportedLanguage): string {
+    return language === 'es' ? 'ES' : 'US';
   }
 
   private schedulePhoneLookup(event: MouseEvent, phone: string): void {
@@ -387,12 +393,13 @@ export class AppShellChatComponent {
       const cachedLookup = this.phoneLookupCache.get(phone);
 
       if (cachedLookup !== undefined) {
-        const cachedTooltipLabel = this.formatPhoneTooltipLabel(cachedLookup);
+        const cachedTooltip = this.formatPhoneTooltip(cachedLookup);
 
-        if (cachedTooltipLabel) {
+        if (cachedTooltip) {
           this.phoneTooltip.set({
             phone,
-            text: cachedTooltipLabel,
+            text: cachedTooltip.text,
+            countryCode: cachedTooltip.countryCode,
             x: event.clientX,
             y: event.clientY
           });
@@ -406,15 +413,16 @@ export class AppShellChatComponent {
         .subscribe({
           next: (response) => {
             this.phoneLookupCache.set(phone, response);
-            const tooltipLabel = this.formatPhoneTooltipLabel(response);
+            const tooltip = this.formatPhoneTooltip(response);
 
-            if (!tooltipLabel || this.activeHoveredPhone !== phone) {
+            if (!tooltip || this.activeHoveredPhone !== phone) {
               return;
             }
 
             this.phoneTooltip.set({
               phone,
-              text: tooltipLabel,
+              text: tooltip.text,
+              countryCode: tooltip.countryCode,
               x: event.clientX,
               y: event.clientY
             });
@@ -433,25 +441,28 @@ export class AppShellChatComponent {
     }
   }
 
-  private formatPhoneTooltipLabel(
+  private formatPhoneTooltip(
     lookup: PhonePrefixLookupResponse | null
-  ): string | null {
+  ): { countryCode: string | null; text: string } | null {
     if (!lookup) {
       return null;
     }
 
-    const countryLabel = this.phoneCountryI18nService.getCountryLabel(
+    const countryName = this.phoneCountryI18nService.getCountryName(
       lookup.countryCode,
       this.selectedLanguage()
     );
 
-    if (!countryLabel) {
+    if (!countryName) {
       return null;
     }
 
-    return lookup.subzoneName
-      ? `${countryLabel} / ${lookup.subzoneName}`
-      : countryLabel;
+    return {
+      countryCode: lookup.countryCode,
+      text: lookup.subzoneName
+        ? `${countryName} / ${lookup.subzoneName}`
+        : countryName
+    };
   }
 }
 
@@ -463,6 +474,7 @@ type TextSegment =
 type PhoneTooltipState = {
   phone: string;
   text: string;
+  countryCode: string | null;
   x: number;
   y: number;
 };

@@ -18,4 +18,13 @@ export class PhoneCountryI18nService {
 
     return translation[language];
   }
+
+  public getCountryName(countryCode: string | null, language: SupportedLanguage): string | null {
+    const label = this.getCountryLabel(countryCode, language);
+    if (!label) {
+      return null;
+    }
+
+    return label.replace(/^[\u{1F1E6}-\u{1F1FF}]{2}\s*/u, '');
+  }
 }
