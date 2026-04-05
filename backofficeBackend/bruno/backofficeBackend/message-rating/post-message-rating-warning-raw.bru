@@ -1,0 +1,28 @@
+meta {
+  name: Rate Message Warning Raw
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/message-rating
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "conversationId": "10396 Paula Gil😜",
+    "stage": "raw",
+    "stageId": "10396 Paula Gil😜-1",
+    "rating": "warning"
+  }
+}
+
+vars:pre-request {
+  baseUrl: http://localhost:3667
+}

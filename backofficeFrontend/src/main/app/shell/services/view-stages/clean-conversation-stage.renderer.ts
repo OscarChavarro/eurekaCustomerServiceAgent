@@ -33,6 +33,8 @@ export class CleanConversationStageRenderer implements ConversationStageRenderer
         directionRaw: messageDirection,
         text: messageText,
         stageLabel: 'clean',
+        reviewStage: 'clean',
+        reviewStageId: rawMessage.externalId,
         rawText: hasDifferentCleanText ? rawMessage.text : undefined,
         showRawStrikethrough: hasDifferentCleanText
       });

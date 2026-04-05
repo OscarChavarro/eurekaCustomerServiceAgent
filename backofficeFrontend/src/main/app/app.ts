@@ -6,6 +6,6 @@ import { AppShellChatComponent } from './shell/components/app/app-shell-chat.com
   selector: 'app-root',
   imports: [AppShellChatComponent],
   templateUrl: './app.html',
-  styleUrl: './app.css',
+  styleUrl: './app.sass',
 })
 export class App {}

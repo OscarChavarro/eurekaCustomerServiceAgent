@@ -7,7 +7,7 @@ import {
   formatSentAt,
   mapDirectionFromAgentPerspective
 } from './conversation-stage-renderer.utils';
-import type { ChatMessage } from './conversation-view.types';
+import type { ChatMessage, MessageReviewStage } from './conversation-view.types';
 
 type CreateFromRawOverrides = {
   directionRaw?: string;
@@ -16,6 +16,8 @@ type CreateFromRawOverrides = {
   backgroundColor?: string;
   rawText?: string;
   showRawStrikethrough?: boolean;
+  reviewStage?: MessageReviewStage;
+  reviewStageId?: string;
 };
 
 type CreateSystemParams = {
@@ -24,6 +26,8 @@ type CreateSystemParams = {
   sentAt: string;
   stageLabel?: string;
   backgroundColor?: string;
+  reviewStage?: MessageReviewStage;
+  reviewStageId?: string;
 };
 
 @Injectable({ providedIn: 'root' })
@@ -44,7 +48,9 @@ export class MessageBubbleFactory {
       stageLabel: overrides.stageLabel,
       backgroundColor: overrides.backgroundColor,
       rawText: overrides.rawText,
-      showRawStrikethrough: overrides.showRawStrikethrough
+      showRawStrikethrough: overrides.showRawStrikethrough,
+      reviewStage: overrides.reviewStage,
+      reviewStageId: overrides.reviewStageId
     };
   }
 
@@ -55,7 +61,9 @@ export class MessageBubbleFactory {
       text: params.text,
       sentAt: params.sentAt,
       stageLabel: params.stageLabel,
-      backgroundColor: params.backgroundColor
+      backgroundColor: params.backgroundColor,
+      reviewStage: params.reviewStage,
+      reviewStageId: params.reviewStageId
     };
   }
 }

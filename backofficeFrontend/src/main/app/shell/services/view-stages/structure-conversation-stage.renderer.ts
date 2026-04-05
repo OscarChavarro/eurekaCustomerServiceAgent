@@ -31,6 +31,7 @@ export class StructureConversationStageRenderer implements ConversationStageRend
   render(document: BackendConversationDocument): ChatMessage[] {
     const cleanByExternalId = this.buildCleanByExternalId(document.cleanedMessages ?? []);
     const messageIdToGroupColors = this.buildMessageIdToGroupColors(document);
+    const messageIdToTurnId = this.buildMessageIdToTurnId(document);
 
     return (document.rawMessages ?? []).map((rawMessage) => {
       const cleanMessage = cleanByExternalId.get(rawMessage.externalId);
@@ -42,6 +43,8 @@ export class StructureConversationStageRenderer implements ConversationStageRend
         directionRaw: directionSource,
         text: cleanMessage?.text ?? rawMessage.text,
         stageLabel: 'structure',
+        reviewStage: 'structure',
+        reviewStageId: messageIdToTurnId.get(rawMessage.externalId) ?? rawMessage.externalId,
         backgroundColor: this.resolveBackgroundColor(direction, groupColors)
       });
     });
@@ -71,6 +74,18 @@ export class StructureConversationStageRenderer implements ConversationStageRend
     });
 
     return messageIdToGroupColors;
+  }
+
+  private buildMessageIdToTurnId(document: BackendConversationDocument): Map<string, string> {
+    const messageIdToTurnId = new Map<string, string>();
+
+    (document.structuredMessages ?? []).forEach((structuredMessage) => {
+      structuredMessage.messageIds.forEach((messageId) => {
+        messageIdToTurnId.set(messageId, structuredMessage.turnId);
+      });
+    });
+
+    return messageIdToTurnId;
   }
 
   private resolveBackgroundColor(

@@ -12,7 +12,11 @@ export class RawConversationStageRenderer implements ConversationStageRenderer {
 
   render(document: BackendConversationDocument): ChatMessage[] {
     return (document.rawMessages ?? []).map((rawMessage) =>
-      this.messageBubbleFactory.createFromRaw(rawMessage, { stageLabel: 'raw' })
+      this.messageBubbleFactory.createFromRaw(rawMessage, {
+        stageLabel: 'raw',
+        reviewStage: 'raw',
+        reviewStageId: rawMessage.externalId
+      })
     );
   }
 }

@@ -26,6 +26,7 @@ export class MongoConnectivityStartupValidator implements StartupValidator {
       const database = mongoClient.db(this.serviceConfig.mongoConfig.database);
       await database.command({ ping: 1 });
       await this.ensureConversationsIndexes(database);
+      await this.ensureRevisionsIndexes(database);
     } catch (error) {
       throw new Error(
         `Cannot connect to MongoDB, waiting for pod to become available. ${String(error)}`
@@ -49,5 +50,17 @@ export class MongoConnectivityStartupValidator implements StartupValidator {
   private async ensureConversationsIndexes(database: Db): Promise<void> {
     const conversationsCollection = database.collection('conversations');
     await conversationsCollection.createIndex({ _id: 1 }, { name: 'idx_conversations_id' });
+  }
+
+  private async ensureRevisionsIndexes(database: Db): Promise<void> {
+    const revisionsCollection = database.collection('revisions');
+    await revisionsCollection.createIndex(
+      { conversationId: 1, stage: 1, stageId: 1 },
+      { name: 'idx_revisions_conversation_stage_stageId', unique: true }
+    );
+    await revisionsCollection.createIndex(
+      { conversationId: 1, ratedAt: -1 },
+      { name: 'idx_revisions_conversation_ratedAt' }
+    );
   }
 }

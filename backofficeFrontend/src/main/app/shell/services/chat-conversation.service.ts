@@ -3,6 +3,9 @@ import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import {
   BackendConversationSummary,
   BackendConversationDocument,
+  MessageRatingValue,
+  RevisionStage,
+  MessageRatingsResponse,
   ConversationsApiService
 } from '../../core/api/services/conversations-api.service';
 import { I18nStateService } from '../../core/i18n/services/i18n-state.service';
@@ -38,8 +41,12 @@ export class ChatConversationService {
   private readonly embedConversationStageRenderer = inject(EmbedConversationStageRenderer);
 
   private readonly loadedMessagesConversationIds = new Set<string>();
+  private readonly loadedRatingsConversationIds = new Set<string>();
   private readonly conversationDocumentsState = signal<Record<string, BackendConversationDocument>>({});
   private readonly conversationSummariesState = signal<Record<string, BackendConversationSummary>>({});
+  private readonly conversationRatingsState = signal<
+    Record<string, MessageRatingsResponse['ratings']>
+  >({});
   private readonly viewModeState = signal<ConversationViewMode>('raw');
 
   private readonly stageRenderers: Record<ConversationViewMode, ConversationStageRenderer> = {
@@ -90,7 +97,39 @@ export class ChatConversationService {
 
   readonly conversations = this.conversationState.asReadonly();
   readonly activeConversationId = this.activeConversationIdState.asReadonly();
+  readonly conversationRatings = this.conversationRatingsState.asReadonly();
   readonly viewMode = this.viewModeState.asReadonly();
+
+  applyConversationRating(
+    conversationId: string,
+    stage: RevisionStage,
+    stageId: string,
+    rating: MessageRatingValue
+  ): void {
+    this.conversationRatingsState.update((current) => {
+      const currentRatings = current[conversationId] ?? {
+        raw: {},
+        clean: {},
+        structure: {},
+        chunk: {}
+      };
+      const nextStageRatings = { ...currentRatings[stage] };
+
+      if (rating === 'cleared') {
+        delete nextStageRatings[stageId];
+      } else {
+        nextStageRatings[stageId] = rating;
+      }
+
+      return {
+        ...current,
+        [conversationId]: {
+          ...currentRatings,
+          [stage]: nextStageRatings
+        }
+      };
+    });
+  }
 
   readonly activeConversation = computed(() => {
     const activeId = this.activeConversationIdState();
@@ -197,9 +236,32 @@ export class ChatConversationService {
 
         this.loadedMessagesConversationIds.add(conversationId);
         this.applyConversationDocumentToState(conversationId, conversationDocument);
+        this.loadConversationRatings(conversationId);
       },
       error: (error: unknown) => {
         console.error(`Unable to load messages from backend /messages for id=${conversationId}`, error);
+      }
+    });
+  }
+
+  private loadConversationRatings(conversationId: string): void {
+    if (this.loadedRatingsConversationIds.has(conversationId)) {
+      return;
+    }
+
+    this.conversationsApiService.getMessageRatings(conversationId).subscribe({
+      next: (ratingsResponse) => {
+        this.loadedRatingsConversationIds.add(conversationId);
+        this.conversationRatingsState.update((current) => ({
+          ...current,
+          [conversationId]: ratingsResponse.ratings
+        }));
+      },
+      error: (error: unknown) => {
+        console.error(
+          `Unable to load message ratings from backend /message-ratings for id=${conversationId}`,
+          error
+        );
       }
     });
   }

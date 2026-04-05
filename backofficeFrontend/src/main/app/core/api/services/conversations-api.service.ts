@@ -55,6 +55,35 @@ export type PhonePrefixLookupResponse = {
   subzoneName: string | null;
 };
 
+export type RevisionStage = 'raw' | 'clean' | 'structure' | 'chunk';
+export type MessageRatingValue = 'warning' | 'good' | 'bad' | 'cleared';
+
+export type RateMessageRatingRequest = {
+  conversationId: string;
+  stage: RevisionStage;
+  stageId: string;
+  rating: MessageRatingValue;
+};
+
+export type RateMessageRatingResponse = {
+  ok: true;
+  conversationId: string;
+  stage: RevisionStage;
+  stageId: string;
+  rating: MessageRatingValue;
+  ratedAt: string;
+};
+
+export type MessageRatingsResponse = {
+  conversationId: string;
+  ratings: {
+    raw: Record<string, 'warning'>;
+    clean: Record<string, 'good' | 'bad'>;
+    structure: Record<string, 'good' | 'bad'>;
+    chunk: Record<string, 'good' | 'bad'>;
+  };
+};
+
 @Injectable({ providedIn: 'root' })
 export class ConversationsApiService {
   private readonly httpClient = inject(HttpClient);
@@ -80,6 +109,24 @@ export class ConversationsApiService {
 
     return this.httpClient.get<PhonePrefixLookupResponse>(
       `${this.frontendSecretsService.backendBaseUrl}/phone-prefix`,
+      { params }
+    );
+  }
+
+  public rateMessage(
+    request: RateMessageRatingRequest
+  ): Observable<RateMessageRatingResponse> {
+    return this.httpClient.post<RateMessageRatingResponse>(
+      `${this.frontendSecretsService.backendBaseUrl}/message-rating`,
+      request
+    );
+  }
+
+  public getMessageRatings(conversationId: string): Observable<MessageRatingsResponse> {
+    const params = new HttpParams().set('conversationId', conversationId);
+
+    return this.httpClient.get<MessageRatingsResponse>(
+      `${this.frontendSecretsService.backendBaseUrl}/message-ratings`,
       { params }
     );
   }

@@ -148,6 +148,7 @@
             [class.incoming]="message.direction === 'incoming'"
             [class.outgoing]="message.direction === 'outgoing'"
             [class.system]="message.direction === 'system'"
+            [class.has-rating]="!!selectedReaction(currentConversation.id, message)"
             [class.group-start]="isGroupStart(currentConversation.messages, $index)"
             [class.group-end]="isGroupEnd(currentConversation.messages, $index)"
             [class.group-middle]="
@@ -155,7 +156,62 @@
               !isGroupEnd(currentConversation.messages, $index)
             "
             [style.--bubble-bg]="message.backgroundColor || null"
+            (mouseenter)="onMessageMouseEnter(currentConversation.id, message.id)"
+            (mouseleave)="onMessageMouseLeave(currentConversation.id, message.id)"
           >
+            @if (shouldShowReactionControls(currentConversation.id, message)) {
+              <div class="message-hover-tools">
+                <button type="button" class="message-hover-icon left" aria-label="Reactions">
+                  🙂
+                </button>
+                <div class="reaction-menu-wrapper">
+                  <button
+                    type="button"
+                    class="message-hover-icon right"
+                    aria-label="Open reactions menu"
+                    (click)="toggleReactionMenu($event, currentConversation.id, message.id)"
+                  >
+                    <span class="material-symbols-outlined">expand_more</span>
+                  </button>
+                  @if (openReactionMenuKey() === messageKey(currentConversation.id, message.id)) {
+                    <div class="reaction-menu">
+                      @if (canRateAsWarning(message)) {
+                        <button
+                          type="button"
+                          class="reaction-item is-warning"
+                          (click)="selectMessageReaction($event, currentConversation.id, message, 'warning')"
+                        >
+                          ⚠️
+                        </button>
+                      }
+                      @if (canRateAsGoodOrBad(message)) {
+                        <button
+                          type="button"
+                          class="reaction-item is-positive"
+                          (click)="selectMessageReaction($event, currentConversation.id, message, 'good')"
+                        >
+                          ✅
+                        </button>
+                        <button
+                          type="button"
+                          class="reaction-item is-negative"
+                          (click)="selectMessageReaction($event, currentConversation.id, message, 'bad')"
+                        >
+                          ❌
+                        </button>
+                      }
+                      <button
+                        type="button"
+                        class="reaction-item is-clear"
+                        (click)="selectMessageReaction($event, currentConversation.id, message, 'cleared')"
+                      >
+                        ✖
+                      </button>
+                    </div>
+                  }
+                </div>
+              </div>
+            }
             @if (message.showRawStrikethrough) {
               <p class="message-text-raw">
                 @for (segment of getTextSegments(message.rawText); track trackByTextSegment($index)) {
@@ -235,6 +291,9 @@
               </p>
             }
             <footer>
+              @if (selectedReaction(currentConversation.id, message); as reaction) {
+                <span class="message-reaction">{{ reaction }}</span>
+              }
               <time>{{ message.sentAt }}</time>
               @if (message.stageLabel) {
                 <span class="message-stage">{{ stageLabel(message.stageLabel) }}</span>

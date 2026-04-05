@@ -15,6 +15,11 @@ export class MongoClientProvider implements OnApplicationShutdown {
     return database.collection<TDocument>('conversations');
   }
 
+  public async getRevisionsCollection<TDocument extends object>(): Promise<Collection<TDocument>> {
+    const database = await this.getDatabase();
+    return database.collection<TDocument>('revisions');
+  }
+
   public async ping(): Promise<void> {
     const database = await this.getDatabase();
     await database.command({ ping: 1 });

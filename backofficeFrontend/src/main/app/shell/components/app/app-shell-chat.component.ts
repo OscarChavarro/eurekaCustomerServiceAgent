@@ -4,6 +4,7 @@ import { take } from 'rxjs/operators';
 
 import {
   ConversationsApiService,
+  type MessageRatingValue,
   type PhonePrefixLookupResponse
 } from '../../../core/api/services/conversations-api.service';
 import { I18nService } from '../../../core/i18n/services/i18n.service';
@@ -22,7 +23,7 @@ import {
   selector: 'app-shell-chat',
   imports: [CommonModule],
   templateUrl: './app-shell-chat.component.html',
-  styleUrl: './app-shell-chat.component.css',
+  styleUrl: './app-shell-chat.component.sass',
 })
 export class AppShellChatComponent {
   private readonly chatConversationService = inject(ChatConversationService);
@@ -36,10 +37,13 @@ export class AppShellChatComponent {
   private readonly phoneLookupCache = new Map<string, PhonePrefixLookupResponse | null>();
   private hoverIntentTimeoutId: ReturnType<typeof setTimeout> | null = null;
   private activeHoveredPhone: string | null = null;
+  private readonly hoveredMessageKeyState = signal<string | null>(null);
+  private readonly openReactionMenuKeyState = signal<string | null>(null);
 
   protected readonly conversations = this.chatConversationService.conversations;
   protected readonly activeConversation = this.chatConversationService.activeConversation;
   protected readonly activeConversationId = this.chatConversationService.activeConversationId;
+  protected readonly conversationRatings = this.chatConversationService.conversationRatings;
   protected readonly viewMode = this.chatConversationService.viewMode;
   protected readonly selectedLanguage = this.i18nStateService.selectedLanguage;
   protected readonly availableLanguages: SupportedLanguage[] = ['es', 'en'];
@@ -47,6 +51,8 @@ export class AppShellChatComponent {
     this.getLanguageFlag(this.selectedLanguage())
   );
   protected readonly phoneTooltip = signal<PhoneTooltipState | null>(null);
+  protected readonly hoveredMessageKey = this.hoveredMessageKeyState.asReadonly();
+  protected readonly openReactionMenuKey = this.openReactionMenuKeyState.asReadonly();
   protected readonly languageDropdownOpen = this.languageDropdownOpenState.asReadonly();
   protected readonly availableViewModes: ConversationViewMode[] = [
     'raw',
@@ -223,6 +229,112 @@ export class AppShellChatComponent {
 
   protected trackByTextSegment(index: number): number {
     return index;
+  }
+
+  protected messageKey(conversationId: string, messageId: string): string {
+    return `${conversationId}|${messageId}`;
+  }
+
+  protected onMessageMouseEnter(conversationId: string, messageId: string): void {
+    this.hoveredMessageKeyState.set(this.messageKey(conversationId, messageId));
+  }
+
+  protected onMessageMouseLeave(conversationId: string, messageId: string): void {
+    const key = this.messageKey(conversationId, messageId);
+
+    if (this.hoveredMessageKeyState() === key) {
+      this.hoveredMessageKeyState.set(null);
+    }
+
+    if (this.openReactionMenuKeyState() === key) {
+      this.openReactionMenuKeyState.set(null);
+    }
+  }
+
+  protected shouldShowReactionControls(
+    conversationId: string,
+    message: ChatMessage
+  ): boolean {
+    if (!message.reviewStage || !message.reviewStageId) {
+      return false;
+    }
+
+    const key = this.messageKey(conversationId, message.id);
+    return this.hoveredMessageKey() === key || this.openReactionMenuKey() === key;
+  }
+
+  protected toggleReactionMenu(
+    event: MouseEvent,
+    conversationId: string,
+    messageId: string
+  ): void {
+    event.stopPropagation();
+
+    const key = this.messageKey(conversationId, messageId);
+    this.openReactionMenuKeyState.update((current) => (current === key ? null : key));
+  }
+
+  protected selectMessageReaction(
+    event: MouseEvent,
+    conversationId: string,
+    message: ChatMessage,
+    rating: MessageRatingValue
+  ): void {
+    event.stopPropagation();
+    const stage = message.reviewStage;
+    const stageId = message.reviewStageId;
+
+    if (!stage || !stageId) {
+      return;
+    }
+
+    this.conversationsApiService
+      .rateMessage({ conversationId, stage, stageId, rating })
+      .pipe(take(1))
+      .subscribe({
+        next: () => {
+          this.chatConversationService.applyConversationRating(conversationId, stage, stageId, rating);
+          this.openReactionMenuKeyState.set(null);
+        },
+        error: (error) => {
+          console.error('Unable to rate message', error);
+        }
+      });
+  }
+
+  protected selectedReaction(conversationId: string, message: ChatMessage): string | null {
+    if (!message.reviewStage || !message.reviewStageId) {
+      return null;
+    }
+
+    const rating =
+      this.conversationRatings()[conversationId]?.[message.reviewStage]?.[message.reviewStageId];
+
+    if (rating === 'warning') {
+      return '⚠️';
+    }
+
+    if (rating === 'good') {
+      return '✅';
+    }
+
+    if (rating === 'bad') {
+      return '❌';
+    }
+
+    return null;
+  }
+
+  protected canRateAsWarning(message: ChatMessage): boolean {
+    return message.reviewStage === 'raw';
+  }
+
+  protected canRateAsGoodOrBad(message: ChatMessage): boolean {
+    return (
+      message.reviewStage === 'clean' ||
+      message.reviewStage === 'structure' ||
+      message.reviewStage === 'chunk'
+    );
   }
 
   protected onPhoneMouseEnter(event: MouseEvent, phone: string): void {

@@ -1,0 +1,28 @@
+meta {
+  name: Rate Message Bad
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/message-rating
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "conversationId": "10396 Paula Gil😜",
+    "stage": "structure",
+    "stageId": "10396 Paula Gil😜|WhatsApp - 10396 Paula Gil_.csv-turn-2",
+    "rating": "bad"
+  }
+}
+
+vars:pre-request {
+  baseUrl: http://localhost:3667
+}

@@ -27,7 +27,9 @@ export class ChunkConversationStageRenderer implements ConversationStageRenderer
         id: chunkMessage.chunkId,
         text: chunkMessage.chunkMessage,
         sentAt,
-        stageLabel: 'chunk'
+        stageLabel: 'chunk',
+        reviewStage: 'chunk',
+        reviewStageId: chunkMessage.chunkId
       });
     });
   }
