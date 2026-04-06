@@ -11,7 +11,15 @@ export type LlmConfig = {
   host: string;
   port: number;
   endpoint: string;
-  contextMessage: string;
+};
+
+export type ContextGeneratorImplementation = 'naive' | 'vector-search';
+
+export type ContextGeneratorConfig = {
+  implementation: ContextGeneratorImplementation;
+  naive: {
+    contextMessage: string;
+  };
 };
 
 @Injectable()
@@ -38,14 +46,20 @@ export class ServiceConfig {
     const endpoint = this.normalizeEndpoint(
       process.env.LLM_ENDPOINT?.trim() || this.secretsConfig.values.llm.endpoint
     );
-    const contextMessage =
-      process.env.LLM_CONTEXT_MESSAGE?.trim() || this.secretsConfig.values.llm.contextMessage;
 
     return {
       host,
       port,
-      endpoint,
-      contextMessage
+      endpoint
+    };
+  }
+
+  public get contextGeneratorConfig(): ContextGeneratorConfig {
+    return {
+      implementation: this.secretsConfig.values.contextGenerator.implementation,
+      naive: {
+        contextMessage: this.secretsConfig.values.contextGenerator.naive.contextMessage
+      }
     };
   }
 

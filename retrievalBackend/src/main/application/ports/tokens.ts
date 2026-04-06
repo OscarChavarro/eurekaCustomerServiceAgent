@@ -1,3 +1,4 @@
 export const TOKENS = {
-  LlmChatCompletionsPort: Symbol('LlmChatCompletionsPort')
+  LlmChatCompletionsPort: Symbol('LlmChatCompletionsPort'),
+  ContextGenerator: Symbol('ContextGenerator')
 } as const;

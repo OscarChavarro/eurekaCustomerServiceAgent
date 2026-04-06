@@ -8,7 +8,12 @@ export const secretsSettingsSchema = z.object({
   llm: z.object({
     host: z.string().trim().min(1),
     port: z.number().int().positive(),
-    endpoint: z.string().trim().min(1),
-    contextMessage: z.string().trim().min(1)
+    endpoint: z.string().trim().min(1)
+  }),
+  contextGenerator: z.object({
+    implementation: z.enum(['naive', 'vector-search']),
+    naive: z.object({
+      contextMessage: z.string().trim().min(1)
+    })
   })
 });
