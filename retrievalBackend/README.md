@@ -38,5 +38,25 @@ Ejemplo:
 
 Comportamiento actual:
 
-- `naive`: retorna el texto configurado en `contextGenerator.naive.contextMessage`.
-- `vector-search`: placeholder actual que retorna `TODO: Implement this!`.
+- `naive`: retorna el texto configurado en `contextGenerator.naive.contextMessage` e imprime el contexto generado en consola.
+- `vector-search`:
+  1. toma el ultimo prompt del usuario;
+  2. llama a BGE (`embedding`) para convertir prompt a vector;
+  3. consulta Qdrant (`qdrant`) para recuperar chunks similares;
+  4. arma un contexto de sistema en espanol con evidencia recuperada;
+  5. imprime el contexto generado en consola.
+
+## Configuracion para `vector-search`
+
+`secrets.json` incluye:
+
+- `embedding.provider|host|port` (servicio BGE)
+- `qdrant.url|apiKey|collectionName`
+- `contextGenerator.vectorSearch.maxMatches`
+
+## Startup Validation
+
+En el arranque se ejecuta validacion de conectividad con BGE:
+
+- si `contextGenerator.implementation` es `vector-search`, valida llamada real a `/embed`.
+- si esta en `naive`, la validacion BGE se omite de forma explicita.

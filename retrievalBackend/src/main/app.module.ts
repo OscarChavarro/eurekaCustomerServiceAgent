@@ -7,6 +7,8 @@ import { TOKENS } from './application/ports/tokens';
 import { StreamChatCompletionsUseCase } from './application/use-cases/chat-completions/stream-chat-completions.use-case';
 import { GenerateContextUseCase } from './application/use-cases/context-generation/generate-context.use-case';
 import type { ContextGenerator } from './application/ports/outbound/context/context-generator.port';
+import { StartupValidationOrchestrator } from './infrastructure/bootstrap/startup-validation.orchestrator';
+import { BgeConnectivityStartupValidator } from './infrastructure/bootstrap/validators/bge-connectivity-startup.validator';
 import { ServiceConfig } from './infrastructure/config/service.config';
 import { SecretsConfig } from './infrastructure/config/settings/secrets.config';
 import { SettingsConfig } from './infrastructure/config/settings/settings.config';
@@ -17,6 +19,8 @@ import { SettingsConfig } from './infrastructure/config/settings/settings.config
     SettingsConfig,
     SecretsConfig,
     ServiceConfig,
+    BgeConnectivityStartupValidator,
+    StartupValidationOrchestrator,
     NaiveContextGenerator,
     VectorSearchContextGenerator,
     GenerateContextUseCase,

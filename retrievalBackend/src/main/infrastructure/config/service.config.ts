@@ -13,12 +13,27 @@ export type LlmConfig = {
   endpoint: string;
 };
 
+export type EmbeddingConfig = {
+  provider: string;
+  host: string;
+  port: number;
+};
+
+export type QdrantConfig = {
+  url: string;
+  apiKey?: string;
+  collectionName: string;
+};
+
 export type ContextGeneratorImplementation = 'naive' | 'vector-search';
 
 export type ContextGeneratorConfig = {
   implementation: ContextGeneratorImplementation;
   naive: {
     contextMessage: string;
+  };
+  vectorSearch: {
+    maxMatches: number;
   };
 };
 
@@ -54,11 +69,30 @@ export class ServiceConfig {
     };
   }
 
+  public get embeddingConfig(): EmbeddingConfig {
+    return {
+      provider: this.secretsConfig.values.embedding.provider,
+      host: this.secretsConfig.values.embedding.host,
+      port: this.secretsConfig.values.embedding.port
+    };
+  }
+
+  public get qdrantConfig(): QdrantConfig {
+    return {
+      url: this.normalizeUrl(this.secretsConfig.values.qdrant.url),
+      apiKey: this.secretsConfig.values.qdrant.apiKey ?? undefined,
+      collectionName: this.secretsConfig.values.qdrant.collectionName
+    };
+  }
+
   public get contextGeneratorConfig(): ContextGeneratorConfig {
     return {
       implementation: this.secretsConfig.values.contextGenerator.implementation,
       naive: {
         contextMessage: this.secretsConfig.values.contextGenerator.naive.contextMessage
+      },
+      vectorSearch: {
+        maxMatches: this.secretsConfig.values.contextGenerator.vectorSearch.maxMatches
       }
     };
   }
@@ -81,5 +115,10 @@ export class ServiceConfig {
 
   private normalizeEndpoint(endpoint: string): string {
     return endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  }
+
+  private normalizeUrl(url: string): string {
+    const parsed = new URL(url);
+    return parsed.toString().replace(/\/$/, '');
   }
 }

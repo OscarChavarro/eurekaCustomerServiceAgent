@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import type {
   ContextGenerator,
   ContextGeneratorMessage
@@ -7,10 +7,14 @@ import { ServiceConfig } from '../../../infrastructure/config/service.config';
 
 @Injectable()
 export class NaiveContextGenerator implements ContextGenerator {
+  private readonly logger = new Logger(NaiveContextGenerator.name);
+
   constructor(private readonly serviceConfig: ServiceConfig) {}
 
   public async generateContext(messages: ContextGeneratorMessage[]): Promise<string> {
     void messages;
-    return this.serviceConfig.contextGeneratorConfig.naive.contextMessage;
+    const context = this.serviceConfig.contextGeneratorConfig.naive.contextMessage;
+    this.logger.log(`Generated context (naive):\n${context}`);
+    return context;
   }
 }
