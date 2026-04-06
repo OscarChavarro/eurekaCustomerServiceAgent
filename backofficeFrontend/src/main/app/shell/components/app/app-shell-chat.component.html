@@ -60,6 +60,17 @@
         <span class="material-symbols-outlined" aria-hidden="true">calendar_month</span>
       </button>
     </div>
+
+    <div class="sidebar-bottom-actions">
+      <button
+        type="button"
+        class="sidebar-action-button"
+        [attr.aria-label]="fullScreenAriaLabel()"
+        (click)="onFullScreenButtonClick()"
+      >
+        <span class="material-symbols-outlined" aria-hidden="true">fullscreen</span>
+      </button>
+    </div>
   </aside>
 
   <section class="workspace-panel">

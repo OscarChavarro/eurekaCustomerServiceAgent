@@ -103,20 +103,22 @@ export class TimelineCanvasRenderer {
 
   private drawSegments(context: CanvasRenderingContext2D, mainRect: TimelineRect): void {
     const state = this.model.getState();
+    const totalRows = state.segments.length;
     const activeTimeRange = this.getActiveTimeRange();
     const hoveredConversationId = this.getHoveredConversationId();
     const firstVisibleRow = Math.floor(state.scrollY / state.rowHeightPx);
     const visibleRows = Math.ceil(mainRect.height / state.rowHeightPx) + 2;
-    const rowStart = Math.max(0, firstVisibleRow);
-    const rowEnd = Math.min(state.segments.length - 1, firstVisibleRow + visibleRows);
+    const visualRowStart = Math.max(0, firstVisibleRow);
+    const visualRowEnd = Math.min(totalRows - 1, firstVisibleRow + visibleRows);
 
-    for (let rowIndex = rowStart; rowIndex <= rowEnd; rowIndex += 1) {
-      const segment = state.segments[rowIndex];
+    for (let visualRowIndex = visualRowStart; visualRowIndex <= visualRowEnd; visualRowIndex += 1) {
+      const logicalRowIndex = totalRows - 1 - visualRowIndex;
+      const segment = state.segments[logicalRowIndex];
       if (!segment) {
         continue;
       }
 
-      const y = mainRect.y + rowIndex * state.rowHeightPx - state.scrollY;
+      const y = mainRect.y + visualRowIndex * state.rowHeightPx - state.scrollY;
       const xStart = mainRect.x + ((segment.startMs - state.timeOffsetMs) / 1_000) * state.pixelsPerSecond;
       const xEnd = mainRect.x + ((segment.endMs - state.timeOffsetMs) / 1_000) * state.pixelsPerSecond;
       const clippedStart = Math.max(mainRect.x, xStart);

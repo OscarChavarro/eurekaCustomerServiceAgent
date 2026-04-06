@@ -31,8 +31,9 @@ export class TimeCursorController {
 
     let conversationName: string | null = null;
     if (this.isInsideRect(metrics.mainRect, x, y)) {
-      const rowIndex = Math.floor((timelineState.scrollY + y - metrics.mainRect.y) / timelineState.rowHeightPx);
-      const segment = timelineState.segments[rowIndex];
+      const visualRowIndex = Math.floor((timelineState.scrollY + y - metrics.mainRect.y) / timelineState.rowHeightPx);
+      const logicalRowIndex = timelineState.segments.length - 1 - visualRowIndex;
+      const segment = timelineState.segments[logicalRowIndex];
       conversationName = segment?.id ?? null;
     }
 

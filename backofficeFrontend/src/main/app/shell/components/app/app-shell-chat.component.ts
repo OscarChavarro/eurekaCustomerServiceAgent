@@ -173,6 +173,10 @@ export class AppShellChatComponent implements OnDestroy {
     return this.t(I18N_KEYS.shell.MODE_SWITCH_ARIA);
   }
 
+  protected fullScreenAriaLabel(): string {
+    return this.t(I18N_KEYS.shell.FULL_SCREEN_ARIA);
+  }
+
   protected chatModeAriaLabel(): string {
     return this.t(I18N_KEYS.shell.MODE_CHAT_TAB_ARIA);
   }
@@ -427,6 +431,10 @@ export class AppShellChatComponent implements OnDestroy {
 
   protected isAgentTyping(conversationId: string): boolean {
     return this.agentTyping()[conversationId] === true;
+  }
+
+  protected onFullScreenButtonClick(): void {
+    void this.toggleFullScreenMode();
   }
 
   ngOnDestroy(): void {

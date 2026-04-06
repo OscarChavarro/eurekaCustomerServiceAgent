@@ -13,6 +13,10 @@ export const SHELL_TRANSLATIONS = {
     en: 'Toggle mode',
     es: 'Cambiar modo'
   },
+  FULL_SCREEN_ARIA: {
+    en: 'Toggle full screen',
+    es: 'Alternar pantalla completa'
+  },
   MODE_CHAT_TAB_ARIA: {
     en: 'modo chat',
     es: 'modo chat'

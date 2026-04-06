@@ -196,9 +196,10 @@ export class TimelinePointerController {
       const point = { x: event.offsetX, y: event.offsetY };
       if (this.isInsideRect(metrics.mainRect, point)) {
         const state = this.model.getState();
-        const rowIndex = Math.floor((state.scrollY + point.y - metrics.mainRect.y) / state.rowHeightPx);
-        if (rowIndex >= 0 && rowIndex < state.segments.length) {
-          this.onConversationRowClick(rowIndex);
+        const visualRowIndex = Math.floor((state.scrollY + point.y - metrics.mainRect.y) / state.rowHeightPx);
+        const logicalRowIndex = state.segments.length - 1 - visualRowIndex;
+        if (logicalRowIndex >= 0 && logicalRowIndex < state.segments.length) {
+          this.onConversationRowClick(logicalRowIndex);
         }
       }
     }
