@@ -18,7 +18,6 @@ import { BgeConnectivityStartupValidator } from './infrastructure/bootstrap/vali
 import { MongoConnectivityStartupValidator } from './infrastructure/bootstrap/validators/mongo-connectivity-startup.validator';
 import { ProcessedConversationsFolderStartupValidator } from './infrastructure/bootstrap/validators/processed-conversations-folder-startup.validator';
 import { QdrantConnectivityStartupValidator } from './infrastructure/bootstrap/validators/qdrant-connectivity-startup.validator';
-import { ServiceConfigIngestionRuntimeConfigAdapter } from './infrastructure/config/adapters/service-config-ingestion-runtime-config.adapter';
 import { ServiceConfig } from './infrastructure/config/service.config';
 import { SecretsConfig } from './infrastructure/config/settings/secrets.config';
 import { SettingsConfig } from './infrastructure/config/settings/settings.config';
@@ -35,10 +34,6 @@ import { SettingsConfig } from './infrastructure/config/settings/settings.config
     QdrantConnectivityStartupValidator,
     BgeConnectivityStartupValidator,
     StartupValidationOrchestrator,
-    {
-      provide: TOKENS.IngestionRuntimeConfigPort,
-      useClass: ServiceConfigIngestionRuntimeConfigAdapter
-    },
     ConversationCsvRecordTranslatorService,
     ConversationMessageCleaningService,
     ConversationStructuringService,

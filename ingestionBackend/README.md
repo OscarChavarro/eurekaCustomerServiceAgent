@@ -21,7 +21,7 @@ Current stage implementation:
 - `structure`: groups cleaned messages into conversational turns (customer -> agent).
 - `chunk`: converts turns into semantic chunks ready for embedding.
 - `embed`: BGE embedding service via HTTP (`/embed`) generating one vector per semantic chunk.
-- `store`: wired through `VectorStorePort`; can stay disabled with `service.enableQdrantIngestion=false` while validating embedding quality.
+- `store`: wired through `VectorStorePort`; always sends points to Qdrant with payload containing `conversationId`, `chunkId`, `messageIds`, `rawMessages`, and `chunkMessage`.
 
 ## Processing Debug Output
 
@@ -72,14 +72,39 @@ docker run -d \
   qdrant/qdrant
 ```
 
+There is a [Web UI for managing](http://192.168.1.3:6333/dashboard).
+
 ## Qdrant Integration
 
 - Default URL: `http://localhost:6333`
 - No authentication by default
-- Optional API key: `QDRANT_API_KEY` environment variable
-- Optional URL override: `QDRANT_URL` environment variable
+- Qdrant endpoint and optional API key come from `secrets.json` (`qdrant.url`, `qdrant.apiKey`)
 
 Qdrant integration is isolated behind `VectorStorePort`. Only the outbound adapter (`QdrantVectorStoreAdapter`) talks to Qdrant directly.
+
+## Qdrant creation of collection:
+
+```bash
+curl -X PUT "http://192.168.1.3:6333/collections/whatsapp_message_chunks" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "vectors": {
+      "size": 1024,
+      "distance": "Cosine"
+    }
+  }'
+
+curl "http://192.168.1.3:6333/collections/whatsapp_message_chunks"
+
+# Count points
+curl -sS -X POST "http://192.168.1.3:6333/collections/whatsapp_message_chunks/points/count" \
+  -H "Content-Type: application/json" \
+  -d '{"exact":true}'
+```
+
+The service startup validator enforces this automatically:
+- If collection does not exist, it is created.
+- If it exists with vector size different from `1024`, it is deleted and recreated.
 
 ## Embedding Integration
 
@@ -186,4 +211,3 @@ npm run start:dev
 - Processed conversations output folder name is configured with `service.processedConversationsFolderName`.
 - Embedding service secrets are configured under `embedding.provider`, `embedding.host`, and `embedding.port`.
 - MongoDB secrets are configured under `mongo.host`, `mongo.port`, `mongo.database`, `mongo.username`, and `mongo.password`.
-- Set `service.enableQdrantIngestion` to `false` to keep storage ingestion disabled while refining cleaning/structuring/chunking quality.

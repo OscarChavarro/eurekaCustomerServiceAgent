@@ -1,2 +1,10 @@
-cd ingestionBackend || exit 1
-npm run arch:check
+#!/bin/sh
+set -e
+
+for backend in ingestionBackend backofficeBackend retrievalBackend; do
+  echo "Running arch:check in ${backend}"
+  (cd "$backend" && npm run arch:check)
+
+  echo "Running lint in ${backend}"
+  (cd "$backend" && npm run lint)
+done

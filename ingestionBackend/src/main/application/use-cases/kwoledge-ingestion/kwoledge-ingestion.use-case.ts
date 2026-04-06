@@ -1,6 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { createHash } from 'node:crypto';
-import type { IngestionRuntimeConfigPort } from '../../ports/config/ingestion-runtime-config.port';
 import type { ConversationCsvSourcePort } from '../../ports/inbound/conversation-csv-source.port';
 import type {
   ConversationsRepositoryPort,
@@ -45,6 +44,9 @@ type EmbeddingPayloadRawMessage = {
 };
 
 type EmbeddingChunkPayload = {
+  conversationId: string;
+  chunkId: string;
+  messageIds: string[];
   rawMessages: EmbeddingPayloadRawMessage[];
   chunkMessage: string;
 };
@@ -120,8 +122,6 @@ export class KwoledgeIngestionUseCase {
     private readonly embeddingsRepositoryPort: EmbeddingsRepositoryPort,
     @Inject(TOKENS.ProcessedConversationStageStorePort)
     private readonly processedConversationStageStorePort: ProcessedConversationStageStorePort,
-    @Inject(TOKENS.IngestionRuntimeConfigPort)
-    private readonly ingestionRuntimeConfigPort: IngestionRuntimeConfigPort,
     private readonly conversationCsvRecordTranslatorService: ConversationCsvRecordTranslatorService,
     private readonly conversationMessageCleaningService: ConversationMessageCleaningService,
     private readonly conversationStructuringService: ConversationStructuringService,
@@ -129,6 +129,7 @@ export class KwoledgeIngestionUseCase {
   ) {}
 
   public async execute(command: KwoledgeIngestionCommand): Promise<KwoledgeIngestionResult> {
+    await this.vectorStorePort.clearCollection();
     const rawMessages = await this.loadRawMessages(command.folderPath);
     const rawByConversation = this.groupByConversationId(rawMessages, (message) => message.conversationId);
     const orderedConversationIds = Array.from(rawByConversation.keys()).sort((left, right) =>
@@ -139,7 +140,7 @@ export class KwoledgeIngestionUseCase {
 
     const allCleanedMessages: CleanedConversationMessage[] = [];
     const allSemanticChunks: SemanticConversationChunk[] = [];
-    const allEmbeddedChunks: EmbeddedChunk[] = [];
+    let totalIndexedChunks = 0;
     let skippedMessages = 0;
 
     for (const [index, conversationId] of orderedConversationIds.entries()) {
@@ -186,9 +187,17 @@ export class KwoledgeIngestionUseCase {
         conversationRawMessages,
         conversationSemanticChunks
       );
-      allEmbeddedChunks.push(...conversationEmbeddedChunks);
       await this.persistEmbeddings(conversationEmbeddedChunks);
       this.logConversationPhase(currentPosition, totalConversations, conversationId, 'embed');
+
+      const indexedChunks = await this.runStorageStage(conversationEmbeddedChunks);
+      totalIndexedChunks += indexedChunks;
+      this.logConversationPhase(
+        currentPosition,
+        totalConversations,
+        conversationId,
+        `store (${indexedChunks} points)`
+      );
 
       await this.persistProcessedConversation(
         conversationId,
@@ -204,14 +213,13 @@ export class KwoledgeIngestionUseCase {
       this.logger.warn(`No semantic chunks found in folder ${command.folderPath}.`);
     }
 
-    const indexedChunks = await this.runStorageStage(allEmbeddedChunks);
     const messagesBreakdown = this.buildMessagesBreakdown(allCleanedMessages);
     const limits = this.buildLimits(allCleanedMessages);
 
     return new KwoledgeIngestionResult(
       command.folderPath,
       uniqueFiles.size,
-      indexedChunks,
+      totalIndexedChunks,
       skippedMessages,
       messagesBreakdown,
       limits
@@ -267,10 +275,6 @@ export class KwoledgeIngestionUseCase {
   }
 
   private async runStorageStage(embeddedChunks: EmbeddedChunk[]): Promise<number> {
-    if (!this.ingestionRuntimeConfigPort.isQdrantIngestionEnabled()) {
-      return 0;
-    }
-
     if (embeddedChunks.length === 0) {
       return 0;
     }
@@ -292,8 +296,6 @@ export class KwoledgeIngestionUseCase {
     });
 
     await this.vectorStorePort.upsert(points);
-
-    this.logger.log(`Stored ${points.length} semantic chunks in vector storage.`);
 
     return points.length;
   }
@@ -396,6 +398,9 @@ export class KwoledgeIngestionUseCase {
       .map((rawMessage) => this.toEmbeddingPayloadRawMessage(rawMessage));
 
     return {
+      conversationId: semanticChunk.conversationId,
+      chunkId: semanticChunk.chunkId,
+      messageIds,
       rawMessages,
       chunkMessage: semanticChunk.content
     };
@@ -515,8 +520,9 @@ export class KwoledgeIngestionUseCase {
   private omitTextFromNormalizedFields(
     normalizedFields: RawConversationMessage['normalizedFields']
   ): Record<string, unknown> {
-    const { text: _unusedText, ...remainingFields } =
-      normalizedFields as unknown as Record<string, unknown>;
+    const normalizedFieldsRecord = normalizedFields as unknown as Record<string, unknown>;
+    const { text, ...remainingFields } = normalizedFieldsRecord;
+    void text;
     return remainingFields;
   }
 

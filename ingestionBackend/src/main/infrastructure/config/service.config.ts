@@ -29,27 +29,20 @@ export class ServiceConfig {
   }
 
   public get qdrantUrl(): string {
-    return this.normalizeUrl(process.env.QDRANT_URL?.trim() || this.secretsConfig.values.qdrant.url);
+    return this.normalizeUrl(this.secretsConfig.values.qdrant.url);
   }
 
   public get qdrantApiKey(): string | undefined {
-    const rawValue = process.env.QDRANT_API_KEY?.trim() ?? this.secretsConfig.values.qdrant.apiKey;
+    const rawValue = this.secretsConfig.values.qdrant.apiKey;
     return rawValue ? rawValue.trim() : undefined;
   }
 
   public get qdrantCollectionName(): string {
-    return (
-      process.env.QDRANT_COLLECTION_NAME?.trim() ||
-      this.settingsConfig.values.qdrant.collectionName
-    );
+    return this.settingsConfig.values.qdrant.collectionName;
   }
 
   public get qdrantConnectionFailurePauseMs(): number {
     return this.settingsConfig.values.service.qdrantConnectionFailurePauseMinutes * 60_000;
-  }
-
-  public get enableQdrantIngestion(): boolean {
-    return this.settingsConfig.values.service.enableQdrantIngestion;
   }
 
   public get embeddingConfig(): EmbeddingConfig {

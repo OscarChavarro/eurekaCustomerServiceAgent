@@ -5,6 +5,7 @@ export interface VectorPoint {
 }
 
 export interface VectorStorePort {
+  clearCollection(): Promise<void>;
   ensureCollection(dimension: number): Promise<void>;
   upsert(points: VectorPoint[]): Promise<void>;
 }

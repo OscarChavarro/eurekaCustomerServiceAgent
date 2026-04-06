@@ -3,17 +3,41 @@ import { QdrantConnectionError } from '../../../application/errors/qdrant-connec
 import type { VectorPoint, VectorStorePort } from '../../../application/ports/outbound/vector-store.port';
 import { ServiceConfig } from '../../../infrastructure/config/service.config';
 
-interface QdrantResponse {
-  status: string;
-  time: number;
-}
-
 @Injectable()
 export class QdrantVectorStoreAdapter implements VectorStorePort {
+  private static readonly VECTOR_SIZE = 1024;
+
   constructor(private readonly serviceConfig: ServiceConfig) {}
+
+  public async clearCollection(): Promise<void> {
+    const url = `${this.baseUrl}/collections/${this.serviceConfig.qdrantCollectionName}`;
+    const deleteResponse = await this.request(url, { method: 'DELETE' }, { allowNotFound: true });
+
+    if (!deleteResponse.ok && deleteResponse.status !== 404) {
+      const body = await deleteResponse.text();
+      throw new Error(
+        `Qdrant collection cleanup failed: ${deleteResponse.status} ${deleteResponse.statusText}. ${body}`
+      );
+    }
+
+    await this.request(url, {
+      method: 'PUT',
+      body: JSON.stringify({
+        vectors: {
+          size: QdrantVectorStoreAdapter.VECTOR_SIZE,
+          distance: 'Cosine'
+        }
+      })
+    });
+  }
 
   public async ensureCollection(dimension: number): Promise<void> {
     const url = `${this.baseUrl}/collections/${this.serviceConfig.qdrantCollectionName}`;
+    const collectionResponse = await this.request(url, { method: 'GET' }, { allowNotFound: true });
+
+    if (collectionResponse.status !== 404) {
+      return;
+    }
 
     await this.request(url, {
       method: 'PUT',
@@ -43,7 +67,11 @@ export class QdrantVectorStoreAdapter implements VectorStorePort {
     return this.serviceConfig.qdrantUrl.replace(/\/$/, '');
   }
 
-  private async request(url: string, init: RequestInit): Promise<QdrantResponse> {
+  private async request(
+    url: string,
+    init: RequestInit,
+    options?: { allowNotFound?: boolean }
+  ): Promise<Response> {
     const headers: HeadersInit = {
       'Content-Type': 'application/json'
     };
@@ -70,12 +98,15 @@ export class QdrantVectorStoreAdapter implements VectorStorePort {
     }
 
     if (!response.ok) {
+      if (options?.allowNotFound && response.status === 404) {
+        return response;
+      }
+
       const body = await response.text();
       throw new Error(`Qdrant request failed: ${response.status} ${response.statusText}. ${body}`);
     }
 
-    const payload = (await response.json()) as QdrantResponse;
-    return payload;
+    return response;
   }
 
   private isConnectionRefused(error: unknown): boolean {
