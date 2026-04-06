@@ -1,0 +1,191 @@
+.time-range-selector-backdrop
+  position: fixed
+  inset: 0
+  background: rgb(0 0 0 / 42%)
+  display: flex
+  align-items: center
+  justify-content: center
+  z-index: 1200
+
+.time-range-selector-dialog
+  width: min(92vw, 980px)
+  max-height: min(88vh, 760px)
+  background: #f7f9fb
+  border: 1px solid #d3dde6
+  border-radius: 0.75rem
+  box-shadow: 0 18px 40px rgb(0 0 0 / 28%)
+  display: grid
+  grid-template-rows: auto 1fr auto
+  overflow: hidden
+
+.dialog-header
+  padding: 0.8rem 1rem
+  border-bottom: 1px solid #d3dde6
+  background: #ffffff
+
+.dialog-header h2
+  margin: 0
+  font-size: 1rem
+  color: #25313c
+
+.dialog-body
+  min-height: 0
+  display: grid
+  grid-template-columns: 1.25fr 1fr 0.95fr
+
+.calendar-panel,
+.absolute-panel,
+.relative-panel
+  padding: 0.85rem
+  min-width: 0
+
+.calendar-panel
+  border-right: 1px solid #d9e3ec
+  background: #ffffff
+
+.absolute-panel
+  border-right: 1px solid #d9e3ec
+  background: #fbfcfe
+
+.relative-panel
+  background: #ffffff
+
+.calendar-toolbar
+  display: grid
+  grid-template-columns: auto 1fr 1fr auto
+  gap: 0.45rem
+  align-items: end
+  margin-bottom: 0.55rem
+
+.icon-button
+  border: 1px solid #c8d3de
+  background: #fff
+  border-radius: 0.45rem
+  width: 2rem
+  height: 2rem
+  cursor: pointer
+
+.calendar-toolbar label
+  display: grid
+  gap: 0.2rem
+
+.calendar-toolbar span
+  font-size: 0.7rem
+  color: #617386
+
+.calendar-toolbar select
+  height: 2rem
+  border: 1px solid #c8d3de
+  border-radius: 0.45rem
+  padding: 0 0.5rem
+  background: #fff
+
+.calendar-weekdays,
+.calendar-grid
+  display: grid
+  grid-template-columns: repeat(7, 1fr)
+  gap: 0.25rem
+
+.calendar-weekdays
+  margin-bottom: 0.35rem
+
+.calendar-weekdays span
+  text-align: center
+  font-size: 0.72rem
+  color: #5b6f81
+
+.calendar-day
+  border: 0
+  border-radius: 0.45rem
+  height: 2rem
+  background: transparent
+  color: #2e3d4b
+  cursor: pointer
+
+.calendar-day.is-other-month
+  color: #97a7b7
+
+.calendar-day.is-in-range
+  background: #cfe3ff
+  color: #1c3f6f
+
+.calendar-day.is-range-start,
+.calendar-day.is-range-end
+  background: #1f6fcb
+  color: #ffffff
+  font-weight: 600
+
+.field
+  display: grid
+  gap: 0.3rem
+  margin-bottom: 0.6rem
+
+.field span
+  font-size: 0.76rem
+  color: #5b6f81
+
+.field input
+  height: 2rem
+  border: 1px solid #c8d3de
+  border-radius: 0.45rem
+  padding: 0 0.55rem
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace
+  font-size: 0.78rem
+
+.format-hint
+  margin: 0.2rem 0 0
+  font-size: 0.7rem
+  color: #72879a
+
+.relative-panel h3
+  margin: 0 0 0.5rem
+  font-size: 0.86rem
+  color: #2f3e4b
+
+.relative-panel button
+  width: 100%
+  border: 1px solid #d1dce7
+  background: #f8fbff
+  color: #24496f
+  border-radius: 0.45rem
+  padding: 0.46rem 0.55rem
+  text-align: left
+  margin-bottom: 0.35rem
+  cursor: pointer
+
+.relative-panel button:hover
+  background: #eaf4ff
+
+.dialog-footer
+  display: flex
+  justify-content: flex-end
+  gap: 0.5rem
+  padding: 0.75rem 0.9rem
+  border-top: 1px solid #d3dde6
+  background: #ffffff
+
+.dialog-footer button
+  border: 0
+  border-radius: 0.5rem
+  padding: 0.5rem 0.8rem
+  cursor: pointer
+
+.dialog-footer .secondary
+  background: #edf2f6
+  color: #374958
+
+.dialog-footer .primary
+  background: #1f6fcb
+  color: #ffffff
+
+@media (max-width: 960px)
+  .time-range-selector-dialog
+    width: min(95vw, 760px)
+
+  .dialog-body
+    grid-template-columns: 1fr
+
+  .calendar-panel,
+  .absolute-panel
+    border-right: 0
+    border-bottom: 1px solid #d9e3ec

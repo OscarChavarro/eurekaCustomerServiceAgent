@@ -21,6 +21,10 @@ export const SHELL_TRANSLATIONS = {
     en: 'Toggle time chat panel',
     es: 'Alternar panel de chat en modo tiempo'
   },
+  OPEN_TIME_RANGE_SELECTOR_ARIA: {
+    en: 'Open time range selector',
+    es: 'Abrir selector de rango de tiempo'
+  },
   MODE_CHAT_TAB_ARIA: {
     en: 'modo chat',
     es: 'modo chat'

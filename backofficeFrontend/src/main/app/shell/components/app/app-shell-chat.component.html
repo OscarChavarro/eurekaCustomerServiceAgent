@@ -73,6 +73,14 @@
         <button
           type="button"
           class="sidebar-action-button"
+          [attr.aria-label]="openTimeRangeSelectorAriaLabel()"
+          (click)="openTimeRangeSelector()"
+        >
+          <span class="material-symbols-outlined" aria-hidden="true">calendar_month</span>
+        </button>
+        <button
+          type="button"
+          class="sidebar-action-button"
           [class.is-active]="isTimeModeChatHidden()"
           [attr.aria-label]="toggleTimeChatAriaLabel()"
           (click)="onTimeModeChatToggleButtonClick()"
@@ -95,7 +103,10 @@
           [attr.aria-label]="timePanelAriaLabel()"
           [style.height]="timePanelHeight()"
         >
-          <app-time-panel (conversationSelected)="selectConversationFromTimePanel($event)"></app-time-panel>
+          <app-time-panel
+            [externalTimeRangeRequest]="timeRangeSelectionRequest()"
+            (conversationSelected)="selectConversationFromTimePanel($event)"
+          ></app-time-panel>
         </section>
         @if (!isTimeModeChatHidden()) {
           <button
@@ -129,6 +140,14 @@
       {{ tooltip.text }}
     </div>
   }
+
+  <app-time-range-selector
+    [open]="isTimeRangeSelectorOpen()"
+    [language]="selectedLanguage()"
+    [initialRange]="selectedTimeRange()"
+    (closed)="closeTimeRangeSelector()"
+    (applied)="applyTimeRangeSelection($event)"
+  ></app-time-range-selector>
 </div>
 
 <ng-template #chatPanelsTemplate>

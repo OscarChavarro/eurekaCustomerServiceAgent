@@ -24,6 +24,10 @@ import { I18N_KEYS } from '../../../core/i18n/translations/i18n-keys.const';
 import type { SupportedLanguage } from '../../../core/i18n/types/supported-language.type';
 import { TimePanelComponent } from '../time-panel/time-panel.component';
 import {
+  TimeRangeSelection,
+  TimeRangeSelectorComponent
+} from '../../../shared/components/time-range-selector/time-range-selector.component';
+import {
   ChatConversation,
   ChatConversationService,
   ChatMessage,
@@ -32,7 +36,7 @@ import {
 
 @Component({
   selector: 'app-shell-chat',
-  imports: [CommonModule, TimePanelComponent],
+  imports: [CommonModule, TimePanelComponent, TimeRangeSelectorComponent],
   templateUrl: './app-shell-chat.component.html',
   styleUrl: './app-shell-chat.component.sass',
 })
@@ -55,6 +59,9 @@ export class AppShellChatComponent implements OnDestroy {
   private readonly openConversationDeleteMenuIdState = signal<string | null>(null);
   private readonly operationModeState = signal<OperationMode>('chat');
   private readonly chatHiddenInTimeModeState = signal<boolean>(false);
+  private readonly timeRangeSelectorOpenState = signal<boolean>(false);
+  private readonly selectedTimeRangeState = signal<TimeRangeSelection | null>(null);
+  private readonly timeRangeRequestSequenceState = signal<number>(0);
   private readonly timePaneTopRatioState = signal<number>(0.5);
   private isDraggingTimeSplit = false;
   @ViewChild('messagesArea') private messagesAreaRef?: ElementRef<HTMLDivElement>;
@@ -82,6 +89,20 @@ export class AppShellChatComponent implements OnDestroy {
   protected readonly operationMode = this.operationModeState.asReadonly();
   protected readonly isTimeMode = computed(() => this.operationModeState() === 'time');
   protected readonly isTimeModeChatHidden = this.chatHiddenInTimeModeState.asReadonly();
+  protected readonly isTimeRangeSelectorOpen = this.timeRangeSelectorOpenState.asReadonly();
+  protected readonly selectedTimeRange = this.selectedTimeRangeState.asReadonly();
+  protected readonly timeRangeSelectionRequest = computed(() => {
+    const range = this.selectedTimeRangeState();
+    if (!range) {
+      return null;
+    }
+
+    return {
+      requestId: this.timeRangeRequestSequenceState(),
+      startTime: range.startTime,
+      endTime: range.endTime
+    };
+  });
   protected readonly timePaneTopHeight = computed(() => `${Math.round(this.timePaneTopRatioState() * 100)}%`);
   protected readonly timePaneBottomHeight = computed(
     () => `${Math.round((1 - this.timePaneTopRatioState()) * 100)}%`
@@ -179,6 +200,10 @@ export class AppShellChatComponent implements OnDestroy {
 
   protected toggleTimeChatAriaLabel(): string {
     return this.t(I18N_KEYS.shell.TOGGLE_TIME_CHAT_ARIA);
+  }
+
+  protected openTimeRangeSelectorAriaLabel(): string {
+    return this.t(I18N_KEYS.shell.OPEN_TIME_RANGE_SELECTOR_ARIA);
   }
 
   protected chatModeAriaLabel(): string {
@@ -447,6 +472,27 @@ export class AppShellChatComponent implements OnDestroy {
     }
 
     this.toggleTimeModeChatVisibility();
+  }
+
+  protected openTimeRangeSelector(): void {
+    if (this.operationModeState() !== 'time') {
+      return;
+    }
+
+    this.timeRangeSelectorOpenState.set(true);
+  }
+
+  protected closeTimeRangeSelector(): void {
+    this.timeRangeSelectorOpenState.set(false);
+  }
+
+  protected applyTimeRangeSelection(range: TimeRangeSelection): void {
+    this.selectedTimeRangeState.set({
+      startTime: new Date(range.startTime),
+      endTime: new Date(range.endTime)
+    });
+    this.timeRangeRequestSequenceState.update((current) => current + 1);
+    this.timeRangeSelectorOpenState.set(false);
   }
 
   ngOnDestroy(): void {

@@ -3,9 +3,12 @@ import {
   Component,
   ElementRef,
   effect,
+  Input,
   inject,
+  OnChanges,
   OnDestroy,
   output,
+  SimpleChanges,
   ViewChild
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
@@ -35,7 +38,8 @@ import type { TimelineRenderMetrics } from './timeline/timeline.types';
   templateUrl: './time-panel.component.html',
   styleUrl: './time-panel.component.sass'
 })
-export class TimePanelComponent implements AfterViewInit, OnDestroy {
+export class TimePanelComponent implements AfterViewInit, OnChanges, OnDestroy {
+  @Input() public externalTimeRangeRequest: ExternalTimeRangeRequest | null = null;
   private readonly chatConversationService = inject(ChatConversationService);
   private readonly i18nService = inject(I18nService);
   private readonly i18nStateService = inject(I18nStateService);
@@ -91,6 +95,8 @@ export class TimePanelComponent implements AfterViewInit, OnDestroy {
   private loadingStatus = '';
   private isLoading = true;
   private hasLoadError = false;
+  private latestExternalTimeRangeRequest: ExternalTimeRangeRequest | null = null;
+  private appliedExternalTimeRangeRequestId: number | null = null;
   protected statusText = '';
   private readonly summariesEffectRef = effect(
     () => {
@@ -143,6 +149,13 @@ export class TimePanelComponent implements AfterViewInit, OnDestroy {
     queueMicrotask(() => {
       this.syncSharedTimeRangeFilter();
     });
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['externalTimeRangeRequest']) {
+      this.latestExternalTimeRangeRequest = this.externalTimeRangeRequest;
+      this.tryApplyExternalTimeRangeRequest();
+    }
   }
 
   ngOnDestroy(): void {
@@ -247,6 +260,7 @@ export class TimePanelComponent implements AfterViewInit, OnDestroy {
 
       this.model.setSegments(segments);
       this.initializeTimeModeDefaultWindow();
+      this.tryApplyExternalTimeRangeRequest();
       this.isLoading = false;
       this.hasLoadError = false;
       this.statusText = '';
@@ -438,6 +452,35 @@ export class TimePanelComponent implements AfterViewInit, OnDestroy {
     this.model.setHorizontalWindow(defaultStartMs, defaultEndMs, safeMainWidth);
   }
 
+  private tryApplyExternalTimeRangeRequest(): void {
+    const request = this.latestExternalTimeRangeRequest;
+    if (!request || this.appliedExternalTimeRangeRequestId === request.requestId) {
+      return;
+    }
+
+    this.applyTimeRangeRequestToTimeline(request);
+    this.appliedExternalTimeRangeRequestId = request.requestId;
+  }
+
+  private applyTimeRangeRequestToTimeline(request: ExternalTimeRangeRequest): void {
+    const startMs = request.startTime.getTime();
+    const endMs = request.endTime.getTime();
+    const normalizedStart = Math.min(startMs, endMs);
+    const normalizedEnd = Math.max(startMs, endMs);
+    const spanMs = Math.max(1_000, normalizedEnd - normalizedStart);
+    const visibleSpanMs = spanMs * 1.1;
+    const centeredMidpointMs = normalizedStart + spanMs / 2;
+    const halfVisibleSpanMs = visibleSpanMs / 2;
+    const viewStartMs = centeredMidpointMs - halfVisibleSpanMs;
+    const viewEndMs = centeredMidpointMs + halfVisibleSpanMs;
+    const { mainWidth } = this.getMainAreaMetrics();
+    const safeMainWidth = Math.max(1, mainWidth);
+
+    this.timeRangeModel.setRange(normalizedStart, normalizedEnd);
+    this.model.setHorizontalWindow(viewStartMs, viewEndMs, safeMainWidth);
+    this.syncSharedTimeRangeFilter();
+  }
+
   private syncSharedTimeRangeFilter(): void {
     const range = this.timeRangeModel.getValue();
 
@@ -475,3 +518,9 @@ export class TimePanelComponent implements AfterViewInit, OnDestroy {
     };
   }
 }
+
+type ExternalTimeRangeRequest = {
+  requestId: number;
+  startTime: Date;
+  endTime: Date;
+};

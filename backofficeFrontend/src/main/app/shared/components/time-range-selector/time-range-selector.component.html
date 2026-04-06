@@ -1,0 +1,84 @@
+@if (open()) {
+  <div class="time-range-selector-backdrop" (click)="onBackdropClick()">
+    <div class="time-range-selector-dialog" (click)="onDialogClick($event)">
+      <header class="dialog-header">
+        <h2>{{ text().title }}</h2>
+      </header>
+
+      <div class="dialog-body">
+        <section class="calendar-panel">
+          <div class="calendar-toolbar">
+            <button type="button" class="icon-button" [attr.aria-label]="text().previousMonthAria" (click)="goToPreviousMonth()">◀</button>
+            <label>
+              <span>{{ text().monthLabel }}</span>
+              <select [ngModel]="selectedMonth" (ngModelChange)="onMonthChange($event)">
+                @for (monthName of monthNames(); track $index) {
+                  <option [value]="$index">{{ monthName }}</option>
+                }
+              </select>
+            </label>
+            <label>
+              <span>{{ text().yearLabel }}</span>
+              <select [ngModel]="selectedYear" (ngModelChange)="onYearChange($event)">
+                @for (year of years; track year) {
+                  <option [value]="year">{{ year }}</option>
+                }
+              </select>
+            </label>
+            <button type="button" class="icon-button" [attr.aria-label]="text().nextMonthAria" (click)="goToNextMonth()">▶</button>
+          </div>
+
+          <div class="calendar-weekdays">
+            @for (weekday of text().weekdaysShort; track weekday) {
+              <span>{{ weekday }}</span>
+            }
+          </div>
+
+          <div class="calendar-grid">
+            @for (cell of calendarCells; track cell.date.getTime()) {
+              <button
+                type="button"
+                class="calendar-day"
+                [class.is-other-month]="!cell.isCurrentMonth"
+                [class.is-in-range]="cell.isInRange"
+                [class.is-range-start]="cell.isRangeStart"
+                [class.is-range-end]="cell.isRangeEnd"
+                (click)="onDayClick(cell)"
+              >
+                {{ cell.dayNumber }}
+              </button>
+            }
+          </div>
+        </section>
+
+        <section class="absolute-panel">
+          <label class="field">
+            <span>{{ text().fromLabel }}</span>
+            <input [ngModel]="fromInputValue" (ngModelChange)="onFromInputChange($event)" />
+          </label>
+          <label class="field">
+            <span>{{ text().toLabel }}</span>
+            <input [ngModel]="toInputValue" (ngModelChange)="onToInputChange($event)" />
+          </label>
+          <p class="format-hint">YYYY-MM-DD HH:mm:ss.SSS (UTC)</p>
+        </section>
+
+        <section class="relative-panel">
+          <h3>{{ text().presetsTitle }}</h3>
+          <button type="button" (click)="applyRelativePreset('lastMinute')">{{ text().presets.lastMinute }}</button>
+          <button type="button" (click)="applyRelativePreset('lastHour')">{{ text().presets.lastHour }}</button>
+          <button type="button" (click)="applyRelativePreset('lastDay')">{{ text().presets.lastDay }}</button>
+          <button type="button" (click)="applyRelativePreset('lastWeek')">{{ text().presets.lastWeek }}</button>
+          <button type="button" (click)="applyRelativePreset('lastMonth')">{{ text().presets.lastMonth }}</button>
+          <button type="button" (click)="applyRelativePreset('last3Months')">{{ text().presets.last3Months }}</button>
+          <button type="button" (click)="applyRelativePreset('lastYear')">{{ text().presets.lastYear }}</button>
+        </section>
+      </div>
+
+      <footer class="dialog-footer">
+        <button type="button" class="secondary" (click)="onCancel()">{{ text().cancelLabel }}</button>
+        <button type="button" class="primary" (click)="onApply()">{{ text().applyLabel }}</button>
+      </footer>
+    </div>
+  </div>
+}
