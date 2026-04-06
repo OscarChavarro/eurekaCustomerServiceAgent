@@ -177,6 +177,10 @@ export class AppShellChatComponent implements OnDestroy {
     return this.t(I18N_KEYS.shell.FULL_SCREEN_ARIA);
   }
 
+  protected toggleTimeChatAriaLabel(): string {
+    return this.t(I18N_KEYS.shell.TOGGLE_TIME_CHAT_ARIA);
+  }
+
   protected chatModeAriaLabel(): string {
     return this.t(I18N_KEYS.shell.MODE_CHAT_TAB_ARIA);
   }
@@ -435,6 +439,14 @@ export class AppShellChatComponent implements OnDestroy {
 
   protected onFullScreenButtonClick(): void {
     void this.toggleFullScreenMode();
+  }
+
+  protected onTimeModeChatToggleButtonClick(): void {
+    if (this.operationModeState() !== 'time') {
+      return;
+    }
+
+    this.toggleTimeModeChatVisibility();
   }
 
   ngOnDestroy(): void {

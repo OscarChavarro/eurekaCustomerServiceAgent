@@ -1,41 +1,5 @@
 <div class="chat-workspace">
   <aside class="left-sidebar" [attr.aria-label]="mainMenuAriaLabel()">
-    <div class="language-switcher">
-      <button
-        class="sidebar-button is-active"
-        type="button"
-        [attr.aria-label]="languageButtonAriaLabel()"
-        (click)="toggleLanguageDropdown()"
-      >
-        <img
-          class="flag-icon language-flag"
-          [src]="flagIconUrl(selectedLanguageCountryCode())"
-          [alt]="selectedLanguage()"
-          loading="lazy"
-        />
-      </button>
-      @if (languageDropdownOpen()) {
-        <div class="language-dropdown">
-          @for (language of availableLanguages; track language) {
-            <button
-              type="button"
-              class="language-option"
-              [class.is-active]="selectedLanguage() === language"
-              (click)="selectLanguage(language)"
-            >
-              <img
-                class="flag-icon"
-                [src]="flagIconUrl(language === 'es' ? 'ES' : 'US')"
-                [alt]="language"
-                loading="lazy"
-              />
-              {{ languageOptionLabel(language) }}
-            </button>
-          }
-        </div>
-      }
-    </div>
-
     <div class="mode-tabs" role="tablist" [attr.aria-label]="modeSwitchAriaLabel()">
       <button
         type="button"
@@ -62,6 +26,41 @@
     </div>
 
     <div class="sidebar-bottom-actions">
+      <div class="language-switcher">
+        <button
+          class="sidebar-button is-active"
+          type="button"
+          [attr.aria-label]="languageButtonAriaLabel()"
+          (click)="toggleLanguageDropdown()"
+        >
+          <img
+            class="flag-icon language-flag"
+            [src]="flagIconUrl(selectedLanguageCountryCode())"
+            [alt]="selectedLanguage()"
+            loading="lazy"
+          />
+        </button>
+        @if (languageDropdownOpen()) {
+          <div class="language-dropdown">
+            @for (language of availableLanguages; track language) {
+              <button
+                type="button"
+                class="language-option"
+                [class.is-active]="selectedLanguage() === language"
+                (click)="selectLanguage(language)"
+              >
+                <img
+                  class="flag-icon"
+                  [src]="flagIconUrl(language === 'es' ? 'ES' : 'US')"
+                  [alt]="language"
+                  loading="lazy"
+                />
+                {{ languageOptionLabel(language) }}
+              </button>
+            }
+          </div>
+        }
+      </div>
       <button
         type="button"
         class="sidebar-action-button"
@@ -70,6 +69,17 @@
       >
         <span class="material-symbols-outlined" aria-hidden="true">fullscreen</span>
       </button>
+      @if (isTimeMode()) {
+        <button
+          type="button"
+          class="sidebar-action-button"
+          [class.is-active]="isTimeModeChatHidden()"
+          [attr.aria-label]="toggleTimeChatAriaLabel()"
+          (click)="onTimeModeChatToggleButtonClick()"
+        >
+          <span class="material-symbols-outlined" aria-hidden="true">horizontal_split</span>
+        </button>
+      }
     </div>
   </aside>
 

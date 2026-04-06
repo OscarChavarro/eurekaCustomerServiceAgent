@@ -17,6 +17,10 @@ export const SHELL_TRANSLATIONS = {
     en: 'Toggle full screen',
     es: 'Alternar pantalla completa'
   },
+  TOGGLE_TIME_CHAT_ARIA: {
+    en: 'Toggle time chat panel',
+    es: 'Alternar panel de chat en modo tiempo'
+  },
   MODE_CHAT_TAB_ARIA: {
     en: 'modo chat',
     es: 'modo chat'
