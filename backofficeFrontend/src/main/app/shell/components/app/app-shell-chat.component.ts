@@ -38,7 +38,11 @@ import {
   selector: 'app-shell-chat',
   imports: [CommonModule, TimePanelComponent, TimeRangeSelectorComponent],
   templateUrl: './app-shell-chat.component.html',
-  styleUrl: './app-shell-chat.component.sass',
+  styleUrls: [
+    './app-shell-chat.workspace.component.sass',
+    './app-shell-chat.conversations.component.sass',
+    './app-shell-chat.messages.component.sass'
+  ],
 })
 export class AppShellChatComponent implements OnDestroy {
   private readonly chatConversationService = inject(ChatConversationService);

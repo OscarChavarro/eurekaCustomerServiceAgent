@@ -29,6 +29,7 @@ Components view:
 ### Current Scope (v1)
 
 - `backofficeFrontend` and `backofficeBackend` for customer-service operations.
+- `retrievalBackend` for `/v1/chat/completions` wrapper and retrieval-oriented LLM orchestration.
 - `ingestionBackend` processing `iMazing` CSV exports.
 - `bge` for embeddings and `Qdrant` for vector storage.
 - `MongoDb` for operational persistence.
@@ -37,5 +38,5 @@ Components view:
 
 ### Planned Next Iterations
 
-- Add `retrievalService` including a `contextBuilder` to prepare prompt-ready context.
+- Extend `retrievalBackend` with a `contextBuilder` to prepare prompt-ready context.
 - Add a product `catalog` fed from WIX e-commerce data.

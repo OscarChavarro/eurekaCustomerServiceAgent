@@ -1,0 +1,193 @@
+.conversation-list
+  display: grid
+  grid-template-rows: auto auto 1fr
+  border-right: 1px solid var(--border-color)
+  background: var(--surface-soft)
+  min-height: 0
+  overflow: hidden
+
+.panel-header
+  min-height: 3.8rem
+  display: flex
+  align-items: center
+  justify-content: space-between
+  gap: 0.75rem
+  padding: 0.75rem 1rem
+  border-bottom: 1px solid var(--border-color)
+  background: var(--surface-soft)
+
+.panel-header h1
+  margin: 0
+  font-size: 1.05rem
+  font-weight: 600
+  color: var(--text-primary)
+
+.panel-action,
+.header-actions button,
+.composer-row button
+  width: 2.2rem
+  height: 2.2rem
+  border: 0
+  border-radius: 0.6rem
+  background: var(--surface-muted)
+  color: var(--text-secondary)
+  cursor: pointer
+
+.search-box
+  margin: 0.75rem 0.75rem 0.9rem
+  padding: 0.55rem 0.75rem
+  display: flex
+  align-items: center
+  gap: 0.5rem
+  background: var(--surface-muted)
+  border-radius: 0.7rem
+
+.search-box input
+  width: 100%
+  border: 0
+  outline: 0
+  background: transparent
+  font-size: 0.92rem
+
+.conversation-items
+  min-height: 0
+  overflow: auto
+
+.conversation-item
+  width: 100%
+  border: 0
+  border-top: 1px solid #eef1f3
+  background: transparent
+  text-align: left
+  padding: 0.72rem 0.9rem
+  display: flex
+  gap: 0.75rem
+  cursor: pointer
+
+.conversation-item:hover,
+.conversation-item.is-active
+  background: #f2f5f7
+
+.avatar
+  width: 2.45rem
+  height: 2.45rem
+  border-radius: 50%
+  background: #dfe5ea
+  color: #30414f
+  display: inline-flex
+  align-items: center
+  justify-content: center
+  font-size: 0.78rem
+  font-weight: 600
+  flex-shrink: 0
+
+.conversation-main
+  min-width: 0
+  flex: 1
+
+.conversation-top-row,
+.conversation-bottom-row
+  display: flex
+  justify-content: space-between
+  align-items: center
+  gap: 0.65rem
+
+.conversation-top-actions
+  display: inline-flex
+  align-items: center
+  gap: 0.45rem
+  flex-shrink: 0
+
+.contact-name
+  color: var(--text-primary)
+  font-size: 0.95rem
+  font-weight: 500
+
+.message-time,
+.message-preview
+  color: var(--text-secondary)
+  font-size: 0.78rem
+
+.message-preview
+  overflow: hidden
+  text-overflow: ellipsis
+  white-space: nowrap
+  max-width: 13rem
+
+.conversation-hover-tools
+  display: inline-flex
+  align-items: center
+  gap: 0.2rem
+
+.conversation-hover-icon
+  width: 1.25rem
+  height: 1.25rem
+  border-radius: 0.3rem
+  display: inline-flex
+  align-items: center
+  justify-content: center
+  font-size: 0.72rem
+  color: #59707f
+  background: #e6edf3
+  cursor: pointer
+  user-select: none
+
+.conversation-hover-icon:hover
+  background: #d9e4ec
+
+.conversation-hover-icon.is-delete
+  font-size: 0.8rem
+
+.unread-pill
+  min-width: 1.3rem
+  height: 1.3rem
+  border-radius: 999px
+  padding: 0 0.35rem
+  background: var(--accent)
+  color: #ffffff
+  display: inline-flex
+  align-items: center
+  justify-content: center
+  font-size: 0.7rem
+  font-weight: 600
+
+.conversation-panel
+  display: grid
+  grid-template-rows: auto 1fr auto
+  background-color: #efeae2
+  background-image: url('/assets/background.webp')
+  background-repeat: repeat
+  background-size: 420px
+  min-height: 0
+  overflow: hidden
+
+.conversation-header
+  background: #f0f2f5
+
+.profile-pill
+  display: flex
+  gap: 0.7rem
+  align-items: center
+
+.profile-pill p
+  margin: 0
+  color: var(--text-secondary)
+  font-size: 0.78rem
+
+.header-actions
+  display: flex
+  gap: 0.5rem
+
+.stage-actions button
+  width: auto
+  height: 2rem
+  min-width: 4.2rem
+  padding: 0 0.55rem
+  text-transform: lowercase
+  font-size: 0.72rem
+  font-weight: 600
+
+.stage-actions button.is-active
+  background: #d0f2e8
+  color: #006f54
+

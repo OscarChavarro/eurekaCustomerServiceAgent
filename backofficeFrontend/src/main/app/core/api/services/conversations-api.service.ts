@@ -192,16 +192,19 @@ export class ConversationsApiService {
     request: ChatCompletionsRequest,
     callbacks: StreamCallbacks
   ): Promise<void> {
-    const response = await fetch(`${this.frontendSecretsService.backendBaseUrl}/v1/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json'
-      },
-      body: JSON.stringify({
-        messages: request.messages,
-        max_tokens: request.maxTokens
-      })
-    });
+    const response = await fetch(
+      `${this.frontendSecretsService.retrievalBackendBaseUrl}/v1/chat/completions`,
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json'
+        },
+        body: JSON.stringify({
+          messages: request.messages,
+          max_tokens: request.maxTokens
+        })
+      }
+    );
 
     if (!response.ok || !response.body) {
       const errorBody = await response.text();
