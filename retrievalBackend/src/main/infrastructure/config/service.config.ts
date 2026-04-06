@@ -30,7 +30,7 @@ export type ContextGeneratorImplementation = 'naive' | 'vector-search';
 export type ContextGeneratorConfig = {
   implementation: ContextGeneratorImplementation;
   naive: {
-    contextMessage: string;
+    contextMessage: string[];
   };
   vectorSearch: {
     maxMatches: number;

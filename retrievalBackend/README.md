@@ -30,7 +30,7 @@ Ejemplo:
   "contextGenerator": {
     "implementation": "naive",
     "naive": {
-      "contextMessage": "..."
+      "contextMessage": ["...", "..."]
     }
   }
 }
@@ -38,7 +38,7 @@ Ejemplo:
 
 Comportamiento actual:
 
-- `naive`: retorna el texto configurado en `contextGenerator.naive.contextMessage` e imprime el contexto generado en consola.
+- `naive`: concatena `contextGenerator.naive.contextMessage` con espacios y retorna ese contexto (ademas imprime el contexto generado en consola).
 - `vector-search`:
   1. toma el ultimo prompt del usuario;
   2. llama a BGE (`embedding`) para convertir prompt a vector;

@@ -6,7 +6,7 @@
   "license": "UNLICENSED",
   "scripts": {
     "build": "nest build",
-    "start": "node dist/main.js",
+    "start": "node dist/main/main.js",
     "start:dev": "nest start --watch",
     "prepare": "cd .. && husky install .husky",
     "lint": "eslint \"src/**/*.ts\" --max-warnings=0",

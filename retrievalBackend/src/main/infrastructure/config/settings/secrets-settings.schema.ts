@@ -26,7 +26,7 @@ export const secretsSettingsSchema = z.object({
   contextGenerator: z.object({
     implementation: z.enum(['naive', 'vector-search']),
     naive: z.object({
-      contextMessage: z.string().trim().min(1)
+      contextMessage: z.array(z.string().trim().min(1)).min(1)
     }),
     vectorSearch: z.object({
       maxMatches: z.number().int().positive().default(5)

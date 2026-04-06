@@ -12,6 +12,7 @@ import { BgeConnectivityStartupValidator } from './infrastructure/bootstrap/vali
 import { ServiceConfig } from './infrastructure/config/service.config';
 import { SecretsConfig } from './infrastructure/config/settings/secrets.config';
 import { SettingsConfig } from './infrastructure/config/settings/settings.config';
+import { HeuristicContextBuilderService } from '../application/services/context-builder.service';
 
 @Module({
   controllers: [ChatCompletionsController],
@@ -23,6 +24,7 @@ import { SettingsConfig } from './infrastructure/config/settings/settings.config
     StartupValidationOrchestrator,
     NaiveContextGenerator,
     VectorSearchContextGenerator,
+    HeuristicContextBuilderService,
     GenerateContextUseCase,
     StreamChatCompletionsUseCase,
     {

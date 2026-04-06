@@ -4,6 +4,10 @@ import type {
   ContextGeneratorMessage
 } from '../../../application/ports/outbound/context/context-generator.port';
 import { ServiceConfig } from '../../../infrastructure/config/service.config';
+import {
+  HeuristicContextBuilderService,
+  type RetrievedChunk
+} from '../../../../application/services/context-builder.service';
 
 interface BgeEmbeddingResponse {
   vector: number[];
@@ -17,6 +21,7 @@ interface QdrantPoint {
     chunkId?: unknown;
     messageIds?: unknown;
     chunkMessage?: unknown;
+    rawMessages?: unknown;
     [key: string]: unknown;
   };
 }
@@ -30,22 +35,24 @@ export class VectorSearchContextGenerator implements ContextGenerator {
   private static readonly EXPECTED_BGE_VECTOR_DIMENSIONS = 1024;
   private readonly logger = new Logger(VectorSearchContextGenerator.name);
 
-  constructor(private readonly serviceConfig: ServiceConfig) {}
+  constructor(
+    private readonly serviceConfig: ServiceConfig,
+    private readonly contextBuilder: HeuristicContextBuilderService
+  ) {}
 
   public async generateContext(messages: ContextGeneratorMessage[]): Promise<string> {
     const latestUserPrompt = this.extractLatestUserPrompt(messages);
     if (!latestUserPrompt) {
-      const emptyPromptContext =
-        'No se encontro un mensaje de usuario para construir contexto. Responde de forma breve y solicita aclaracion.';
-      this.logger.log(`Generated context (vector-search):\n${emptyPromptContext}\n====================`);
-      return emptyPromptContext;
+      return 'No se encontro un mensaje de usuario para construir contexto. Responde de forma breve y solicita aclaracion.';
     }
 
     const promptVector = await this.generatePromptEmbedding(latestUserPrompt);
     const nearestPoints = await this.searchNearestPoints(promptVector);
-    const context = this.buildSystemContext(latestUserPrompt, nearestPoints);
-
-    this.logger.log(`Generated context (vector-search):\n${context}\n====================`);
+    const uniqueAgentResponses = this.extractUniqueAgentResponses(nearestPoints);
+    const retrievedChunks = this.toRetrievedChunks(nearestPoints);
+    const context = this.contextBuilder.buildContext(latestUserPrompt, retrievedChunks);
+    this.logger.log(`**** USER PROMPT: ${latestUserPrompt}`);
+    this.logger.log(this.formatFlowLog(uniqueAgentResponses, context));
 
     return context;
   }
@@ -133,67 +140,115 @@ export class VectorSearchContextGenerator implements ContextGenerator {
     return Array.isArray(payload.result) ? payload.result : [];
   }
 
-  private buildSystemContext(prompt: string, points: QdrantPoint[]): string {
-    const baseInstructions = [
-      'Eres un asistente de atencion al cliente para WhatsApp.',
-      'Responde siempre en espanol, con frases cortas y concretas.',
-      'Usa primero la evidencia recuperada de conversaciones similares.',
-      'Si la evidencia no alcanza, dilo de forma explicita y pregunta lo minimo necesario para continuar.'
-    ];
-
-    if (points.length === 0) {
-      return [
-        ...baseInstructions,
-        '',
-        `Prompt actual del usuario: ${prompt}`,
-        'No se encontraron conversaciones similares en Qdrant.'
-      ].join('\n');
-    }
-
-    const evidenceLines = points.map((point, index) => {
-      const conversationId =
-        typeof point.payload?.conversationId === 'string' ? point.payload.conversationId : 'unknown';
-      const chunkId = typeof point.payload?.chunkId === 'string' ? point.payload.chunkId : 'unknown';
+  private toRetrievedChunks(points: QdrantPoint[]): RetrievedChunk[] {
+    return points.map((point) => {
       const chunkMessage =
         typeof point.payload?.chunkMessage === 'string' ? point.payload.chunkMessage : '';
-      const messageIds = Array.isArray(point.payload?.messageIds)
-        ? point.payload.messageIds.filter((item): item is string => typeof item === 'string')
+      const rawMessages = Array.isArray(point.payload?.rawMessages)
+        ? point.payload.rawMessages
         : [];
-      const score = Number.isFinite(point.score) ? point.score.toFixed(4) : 'n/a';
+      const messages = rawMessages
+        .map((rawMessage) => this.toRetrievedChunkMessage(rawMessage))
+        .filter((message): message is RetrievedChunk['messages'][number] => message !== null);
+      const textFromMessages = messages
+        .filter((message) => message.role === 'agent')
+        .map((message) => message.text.trim())
+        .join(' ')
+        .trim();
+      const chunkText = textFromMessages.length > 0 ? textFromMessages : chunkMessage;
 
-      const formattedChunkMessage = this.formatChunkMessage(chunkMessage);
-
-      return [
-        `- Fuente ${index + 1} (score=${score})`,
-        `  - conversationId: ${conversationId}`,
-        `  - chunkId: ${chunkId}`,
-        `  - messageIds: ${messageIds.join(', ') || 'none'}`,
-        '  - chunkMessage:',
-        ...formattedChunkMessage.map((line) => `  . ${line}`)
-      ].join('\n');
+      return {
+        text: chunkText,
+        score: point.score,
+        messages
+      };
     });
-
-    return [
-      ...baseInstructions,
-      '',
-      `Prompt actual del usuario: ${prompt}`,
-      '',
-      'Evidencia recuperada desde Qdrant:',
-      ...evidenceLines
-    ].join('\n');
   }
 
-  private formatChunkMessage(chunkMessage: string): string[] {
-    const normalized = chunkMessage.replace(/\s+/g, ' ').trim();
-    if (!normalized) {
-      return ['(vacio)'];
+  private toRetrievedChunkMessage(
+    rawMessage: unknown
+  ): RetrievedChunk['messages'][number] | null {
+    if (!rawMessage || typeof rawMessage !== 'object') {
+      return null;
     }
 
-    const segments = normalized
-      .split(/(?=Cliente:|Agente:)/g)
-      .map((segment) => segment.trim())
-      .filter((segment) => segment.length > 0);
+    const text = (rawMessage as { text?: unknown }).text;
+    const direction = (rawMessage as { direction?: unknown }).direction;
 
-    return segments.length > 0 ? segments : [normalized];
+    if (typeof text !== 'string' || text.trim().length === 0) {
+      return null;
+    }
+
+    if (direction === 'outgoing') {
+      return {
+        role: 'agent',
+        text
+      };
+    }
+
+    if (direction === 'incoming') {
+      return {
+        role: 'customer',
+        text
+      };
+    }
+
+    return null;
+  }
+
+  private extractUniqueAgentResponses(evidences: QdrantPoint[]): string[] {
+    const uniqueResponses: string[] = [];
+    const seen = new Set<string>();
+
+    for (const evidence of evidences) {
+      const rawMessages = Array.isArray(evidence.payload?.rawMessages)
+        ? evidence.payload.rawMessages
+        : [];
+
+      for (const rawMessage of rawMessages) {
+        const parsedMessage = this.toRetrievedChunkMessage(rawMessage);
+        if (!parsedMessage || parsedMessage.role !== 'agent') {
+          continue;
+        }
+
+        const cleanedText = this.cleanAgentLabel(parsedMessage.text);
+        if (!cleanedText) {
+          continue;
+        }
+
+        const dedupKey = cleanedText.toLowerCase();
+        if (seen.has(dedupKey)) {
+          continue;
+        }
+
+        seen.add(dedupKey);
+        uniqueResponses.push(cleanedText);
+      }
+    }
+
+    return uniqueResponses;
+  }
+
+  private cleanAgentLabel(text: string): string {
+    return text
+      .replace(/\bagente\s*:\s*/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  private formatFlowLog(uniqueAgentResponses: string[], context: string): string {
+    const evidenceLines =
+      uniqueAgentResponses.length > 0
+        ? uniqueAgentResponses.map((response) => `- ${response}`)
+        : ['- (no agent responses retrieved)'];
+
+    return [
+      'Qdrant findings (unique agent responses):',
+      evidenceLines.join('\n'),
+      '----',
+      'Generated context:',
+      context,
+      '============'
+    ].join('\n');
   }
 }

@@ -4,6 +4,12 @@ import { TOKENS } from '../../ports/tokens';
 import { GenerateContextUseCase } from '../context-generation/generate-context.use-case';
 import type { StreamChatCompletionsCommand } from './stream-chat-completions.command';
 
+const SYSTEM_PROMPT_INSTRUCTIONS = [
+  'Use the following information to answer the user naturally.',
+  'Do not mention sources, conversations, or records.',
+  'Respond as if this knowledge is your own.'
+].join('\n');
+
 @Injectable()
 export class StreamChatCompletionsUseCase {
   constructor(
@@ -16,7 +22,7 @@ export class StreamChatCompletionsUseCase {
     const contextMessage = await this.generateContextUseCase.execute(command.messages);
     const systemMessage = {
       role: 'system' as const,
-      content: contextMessage
+      content: `${SYSTEM_PROMPT_INSTRUCTIONS}\n\n${contextMessage}`.trim()
     };
 
     return this.llmChatCompletionsPort.streamChatCompletion({

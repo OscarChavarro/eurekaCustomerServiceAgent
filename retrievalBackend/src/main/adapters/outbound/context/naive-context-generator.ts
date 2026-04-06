@@ -13,7 +13,7 @@ export class NaiveContextGenerator implements ContextGenerator {
 
   public async generateContext(messages: ContextGeneratorMessage[]): Promise<string> {
     void messages;
-    const context = this.serviceConfig.contextGeneratorConfig.naive.contextMessage;
+    const context = this.serviceConfig.contextGeneratorConfig.naive.contextMessage.join(' ').trim();
     this.logger.log(`Generated context (naive):\n${context}`);
     return context;
   }
