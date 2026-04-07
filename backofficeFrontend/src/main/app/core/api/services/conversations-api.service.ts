@@ -103,6 +103,11 @@ export type ChatCompletionsRequest = {
   maxTokens: number;
 };
 
+export type ChatCompletionResult = {
+  content: string;
+  usedContext: string[];
+};
+
 export type ChatCompletionsResponse = {
   choices?: Array<{
     message?: {
@@ -111,6 +116,8 @@ export type ChatCompletionsResponse = {
     text?: string;
     [key: string]: unknown;
   }>;
+  used_context_lines?: string[];
+  usedContextLines?: string[];
   [key: string]: unknown;
 };
 
@@ -186,7 +193,7 @@ export class ConversationsApiService {
     );
   }
 
-  public async completeChatCompletions(request: ChatCompletionsRequest): Promise<string> {
+  public async completeChatCompletions(request: ChatCompletionsRequest): Promise<ChatCompletionResult> {
     const response = await fetch(
       `${this.frontendSecretsService.retrievalBackendBaseUrl}/v1/chat/completions`,
       {
@@ -197,7 +204,8 @@ export class ConversationsApiService {
         body: JSON.stringify({
           messages: request.messages,
           hints: request.hints,
-          max_tokens: request.maxTokens
+          max_tokens: request.maxTokens,
+          show_used_context: true
         })
       }
     );
@@ -214,6 +222,14 @@ export class ConversationsApiService {
       throw new Error('Chat completion response does not include assistant content.');
     }
 
-    return content;
+    const rawUsedContext = payload.used_context_lines ?? payload.usedContextLines ?? [];
+    const usedContext = Array.isArray(rawUsedContext)
+      ? rawUsedContext.filter((line): line is string => typeof line === 'string')
+      : [];
+
+    return {
+      content,
+      usedContext
+    };
   }
 }

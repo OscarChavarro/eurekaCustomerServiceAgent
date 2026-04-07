@@ -197,7 +197,28 @@
 
 .workspace-panel
   min-height: 0
-  overflow: hidden
+  overflow: visible
+
+.global-used-context-popup
+  position: fixed
+  z-index: 100000
+  width: min(48rem, 72vw)
+  max-height: 16rem
+  overflow: auto
+  padding: 0.45rem 0.55rem
+  border: 1px solid #d8c879
+  border-radius: 0.45rem
+  background: #fff7bf
+  color: #141414
+  box-shadow: 0 8px 22px rgb(0 0 0 / 22%)
+  pointer-events: auto
+  overscroll-behavior: contain
+
+.global-used-context-popup p
+  margin: 0
+  font-size: 0.68rem
+  line-height: 1.2
+  color: #141414
 
 .chat-panels
   height: 100%

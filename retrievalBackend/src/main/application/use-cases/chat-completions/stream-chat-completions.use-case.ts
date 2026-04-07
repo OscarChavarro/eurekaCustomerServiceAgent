@@ -12,6 +12,11 @@ const SYSTEM_PROMPT_INSTRUCTIONS = [
   'Respond as if this knowledge is your own.'
 ].join('\n');
 
+export type StreamChatCompletionsResult = {
+  upstreamResponse: Response;
+  usedContextLines?: string[];
+};
+
 @Injectable()
 export class StreamChatCompletionsUseCase {
   constructor(
@@ -20,7 +25,7 @@ export class StreamChatCompletionsUseCase {
     private readonly generateContextUseCase: GenerateContextUseCase
   ) {}
 
-  public async execute(command: StreamChatCompletionsCommand): Promise<Response> {
+  public async execute(command: StreamChatCompletionsCommand): Promise<StreamChatCompletionsResult> {
     const contextMessage = await this.generateContextUseCase.execute({
       messages: command.messages
     });
@@ -29,10 +34,22 @@ export class StreamChatCompletionsUseCase {
       content: `${SYSTEM_PROMPT_INSTRUCTIONS}\n\n${contextMessage}`.trim()
     };
 
-    return this.llmChatCompletionsPort.streamChatCompletion({
+    const upstreamResponse = await this.llmChatCompletionsPort.streamChatCompletion({
       messages: [systemMessage, ...command.messages],
       maxTokens: command.maxTokens,
       stream: false
     });
+
+    return {
+      upstreamResponse,
+      usedContextLines: command.showUsedContext ? this.extractContextLines(contextMessage) : undefined
+    };
+  }
+
+  private extractContextLines(contextMessage: string): string[] {
+    return contextMessage
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
   }
 }

@@ -5,6 +5,8 @@
   background: var(--surface-soft)
   min-height: 0
   overflow: hidden
+  position: relative
+  z-index: 1
 
 .panel-header
   min-height: 3.8rem
@@ -159,7 +161,9 @@
   background-repeat: repeat
   background-size: 420px
   min-height: 0
-  overflow: hidden
+  overflow: visible
+  position: relative
+  z-index: 10
 
 .conversation-header
   background: #f0f2f5
@@ -190,4 +194,3 @@
 .stage-actions button.is-active
   background: #d0f2e8
   color: #006f54
-

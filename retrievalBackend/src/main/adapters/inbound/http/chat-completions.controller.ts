@@ -17,7 +17,7 @@ export class ChatCompletionsController {
   @Post('completions')
   public async streamChatCompletions(@Body() body: unknown): Promise<unknown> {
     const command = this.parseAndValidatePayload(body);
-    const upstreamResponse = await this.streamChatCompletionsUseCase.execute(command);
+    const { upstreamResponse, usedContextLines } = await this.streamChatCompletionsUseCase.execute(command);
     const upstreamRawBody = await upstreamResponse.text();
 
     if (!upstreamResponse.ok) {
@@ -32,7 +32,8 @@ export class ChatCompletionsController {
 
     try {
       const parsedPayload = JSON.parse(upstreamRawBody) as unknown;
-      return this.sanitizeLlmResponsePayload(parsedPayload);
+      const sanitizedPayload = this.sanitizeLlmResponsePayload(parsedPayload);
+      return this.attachUsedContextLinesIfRequested(sanitizedPayload, command.showUsedContext, usedContextLines);
     } catch {
       throw new BadGatewayException({
         message:
@@ -47,7 +48,7 @@ export class ChatCompletionsController {
       throw new BadRequestException(`${WRAPPER_RESTRICTION_USER_MESSAGE} Payload must be a JSON object.`);
     }
 
-    const allowedRootKeys = new Set(['messages', 'hints', 'max_tokens', 'maxTokens']);
+    const allowedRootKeys = new Set(['messages', 'hints', 'max_tokens', 'maxTokens', 'show_used_context', 'showUsedContext']);
     const receivedRootKeys = Object.keys(body);
     const forbiddenRootKeys = receivedRootKeys.filter((key) => !allowedRootKeys.has(key));
 
@@ -81,6 +82,12 @@ export class ChatCompletionsController {
         `${WRAPPER_RESTRICTION_USER_MESSAGE} "max_tokens" (or "maxTokens") must be a positive integer.`
       );
     }
+    const showUsedContextRaw = body.show_used_context ?? body.showUsedContext;
+    if (showUsedContextRaw !== undefined && typeof showUsedContextRaw !== 'boolean') {
+      throw new BadRequestException(
+        `${WRAPPER_RESTRICTION_USER_MESSAGE} "show_used_context" (or "showUsedContext") must be boolean when provided.`
+      );
+    }
 
     const hasAnyUserMessage = normalizedMessages.some((message) => message.role === 'user');
     if (!hasAnyUserMessage) {
@@ -92,7 +99,8 @@ export class ChatCompletionsController {
     return {
       messages: normalizedMessages,
       hints,
-      maxTokens: maxTokensRaw
+      maxTokens: maxTokensRaw,
+      showUsedContext: showUsedContextRaw ?? false
     };
   }
 
@@ -209,6 +217,21 @@ export class ChatCompletionsController {
     return {
       ...payload,
       choices: sanitizedChoices
+    };
+  }
+
+  private attachUsedContextLinesIfRequested(
+    payload: unknown,
+    showUsedContext: boolean,
+    usedContextLines: string[] | undefined
+  ): unknown {
+    if (!showUsedContext || !this.isRecord(payload)) {
+      return payload;
+    }
+
+    return {
+      ...payload,
+      used_context_lines: usedContextLines ?? []
     };
   }
 

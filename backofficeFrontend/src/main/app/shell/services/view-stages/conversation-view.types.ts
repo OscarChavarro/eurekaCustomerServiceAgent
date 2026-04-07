@@ -7,6 +7,7 @@ export type ChatMessage = {
   text: string;
   sentAt: string;
   isAiGenerated?: boolean;
+  usedContext?: string[];
   stageLabel?: string;
   backgroundColor?: string;
   status?: 'sent' | 'delivered' | 'read';

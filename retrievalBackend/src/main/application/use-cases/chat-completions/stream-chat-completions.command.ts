@@ -11,4 +11,5 @@ export type StreamChatCompletionsCommand = {
   messages: WrapperChatMessage[];
   hints?: WrapperChatHint;
   maxTokens: number;
+  showUsedContext: boolean;
 };

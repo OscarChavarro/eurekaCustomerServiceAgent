@@ -183,7 +183,7 @@ export class ChatConversationService {
     this.setAgentTyping(conversationId, true);
 
     try {
-      const completionText = await this.conversationsApiService.completeChatCompletions({
+      const completionResult = await this.conversationsApiService.completeChatCompletions({
         messages: conversationMessages,
         hints: {
           customerId: conversationId
@@ -191,13 +191,14 @@ export class ChatConversationService {
         maxTokens: 1000
       });
 
-      const finalAgentText = completionText.trim();
+      const finalAgentText = completionResult.content.trim();
 
       if (finalAgentText) {
         const agentMessage = this.createLocalRawMessage({
           direction: 'outgoing',
           text: finalAgentText,
-          isAiGenerated: true
+          isAiGenerated: true,
+          usedContext: completionResult.usedContext
         });
         this.pushLocalRawMessage(conversationId, agentMessage);
       }
@@ -670,6 +671,7 @@ export class ChatConversationService {
     text: string;
     id?: string;
     isAiGenerated?: boolean;
+    usedContext?: string[];
   }): ChatMessage {
     const nowIso = new Date().toISOString();
 
@@ -679,7 +681,8 @@ export class ChatConversationService {
       text: params.text,
       sentAt: formatSentAt(nowIso, this.i18nStateService.selectedLanguage()),
       stageLabel: 'raw',
-      isAiGenerated: params.isAiGenerated
+      isAiGenerated: params.isAiGenerated,
+      usedContext: params.usedContext
     };
   }
 

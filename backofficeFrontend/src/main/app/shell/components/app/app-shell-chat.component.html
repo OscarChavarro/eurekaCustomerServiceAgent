@@ -140,6 +140,18 @@
       {{ tooltip.text }}
     </div>
   }
+  @if (usedContextPopup(); as usedContext) {
+    <div
+      class="global-used-context-popup"
+      [style.left.px]="usedContext.left"
+      [style.top.px]="usedContext.top"
+      role="note"
+    >
+      @for (contextLine of usedContext.lines; track trackByTextSegment($index)) {
+        <p>{{ contextLine }}</p>
+      }
+    </div>
+  }
 
   <app-time-range-selector
     [open]="isTimeRangeSelectorOpen()"
@@ -312,7 +324,7 @@
               !isGroupEnd(currentConversation.messages, $index)
             "
             [style.--bubble-bg]="message.backgroundColor || null"
-            (mouseenter)="onMessageMouseEnter(currentConversation.id, message.id)"
+            (mouseenter)="onMessageMouseEnter($event, currentConversation.id, message)"
             (mouseleave)="onMessageMouseLeave(currentConversation.id, message.id)"
           >
             @if (shouldShowReactionControls(currentConversation.id, message)) {

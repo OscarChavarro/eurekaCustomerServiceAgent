@@ -59,6 +59,8 @@ export class AppShellChatComponent implements OnDestroy {
   private activeHoveredPhone: string | null = null;
   private readonly hoveredMessageKeyState = signal<string | null>(null);
   private readonly openReactionMenuKeyState = signal<string | null>(null);
+  private readonly openUsedContextMessageKeyState = signal<string | null>(null);
+  private readonly usedContextPopupState = signal<UsedContextPopupState | null>(null);
   private readonly hoveredConversationIdState = signal<string | null>(null);
   private readonly openConversationDeleteMenuIdState = signal<string | null>(null);
   private readonly operationModeState = signal<OperationMode>('chat');
@@ -87,6 +89,8 @@ export class AppShellChatComponent implements OnDestroy {
   protected readonly agentTyping = this.chatConversationService.agentTyping;
   protected readonly hoveredMessageKey = this.hoveredMessageKeyState.asReadonly();
   protected readonly openReactionMenuKey = this.openReactionMenuKeyState.asReadonly();
+  protected readonly openUsedContextMessageKey = this.openUsedContextMessageKeyState.asReadonly();
+  protected readonly usedContextPopup = this.usedContextPopupState.asReadonly();
   protected readonly hoveredConversationId = this.hoveredConversationIdState.asReadonly();
   protected readonly openConversationDeleteMenuId = this.openConversationDeleteMenuIdState.asReadonly();
   protected readonly languageDropdownOpen = this.languageDropdownOpenState.asReadonly();
@@ -509,6 +513,12 @@ export class AppShellChatComponent implements OnDestroy {
       return;
     }
 
+    if (event.key === 'Escape') {
+      this.openUsedContextMessageKeyState.set(null);
+      this.usedContextPopupState.set(null);
+      return;
+    }
+
     if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) {
       return;
     }
@@ -610,8 +620,18 @@ export class AppShellChatComponent implements OnDestroy {
     return `${conversationId}|${messageId}`;
   }
 
-  protected onMessageMouseEnter(conversationId: string, messageId: string): void {
-    this.hoveredMessageKeyState.set(this.messageKey(conversationId, messageId));
+  protected onMessageMouseEnter(
+    event: MouseEvent,
+    conversationId: string,
+    message: ChatMessage
+  ): void {
+    const key = this.messageKey(conversationId, message.id);
+    this.hoveredMessageKeyState.set(key);
+
+    if (this.hasUsedContext(message)) {
+      this.openUsedContextMessageKeyState.set(key);
+      this.openUsedContextPopup(event, message.usedContext ?? []);
+    }
   }
 
   protected onMessageMouseLeave(conversationId: string, messageId: string): void {
@@ -624,6 +644,37 @@ export class AppShellChatComponent implements OnDestroy {
     if (this.openReactionMenuKeyState() === key) {
       this.openReactionMenuKeyState.set(null);
     }
+  }
+
+  private hasUsedContext(message: ChatMessage): boolean {
+    return Array.isArray(message.usedContext) && message.usedContext.length > 0;
+  }
+
+  private openUsedContextPopup(event: MouseEvent, usedContext: string[]): void {
+    const anchor = event.currentTarget as HTMLElement | null;
+    if (!anchor) {
+      return;
+    }
+
+    const anchorRect = anchor.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const popupWidth = Math.min(760, Math.round(viewportWidth * 0.72));
+    const popupMaxHeight = 320;
+    const margin = 10;
+
+    const fitsRight = anchorRect.right + margin + popupWidth <= viewportWidth - margin;
+    const preferredLeft = fitsRight
+      ? anchorRect.right + margin
+      : anchorRect.left - popupWidth - margin;
+    const left = Math.max(margin, Math.min(preferredLeft, viewportWidth - popupWidth - margin));
+    const top = Math.max(margin, Math.min(anchorRect.top, viewportHeight - popupMaxHeight - margin));
+
+    this.usedContextPopupState.set({
+      lines: usedContext,
+      left,
+      top
+    });
   }
 
   protected shouldShowReactionControls(
@@ -983,6 +1034,12 @@ type PhoneTooltipState = {
   countryCode: string | null;
   x: number;
   y: number;
+};
+
+type UsedContextPopupState = {
+  lines: string[];
+  left: number;
+  top: number;
 };
 
 function splitTextIntoSegments(text: string): TextSegment[] {
