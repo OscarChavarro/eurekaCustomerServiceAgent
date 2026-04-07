@@ -1,0 +1,27 @@
+meta {
+  name: Post Nearest Embeddings
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/nearestEmbeddings
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "block": "venden botellas de vino?",
+    "numberOfPoints": 5
+  }
+}
+
+vars:pre-request {
+  baseUrl: http://localhost:3668
+}
+

@@ -14,6 +14,7 @@ import { take } from 'rxjs/operators';
 
 import {
   ConversationsApiService,
+  type NearestEmbeddingsPoint,
   type MessageRatingValue,
   type PhonePrefixLookupResponse
 } from '../../../core/api/services/conversations-api.service';
@@ -63,6 +64,10 @@ export class AppShellChatComponent implements OnDestroy {
   private readonly usedContextPopupState = signal<UsedContextPopupState | null>(null);
   private readonly hoveredConversationIdState = signal<string | null>(null);
   private readonly openConversationDeleteMenuIdState = signal<string | null>(null);
+  private readonly embedNumberOfPointsState = signal<number>(5);
+  private readonly embedSelectedBlockState = signal<string | null>(null);
+  private readonly embedNearestBlocksState = signal<NearestEmbeddingsPoint[]>([]);
+  private readonly embedNearestLoadingState = signal<boolean>(false);
   private readonly operationModeState = signal<OperationMode>('chat');
   private readonly chatHiddenInTimeModeState = signal<boolean>(false);
   private readonly timeRangeSelectorOpenState = signal<boolean>(false);
@@ -95,6 +100,10 @@ export class AppShellChatComponent implements OnDestroy {
   protected readonly openConversationDeleteMenuId = this.openConversationDeleteMenuIdState.asReadonly();
   protected readonly languageDropdownOpen = this.languageDropdownOpenState.asReadonly();
   protected readonly operationMode = this.operationModeState.asReadonly();
+  protected readonly isEmbedMode = computed(() => this.viewMode() === 'embed');
+  protected readonly embedNumberOfPoints = this.embedNumberOfPointsState.asReadonly();
+  protected readonly embedNearestBlocks = this.embedNearestBlocksState.asReadonly();
+  protected readonly embedNearestLoading = this.embedNearestLoadingState.asReadonly();
   protected readonly isTimeMode = computed(() => this.operationModeState() === 'time');
   protected readonly isTimeModeChatHidden = this.chatHiddenInTimeModeState.asReadonly();
   protected readonly isTimeRangeSelectorOpen = this.timeRangeSelectorOpenState.asReadonly();
@@ -177,6 +186,17 @@ export class AppShellChatComponent implements OnDestroy {
       if (firstVisibleConversation) {
         this.chatConversationService.setActiveConversation(firstVisibleConversation.id);
       }
+    },
+    { allowSignalWrites: true }
+  );
+
+  private readonly resetEmbedDebugStateEffectRef = effect(
+    () => {
+      this.activeConversationId();
+      this.viewMode();
+      this.embedSelectedBlockState.set(null);
+      this.embedNearestBlocksState.set([]);
+      this.embedNearestLoadingState.set(false);
     },
     { allowSignalWrites: true }
   );
@@ -328,6 +348,10 @@ export class AppShellChatComponent implements OnDestroy {
 
   protected typingLabel(): string {
     return this.t(I18N_KEYS.shell.TYPING_LABEL);
+  }
+
+  protected embedSelectBlockHint(): string {
+    return this.t(I18N_KEYS.shell.EMBED_SELECT_BLOCK_HINT);
   }
 
   protected stageLabel(stageLabel: string | undefined): string {
@@ -644,6 +668,94 @@ export class AppShellChatComponent implements OnDestroy {
     if (this.openReactionMenuKeyState() === key) {
       this.openReactionMenuKeyState.set(null);
     }
+  }
+
+  protected onEmbedNumberOfPointsInput(rawValue: string): void {
+    const parsed = Number.parseInt(rawValue, 10);
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+      return;
+    }
+
+    const current = this.embedNumberOfPointsState();
+    if (current === parsed) {
+      return;
+    }
+
+    this.embedNumberOfPointsState.set(parsed);
+
+    const selectedBlock = this.embedSelectedBlockState();
+    if (selectedBlock) {
+      this.fetchNearestEmbeddings(selectedBlock);
+    }
+  }
+
+  protected onEmbedSourceBlockClick(message: ChatMessage): void {
+    const block = message.text.trim();
+    if (!block) {
+      return;
+    }
+
+    this.embedSelectedBlockState.set(block);
+    this.fetchNearestEmbeddings(block);
+  }
+
+  private fetchNearestEmbeddings(block: string): void {
+    this.embedNearestLoadingState.set(true);
+    this.embedNearestBlocksState.set([]);
+
+    void this.conversationsApiService
+      .nearestEmbeddings({
+        block,
+        numberOfPoints: this.embedNumberOfPointsState()
+      })
+      .then((response) => {
+        this.embedNearestBlocksState.set(response.points);
+      })
+      .catch((error: unknown) => {
+        console.error('Unable to fetch nearest embeddings', error);
+        this.embedNearestBlocksState.set([]);
+      })
+      .finally(() => {
+        this.embedNearestLoadingState.set(false);
+      });
+  }
+
+  protected embedNearestConversationId(point: NearestEmbeddingsPoint): string {
+    const conversationId = point.payload['conversationId'];
+    const normalizedConversationId =
+      typeof conversationId === 'string' && conversationId.trim().length > 0
+      ? conversationId.trim()
+      : 'unknown-conversation';
+    const normalizedScore =
+      typeof point.score === 'number' && Number.isFinite(point.score)
+        ? point.score.toFixed(3)
+        : 'n/a';
+
+    return `${normalizedConversationId} (${normalizedScore})`;
+  }
+
+  protected embedNearestText(point: NearestEmbeddingsPoint): string {
+    const chunkMessage = point.payload['chunkMessage'];
+    if (typeof chunkMessage === 'string' && chunkMessage.trim().length > 0) {
+      return chunkMessage.trim();
+    }
+
+    const rawMessages = point.payload['rawMessages'];
+    if (Array.isArray(rawMessages) && rawMessages.length > 0) {
+      return rawMessages
+        .map((item) => {
+          if (!item || typeof item !== 'object') {
+            return '';
+          }
+
+          const text = (item as { text?: unknown }).text;
+          return typeof text === 'string' ? text.trim() : '';
+        })
+        .filter((text) => text.length > 0)
+        .join('\n');
+    }
+
+    return '';
   }
 
   private hasUsedContext(message: ChatMessage): boolean {

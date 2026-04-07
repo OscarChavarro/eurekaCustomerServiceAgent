@@ -310,193 +310,241 @@
       </header>
 
       <div class="messages-area" #messagesArea>
-        @for (message of currentConversation.messages; track trackByMessage($index, message)) {
-          <article
-            class="message-bubble"
-            [class.incoming]="message.direction === 'incoming'"
-            [class.outgoing]="message.direction === 'outgoing'"
-            [class.system]="message.direction === 'system'"
-            [class.has-rating]="!!selectedReaction(currentConversation.id, message)"
-            [class.group-start]="isGroupStart(currentConversation.messages, $index)"
-            [class.group-end]="isGroupEnd(currentConversation.messages, $index)"
-            [class.group-middle]="
-              !isGroupStart(currentConversation.messages, $index) &&
-              !isGroupEnd(currentConversation.messages, $index)
-            "
-            [style.--bubble-bg]="message.backgroundColor || null"
-            (mouseenter)="onMessageMouseEnter($event, currentConversation.id, message)"
-            (mouseleave)="onMessageMouseLeave(currentConversation.id, message.id)"
-          >
-            @if (shouldShowReactionControls(currentConversation.id, message)) {
-              <div class="message-hover-tools">
+        @if (isEmbedMode()) {
+          <div class="embed-debug-layout">
+            <section class="embed-debug-left">
+              @for (message of currentConversation.messages; track trackByMessage($index, message)) {
                 <button
                   type="button"
-                  class="message-hover-icon left"
-                  [attr.aria-label]="reactionsAriaLabel()"
+                  class="message-bubble system embed-source-block"
+                  (click)="onEmbedSourceBlockClick(message)"
                 >
-                  🙂
+                  <p>{{ message.text }}</p>
+                  <footer>
+                    <time>{{ message.sentAt }}</time>
+                    @if (message.stageLabel) {
+                      <span class="message-stage">{{ stageLabel(message.stageLabel) }}</span>
+                    }
+                  </footer>
                 </button>
-                <div class="reaction-menu-wrapper">
+              }
+            </section>
+
+            <section class="embed-debug-right">
+              <p class="embed-debug-hint">{{ embedSelectBlockHint() }}</p>
+              <label class="embed-debug-controls">
+                <span>N</span>
+                <input
+                  type="number"
+                  min="1"
+                  [value]="embedNumberOfPoints()"
+                  (input)="onEmbedNumberOfPointsInput($any($event.target).value)"
+                />
+              </label>
+
+              @if (embedNearestLoading()) {
+                <article class="message-bubble system">
+                  <p>{{ typingLabel() }}</p>
+                </article>
+              } @else {
+                @for (point of embedNearestBlocks(); track trackByTextSegment($index)) {
+                  <article class="message-bubble system embed-result-block">
+                    <p class="embed-result-title">{{ embedNearestConversationId(point) }}</p>
+                    <p>{{ embedNearestText(point) }}</p>
+                  </article>
+                }
+              }
+            </section>
+          </div>
+        } @else {
+          @for (message of currentConversation.messages; track trackByMessage($index, message)) {
+            <article
+              class="message-bubble"
+              [class.incoming]="message.direction === 'incoming'"
+              [class.outgoing]="message.direction === 'outgoing'"
+              [class.system]="message.direction === 'system'"
+              [class.has-rating]="!!selectedReaction(currentConversation.id, message)"
+              [class.group-start]="isGroupStart(currentConversation.messages, $index)"
+              [class.group-end]="isGroupEnd(currentConversation.messages, $index)"
+              [class.group-middle]="
+                !isGroupStart(currentConversation.messages, $index) &&
+                !isGroupEnd(currentConversation.messages, $index)
+              "
+              [style.--bubble-bg]="message.backgroundColor || null"
+              (mouseenter)="onMessageMouseEnter($event, currentConversation.id, message)"
+              (mouseleave)="onMessageMouseLeave(currentConversation.id, message.id)"
+            >
+              @if (shouldShowReactionControls(currentConversation.id, message)) {
+                <div class="message-hover-tools">
                   <button
                     type="button"
-                    class="message-hover-icon right"
-                    [attr.aria-label]="openReactionsMenuAriaLabel()"
-                    (click)="toggleReactionMenu($event, currentConversation.id, message.id)"
+                    class="message-hover-icon left"
+                    [attr.aria-label]="reactionsAriaLabel()"
                   >
-                    <span class="material-symbols-outlined">expand_more</span>
+                    🙂
                   </button>
-                  @if (openReactionMenuKey() === messageKey(currentConversation.id, message.id)) {
-                    <div class="reaction-menu">
-                      @if (canRateAsWarning(message)) {
+                  <div class="reaction-menu-wrapper">
+                    <button
+                      type="button"
+                      class="message-hover-icon right"
+                      [attr.aria-label]="openReactionsMenuAriaLabel()"
+                      (click)="toggleReactionMenu($event, currentConversation.id, message.id)"
+                    >
+                      <span class="material-symbols-outlined">expand_more</span>
+                    </button>
+                    @if (openReactionMenuKey() === messageKey(currentConversation.id, message.id)) {
+                      <div class="reaction-menu">
+                        @if (canRateAsWarning(message)) {
+                          <button
+                            type="button"
+                            class="reaction-item is-warning"
+                            (click)="selectMessageReaction($event, currentConversation.id, message, 'warning')"
+                          >
+                            ⚠️
+                          </button>
+                        }
+                        @if (canRateAsGoodOrBad(message)) {
+                          <button
+                            type="button"
+                            class="reaction-item is-positive"
+                            (click)="selectMessageReaction($event, currentConversation.id, message, 'good')"
+                          >
+                            ✅
+                          </button>
+                          <button
+                            type="button"
+                            class="reaction-item is-negative"
+                            (click)="selectMessageReaction($event, currentConversation.id, message, 'bad')"
+                          >
+                            ❌
+                          </button>
+                        }
                         <button
                           type="button"
-                          class="reaction-item is-warning"
-                          (click)="selectMessageReaction($event, currentConversation.id, message, 'warning')"
+                          class="reaction-item is-clear"
+                          (click)="selectMessageReaction($event, currentConversation.id, message, 'cleared')"
                         >
-                          ⚠️
+                          ✖
                         </button>
-                      }
-                      @if (canRateAsGoodOrBad(message)) {
-                        <button
-                          type="button"
-                          class="reaction-item is-positive"
-                          (click)="selectMessageReaction($event, currentConversation.id, message, 'good')"
-                        >
-                          ✅
-                        </button>
-                        <button
-                          type="button"
-                          class="reaction-item is-negative"
-                          (click)="selectMessageReaction($event, currentConversation.id, message, 'bad')"
-                        >
-                          ❌
-                        </button>
-                      }
-                      <button
-                        type="button"
-                        class="reaction-item is-clear"
-                        (click)="selectMessageReaction($event, currentConversation.id, message, 'cleared')"
-                      >
-                        ✖
-                      </button>
-                    </div>
-                  }
+                      </div>
+                    }
+                  </div>
                 </div>
-              </div>
-            }
-            @if (message.imageUrl) {
-              <img
-                class="message-image"
-                [src]="message.imageUrl"
-                alt="attachment image"
-                loading="lazy"
-              />
-            }
-            @if (message.showRawStrikethrough) {
-              <p class="message-text-raw">
-                @for (segment of getTextSegments(message.rawText); track trackByTextSegment($index)) {
-                  @if (segment.type === 'link') {
-                    <a
-                      class="message-link"
-                      [href]="segment.href"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      {{ segment.value }}
-                    </a>
-                  } @else if (segment.type === 'phone') {
-                    <span
-                      class="phone-token"
-                      (mouseenter)="onPhoneMouseEnter($event, segment.value)"
-                      (mousemove)="onPhoneMouseMove($event, segment.value)"
-                      (mouseleave)="onPhoneMouseLeave(segment.value)"
-                    >
-                      {{ segment.value }}
-                    </span>
-                  } @else {
-                    <span>{{ segment.value }}</span>
+              }
+              @if (message.imageUrl) {
+                <img
+                  class="message-image"
+                  [src]="message.imageUrl"
+                  alt="attachment image"
+                  loading="lazy"
+                />
+              }
+              @if (message.showRawStrikethrough) {
+                <p class="message-text-raw">
+                  @for (segment of getTextSegments(message.rawText); track trackByTextSegment($index)) {
+                    @if (segment.type === 'link') {
+                      <a
+                        class="message-link"
+                        [href]="segment.href"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        {{ segment.value }}
+                      </a>
+                    } @else if (segment.type === 'phone') {
+                      <span
+                        class="phone-token"
+                        (mouseenter)="onPhoneMouseEnter($event, segment.value)"
+                        (mousemove)="onPhoneMouseMove($event, segment.value)"
+                        (mouseleave)="onPhoneMouseLeave(segment.value)"
+                      >
+                        {{ segment.value }}
+                      </span>
+                    } @else {
+                      <span>{{ segment.value }}</span>
+                    }
                   }
-                }
-              </p>
-              <p class="message-text-clean">
-                @for (segment of getTextSegments(message.text); track trackByTextSegment($index)) {
-                  @if (segment.type === 'link') {
-                    <a
-                      class="message-link"
-                      [href]="segment.href"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      {{ segment.value }}
-                    </a>
-                  } @else if (segment.type === 'phone') {
-                    <span
-                      class="phone-token"
-                      (mouseenter)="onPhoneMouseEnter($event, segment.value)"
-                      (mousemove)="onPhoneMouseMove($event, segment.value)"
-                      (mouseleave)="onPhoneMouseLeave(segment.value)"
-                    >
-                      {{ segment.value }}
-                    </span>
-                  } @else {
-                    <span>{{ segment.value }}</span>
+                </p>
+                <p class="message-text-clean">
+                  @for (segment of getTextSegments(message.text); track trackByTextSegment($index)) {
+                    @if (segment.type === 'link') {
+                      <a
+                        class="message-link"
+                        [href]="segment.href"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        {{ segment.value }}
+                      </a>
+                    } @else if (segment.type === 'phone') {
+                      <span
+                        class="phone-token"
+                        (mouseenter)="onPhoneMouseEnter($event, segment.value)"
+                        (mousemove)="onPhoneMouseMove($event, segment.value)"
+                        (mouseleave)="onPhoneMouseLeave(segment.value)"
+                      >
+                        {{ segment.value }}
+                      </span>
+                    } @else {
+                      <span>{{ segment.value }}</span>
+                    }
                   }
-                }
-              </p>
-            } @else {
-              <p>
-                @for (segment of getTextSegments(message.text); track trackByTextSegment($index)) {
-                  @if (segment.type === 'link') {
-                    <a
-                      class="message-link"
-                      [href]="segment.href"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      {{ segment.value }}
-                    </a>
-                  } @else if (segment.type === 'phone') {
-                    <span
-                      class="phone-token"
-                      (mouseenter)="onPhoneMouseEnter($event, segment.value)"
-                      (mousemove)="onPhoneMouseMove($event, segment.value)"
-                      (mouseleave)="onPhoneMouseLeave(segment.value)"
-                    >
-                      {{ segment.value }}
-                    </span>
-                  } @else {
-                    <span>{{ segment.value }}</span>
+                </p>
+              } @else {
+                <p>
+                  @for (segment of getTextSegments(message.text); track trackByTextSegment($index)) {
+                    @if (segment.type === 'link') {
+                      <a
+                        class="message-link"
+                        [href]="segment.href"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        {{ segment.value }}
+                      </a>
+                    } @else if (segment.type === 'phone') {
+                      <span
+                        class="phone-token"
+                        (mouseenter)="onPhoneMouseEnter($event, segment.value)"
+                        (mousemove)="onPhoneMouseMove($event, segment.value)"
+                        (mouseleave)="onPhoneMouseLeave(segment.value)"
+                      >
+                        {{ segment.value }}
+                      </span>
+                    } @else {
+                      <span>{{ segment.value }}</span>
+                    }
                   }
+                </p>
+              }
+              <footer>
+                @if (message.isAiGenerated) {
+                  <span class="message-ai-label">{{ aiLabel() }}</span>
                 }
-              </p>
-            }
-            <footer>
-              @if (message.isAiGenerated) {
-                <span class="message-ai-label">{{ aiLabel() }}</span>
-              }
-              @if (selectedReaction(currentConversation.id, message); as reaction) {
-                <span class="message-reaction">{{ reaction }}</span>
-              }
-              <time>{{ message.sentAt }}</time>
-              @if (message.stageLabel) {
-                <span class="message-stage">{{ stageLabel(message.stageLabel) }}</span>
-              }
-              @if (message.direction === 'outgoing' && message.status) {
-                <span class="message-status">{{ message.status }}</span>
-              }
-            </footer>
-          </article>
-        }
+                @if (selectedReaction(currentConversation.id, message); as reaction) {
+                  <span class="message-reaction">{{ reaction }}</span>
+                }
+                <time>{{ message.sentAt }}</time>
+                @if (message.stageLabel) {
+                  <span class="message-stage">{{ stageLabel(message.stageLabel) }}</span>
+                }
+                @if (message.direction === 'outgoing' && message.status) {
+                  <span class="message-status">{{ message.status }}</span>
+                }
+              </footer>
+            </article>
+          }
 
-        @if (isAgentTyping(currentConversation.id)) {
-          <article class="message-bubble outgoing typing-indicator-bubble">
-            <p class="typing-indicator-text">{{ typingLabel() }}</p>
-            <span class="typing-indicator-dots" aria-hidden="true">
-              <span></span>
-              <span></span>
-              <span></span>
-            </span>
-          </article>
+          @if (isAgentTyping(currentConversation.id)) {
+            <article class="message-bubble outgoing typing-indicator-bubble">
+              <p class="typing-indicator-text">{{ typingLabel() }}</p>
+              <span class="typing-indicator-dots" aria-hidden="true">
+                <span></span>
+                <span></span>
+                <span></span>
+              </span>
+            </article>
+          }
         }
       </div>
 

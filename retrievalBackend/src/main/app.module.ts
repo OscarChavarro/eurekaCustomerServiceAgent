@@ -1,11 +1,14 @@
 import { Module } from '@nestjs/common';
 import { ChatCompletionsController } from './adapters/inbound/http/chat-completions.controller';
+import { NearestEmbeddingsController } from './adapters/inbound/http/nearest-embeddings.controller';
 import { NaiveContextGenerator } from './adapters/outbound/context/naive-context-generator';
 import { VectorSearchContextGenerator } from './adapters/outbound/context/vector-search-context-generator';
+import { NearestEmbeddingsConfigAdapter } from './adapters/outbound/config/nearest-embeddings-config.adapter';
 import { FetchLlmChatCompletionsAdapter } from './adapters/outbound/http/fetch-llm-chat-completions.adapter';
 import { TOKENS } from './application/ports/tokens';
 import { StreamChatCompletionsUseCase } from './application/use-cases/chat-completions/stream-chat-completions.use-case';
 import { GenerateContextUseCase } from './application/use-cases/context-generation/generate-context.use-case';
+import { FindNearestEmbeddingsUseCase } from './application/use-cases/nearest-embeddings/find-nearest-embeddings.use-case';
 import type { ContextGenerator } from './application/ports/outbound/context/context-generator.port';
 import { StartupValidationOrchestrator } from './infrastructure/bootstrap/startup-validation.orchestrator';
 import { BgeConnectivityStartupValidator } from './infrastructure/bootstrap/validators/bge-connectivity-startup.validator';
@@ -15,7 +18,7 @@ import { SettingsConfig } from './infrastructure/config/settings/settings.config
 import { HeuristicContextBuilderService } from '../application/services/context-builder.service';
 
 @Module({
-  controllers: [ChatCompletionsController],
+  controllers: [ChatCompletionsController, NearestEmbeddingsController],
   providers: [
     SettingsConfig,
     SecretsConfig,
@@ -24,9 +27,11 @@ import { HeuristicContextBuilderService } from '../application/services/context-
     StartupValidationOrchestrator,
     NaiveContextGenerator,
     VectorSearchContextGenerator,
+    NearestEmbeddingsConfigAdapter,
     HeuristicContextBuilderService,
     GenerateContextUseCase,
     StreamChatCompletionsUseCase,
+    FindNearestEmbeddingsUseCase,
     {
       provide: TOKENS.ContextGenerator,
       inject: [ServiceConfig, NaiveContextGenerator, VectorSearchContextGenerator],
@@ -43,6 +48,10 @@ import { HeuristicContextBuilderService } from '../application/services/context-
     {
       provide: TOKENS.LlmChatCompletionsPort,
       useClass: FetchLlmChatCompletionsAdapter
+    },
+    {
+      provide: TOKENS.NearestEmbeddingsConfigPort,
+      useClass: NearestEmbeddingsConfigAdapter
     }
   ]
 })

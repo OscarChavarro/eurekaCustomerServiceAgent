@@ -135,6 +135,21 @@ export type DeleteConversationResponse = {
   conversationDeleted: boolean;
 };
 
+export type NearestEmbeddingsRequest = {
+  block: string;
+  numberOfPoints: number;
+};
+
+export type NearestEmbeddingsPoint = {
+  payload: Record<string, unknown>;
+  vector: number[];
+  score: number | null;
+};
+
+export type NearestEmbeddingsResponse = {
+  points: NearestEmbeddingsPoint[];
+};
+
 @Injectable({ providedIn: 'root' })
 export class ConversationsApiService {
   private readonly httpClient = inject(HttpClient);
@@ -230,6 +245,47 @@ export class ConversationsApiService {
     return {
       content,
       usedContext
+    };
+  }
+
+  public async nearestEmbeddings(
+    request: NearestEmbeddingsRequest
+  ): Promise<NearestEmbeddingsResponse> {
+    const response = await fetch(
+      `${this.frontendSecretsService.retrievalBackendBaseUrl}/nearestEmbeddings`,
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json'
+        },
+        body: JSON.stringify({
+          block: request.block,
+          numberOfPoints: request.numberOfPoints
+        })
+      }
+    );
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new Error(errorBody || `Nearest embeddings failed with status ${response.status}`);
+    }
+
+    const payload = (await response.json()) as NearestEmbeddingsResponse;
+    if (!Array.isArray(payload.points)) {
+      return { points: [] };
+    }
+
+    return {
+      points: payload.points.map((point) => ({
+        payload:
+          point.payload && typeof point.payload === 'object' && !Array.isArray(point.payload)
+            ? point.payload
+            : {},
+        vector: Array.isArray(point.vector)
+          ? point.vector.filter((value): value is number => typeof value === 'number')
+          : [],
+        score: typeof point.score === 'number' ? point.score : null
+      }))
     };
   }
 }

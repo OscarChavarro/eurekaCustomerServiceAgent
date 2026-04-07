@@ -7,6 +7,68 @@
   gap: 0.45rem
   padding: 1.15rem 3rem
 
+.embed-debug-layout
+  min-height: 0
+  height: 100%
+  display: grid
+  grid-template-columns: 1fr 1fr
+  gap: 0.9rem
+
+.embed-debug-left,
+.embed-debug-right
+  min-height: 0
+  overflow: auto
+  display: flex
+  flex-direction: column
+  gap: 0.55rem
+  padding-right: 0.2rem
+
+.embed-source-block
+  width: 100%
+  border: 0
+  cursor: pointer
+  text-align: left
+  transition: transform 0.12s ease, box-shadow 0.12s ease
+
+.embed-source-block:hover
+  transform: translateY(-1px)
+  box-shadow: 0 3px 10px rgb(0 0 0 / 12%)
+
+.embed-debug-hint
+  margin: 0
+  font-size: 0.82rem
+  color: #2f3f4a
+  background: #f7f0c7
+  border: 1px solid #eadf9d
+  border-radius: 0.5rem
+  padding: 0.55rem 0.65rem
+
+.embed-debug-controls
+  display: inline-flex
+  align-items: center
+  gap: 0.45rem
+  font-size: 0.78rem
+  color: #32454f
+  font-weight: 600
+
+.embed-debug-controls input
+  width: 5.5rem
+  border: 1px solid #c7d3dc
+  border-radius: 0.45rem
+  padding: 0.3rem 0.45rem
+  font-size: 0.82rem
+  background: #fff
+
+.embed-result-block
+  width: 100%
+  max-width: 100%
+
+.embed-result-title
+  font-weight: 700
+  font-size: 0.78rem
+  margin-bottom: 0.3rem
+  color: #1e2f39
+
 .message-bubble
   --bubble-bg: var(--bubble-incoming)
 
@@ -186,6 +248,9 @@
 
   .messages-area
     padding: 1rem
+
+  .embed-debug-layout
+    grid-template-columns: 1fr
 
 @media (max-width: 768px)
   .chat-workspace

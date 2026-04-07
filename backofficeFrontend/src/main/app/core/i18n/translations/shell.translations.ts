@@ -164,5 +164,9 @@ export const SHELL_TRANSLATIONS = {
   STAGE_EMBED: {
     en: 'Embed',
     es: 'Encaje'
+  },
+  EMBED_SELECT_BLOCK_HINT: {
+    en: 'Select one of the blocks on the left and the N nearest messages will appear here.',
+    es: 'Selecciona alguno de los bloques a la izquierda y acá aparecerán los N mensajes más cercanos.'
   }
 } as const satisfies Record<string, TranslationValue>;
