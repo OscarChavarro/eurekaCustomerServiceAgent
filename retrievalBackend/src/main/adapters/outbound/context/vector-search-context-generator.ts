@@ -29,10 +29,18 @@ interface QdrantSearchResponse {
   result?: QdrantPoint[];
 }
 
+interface PriceCatalogItem {
+  name: string;
+  priceEur: number;
+  numberOfColors: number;
+  colorsInOrder: boolean;
+  imageUrls: string[];
+}
+
 @Injectable()
 export class VectorSearchContextGenerator implements ContextGenerator {
   private static readonly EXPECTED_BGE_VECTOR_DIMENSIONS = 1024;
-  private static readonly PRICE_CATALOG_RELATIVE_PATH = 'retrievalBackend/etc/_eureka/priceCatalog.csv';
+  private static readonly PRICE_CATALOG_RELATIVE_PATH = 'retrievalBackend/etc/_eureka/priceCatalog.json';
   private readonly logger = new Logger(VectorSearchContextGenerator.name);
 
   constructor(private readonly serviceConfig: ServiceConfig) {}
@@ -263,37 +271,19 @@ export class VectorSearchContextGenerator implements ContextGenerator {
   }
 
   private loadProductCatalogHints(): string[] {
-    const csvPath = this.resolvePriceCatalogPath();
-    const csvContent = readFileSync(csvPath, 'utf-8').trim();
-    const lines = csvContent.split(/\r?\n/).filter((line) => line.trim().length > 0);
+    const jsonPath = this.resolvePriceCatalogPath();
+    const parsed = this.parsePriceCatalogJson(readFileSync(jsonPath, 'utf-8'));
 
-    if (lines.length <= 1) {
-      return ['No hay productos cargados en el catálogo.'];
-    }
-
-    const headerLine = lines[0];
-    if (!headerLine) {
-      return ['No hay productos cargados en el catálogo.'];
-    }
-
-    const headers = this.parseCsvLine(headerLine).map((header) => header.trim());
-    const nameIndex = headers.indexOf('name');
-    const priceIndex = headers.indexOf('price_eur');
-    const colorsIndex = headers.indexOf('number_of_colors');
-    const orderIndex = headers.indexOf('colors_in_order');
-
-    if (nameIndex < 0 || priceIndex < 0 || colorsIndex < 0 || orderIndex < 0) {
+    if (parsed.length === 0) {
       return ['No fue posible interpretar el catálogo de productos.'];
     }
 
-    return lines.slice(1).map((line) => {
-      const values = this.parseCsvLine(line);
-      const name = values[nameIndex]?.trim() ?? 'Producto sin nombre';
-      const price = values[priceIndex]?.trim() ?? 'N/D';
-      const numberOfColors = values[colorsIndex]?.trim() ?? 'N/D';
-      const colorsInOrder = values[orderIndex]?.trim() ?? 'N/D';
+    return parsed.map((item) => {
+      const imageUrlsText = item.imageUrls.length > 0
+        ? item.imageUrls.join(', ')
+        : 'sin imagen disponible';
 
-      return `${name} (EUR ${price}, colores=${numberOfColors}, colors_in_order=${colorsInOrder})`;
+      return `${item.name} (EUR ${item.priceEur.toFixed(2)}, colores=${item.numberOfColors}, colorsInOrder=${item.colorsInOrder}, imageUrls=[${imageUrlsText}])`;
     });
   }
 
@@ -311,35 +301,67 @@ export class VectorSearchContextGenerator implements ContextGenerator {
     throw new Error(`Price catalog file not found: ${directPath} (or ${monorepoPath}).`);
   }
 
-  private parseCsvLine(line: string): string[] {
-    const values: string[] = [];
-    let current = '';
-    let insideQuotes = false;
-
-    for (let index = 0; index < line.length; index += 1) {
-      const character = line[index];
-
-      if (character === '"') {
-        if (insideQuotes && line[index + 1] === '"') {
-          current += '"';
-          index += 1;
-          continue;
-        }
-
-        insideQuotes = !insideQuotes;
-        continue;
-      }
-
-      if (character === ',' && !insideQuotes) {
-        values.push(current);
-        current = '';
-        continue;
-      }
-
-      current += character;
+  private parsePriceCatalogJson(rawJson: string): PriceCatalogItem[] {
+    let payload: unknown;
+    try {
+      payload = JSON.parse(rawJson) as unknown;
+    } catch {
+      return [];
     }
 
-    values.push(current);
-    return values;
+    if (!Array.isArray(payload)) {
+      return [];
+    }
+
+    const normalized: PriceCatalogItem[] = [];
+
+    for (const item of payload) {
+      if (!item || typeof item !== 'object') {
+        continue;
+      }
+
+      const name = (item as { name?: unknown }).name;
+      const priceEur = (item as { priceEur?: unknown }).priceEur;
+      const numberOfColorsRaw = (item as { numberOfColors?: unknown }).numberOfColors;
+      const colorsInOrder = (item as { colorsInOrder?: unknown }).colorsInOrder;
+      const imageUrls = (item as { imageUrls?: unknown }).imageUrls;
+
+      if (typeof name !== 'string' || name.trim().length === 0) {
+        continue;
+      }
+
+      if (typeof priceEur !== 'number' || !Number.isFinite(priceEur)) {
+        continue;
+      }
+
+      if (typeof numberOfColorsRaw !== 'number' || !Number.isInteger(numberOfColorsRaw) || numberOfColorsRaw < 0) {
+        continue;
+      }
+
+      if (typeof colorsInOrder !== 'boolean') {
+        continue;
+      }
+
+      if (!Array.isArray(imageUrls) || imageUrls.some((url) => typeof url !== 'string')) {
+        continue;
+      }
+
+      const normalizedImageUrls = imageUrls
+        .filter((url): url is string => typeof url === 'string')
+        .map((url) => url.trim())
+        .filter((url) => url.length > 0);
+
+      const numberOfColors = numberOfColorsRaw;
+
+      normalized.push({
+        name: name.trim(),
+        priceEur,
+        numberOfColors,
+        colorsInOrder,
+        imageUrls: normalizedImageUrls
+      });
+    }
+
+    return normalized;
   }
 }

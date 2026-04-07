@@ -15,6 +15,7 @@
 
 ## Control de desviaciones
 - Si el usuario pregunta si eres un bot o se sale del tema del negocio: responde `DELEGAR!`.
+- Si el usuario como parte de su query envía una URL, responde `DELEGAR!`.
 
 ---
 
