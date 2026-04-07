@@ -1,4 +1,6 @@
 import { Injectable } from '@nestjs/common';
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { SecretsConfig } from './settings/secrets.config';
 import { SettingsConfig } from './settings/settings.config';
 
@@ -30,7 +32,8 @@ export type ContextGeneratorImplementation = 'naive' | 'vector-search';
 export type ContextGeneratorConfig = {
   implementation: ContextGeneratorImplementation;
   naive: {
-    contextMessage: string[];
+    contextFilePath: string;
+    contextMessage: string;
   };
   vectorSearch: {
     maxMatches: number;
@@ -86,10 +89,13 @@ export class ServiceConfig {
   }
 
   public get contextGeneratorConfig(): ContextGeneratorConfig {
+    const contextFilePath = this.secretsConfig.values.contextGenerator.naive.contextFilePath;
+
     return {
       implementation: this.secretsConfig.values.contextGenerator.implementation,
       naive: {
-        contextMessage: this.secretsConfig.values.contextGenerator.naive.contextMessage
+        contextFilePath,
+        contextMessage: this.loadNaiveContextMessage(contextFilePath)
       },
       vectorSearch: {
         maxMatches: this.secretsConfig.values.contextGenerator.vectorSearch.maxMatches
@@ -120,5 +126,32 @@ export class ServiceConfig {
   private normalizeUrl(url: string): string {
     const parsed = new URL(url);
     return parsed.toString().replace(/\/$/, '');
+  }
+
+  private loadNaiveContextMessage(contextFilePath: string): string {
+    const resolvedPath = this.resolveContextFilePath(contextFilePath);
+
+    const rawContent = readFileSync(resolvedPath, 'utf-8');
+    const normalized = rawContent.replace(/\r\n/g, '\n').trim();
+
+    if (normalized.length === 0) {
+      throw new Error(`Naive context file is empty: ${resolvedPath}`);
+    }
+
+    return normalized;
+  }
+
+  private resolveContextFilePath(contextFilePath: string): string {
+    const directPath = resolve(process.cwd(), contextFilePath);
+    if (existsSync(directPath)) {
+      return directPath;
+    }
+
+    const monorepoRootPath = resolve(process.cwd(), '..', contextFilePath);
+    if (existsSync(monorepoRootPath)) {
+      return monorepoRootPath;
+    }
+
+    throw new Error(`Naive context file not found: ${directPath} (or ${monorepoRootPath}).`);
   }
 }

@@ -1,5 +1,5 @@
 export type ChatCompletionMessage = {
-  role: 'user' | 'system';
+  role: 'user' | 'assistant' | 'system';
   content: string;
 };
 

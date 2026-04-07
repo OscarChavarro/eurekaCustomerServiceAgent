@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type {
   ContextGenerator,
-  ContextGeneratorMessage
+  GenerateContextInput
 } from '../../ports/outbound/context/context-generator.port';
 import { TOKENS } from '../../ports/tokens';
 
@@ -12,7 +12,7 @@ export class GenerateContextUseCase {
     private readonly contextGenerator: ContextGenerator
   ) {}
 
-  public async execute(messages: ContextGeneratorMessage[]): Promise<string> {
-    return this.contextGenerator.generateContext(messages);
+  public async execute(input: GenerateContextInput): Promise<string> {
+    return this.contextGenerator.generateContext(input);
   }
 }

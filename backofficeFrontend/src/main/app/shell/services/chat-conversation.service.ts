@@ -1,6 +1,8 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
+import { firstValueFrom } from 'rxjs';
 
 import {
+  BackendConversationRawMessage,
   BackendConversationSummary,
   BackendConversationDocument,
   ChatCompletionsStreamChunk,
@@ -20,6 +22,7 @@ import { EmbedConversationStageRenderer } from './view-stages/embed-conversation
 import { RawConversationStageRenderer } from './view-stages/raw-conversation-stage.renderer';
 import { StructureConversationStageRenderer } from './view-stages/structure-conversation-stage.renderer';
 import type { ChatMessage, ConversationViewMode } from './view-stages/conversation-view.types';
+import { GeneratedTextSensorshipService } from './generated-text-sensorship.service';
 
 export type { ChatMessage, ConversationViewMode };
 
@@ -49,8 +52,10 @@ export class ChatConversationService {
   private readonly structureConversationStageRenderer = inject(StructureConversationStageRenderer);
   private readonly chunkConversationStageRenderer = inject(ChunkConversationStageRenderer);
   private readonly embedConversationStageRenderer = inject(EmbedConversationStageRenderer);
+  private readonly generatedTextSensorshipService = inject(GeneratedTextSensorshipService);
 
   private readonly loadedMessagesConversationIds = new Set<string>();
+  private readonly loadingConversationDocumentPromises = new Map<string, Promise<void>>();
   private readonly loadedRatingsConversationIds = new Set<string>();
   private readonly conversationDocumentsState = signal<Record<string, BackendConversationDocument>>({});
   private readonly conversationSummariesState = signal<Record<string, BackendConversationSummary>>({});
@@ -148,6 +153,29 @@ export class ChatConversationService {
       return;
     }
 
+    const selectedConversationId = this.activeConversationIdState();
+    const localStoreRawTexts =
+      this.conversationDocumentsState()[conversationId]?.rawMessages
+        ?.map((message) => message.text?.trim())
+        .filter((text): text is string => typeof text === 'string' && text.length > 0) ?? [];
+    console.log('[chat-debug] Selected conversationId:', selectedConversationId);
+    console.log('[chat-debug] Local store rawMessages texts:', localStoreRawTexts);
+
+    await this.ensureConversationHistoryReady(conversationId);
+
+    const historyMessages = this.buildConversationHistoryPayload(conversationId);
+
+    const conversationMessages: Array<{ role: 'user'; content: string }> = [
+      ...historyMessages.map((message) => ({
+        role: 'user' as const,
+        content: this.toPromptContentWithActorPrefix(message.from, message.text)
+      })),
+      {
+        role: 'user' as const,
+        content: this.toPromptContentWithActorPrefix('customer', trimmedText)
+      }
+    ];
+
     const userMessage = this.createLocalRawMessage({
       direction: 'incoming',
       text: trimmedText
@@ -160,12 +188,10 @@ export class ChatConversationService {
     try {
       await this.conversationsApiService.streamChatCompletions(
         {
-          messages: [
-            {
-              role: 'user',
-              content: trimmedText
-            }
-          ],
+          messages: conversationMessages,
+          hints: {
+            customerId: conversationId
+          },
           maxTokens: 1000
         },
         {
@@ -180,7 +206,9 @@ export class ChatConversationService {
           },
           onDone: () => {
             doneReceived = true;
-            const finalAgentText = aggregatedAgentText.trim();
+            const finalAgentText = this.generatedTextSensorshipService
+              .sanitizeGeneratedText(aggregatedAgentText)
+              .trim();
 
             if (finalAgentText) {
               const agentMessage = this.createLocalRawMessage({
@@ -438,8 +466,27 @@ export class ChatConversationService {
       return;
     }
 
-    this.conversationsApiService.getConversationById(conversationId).subscribe({
-      next: (conversationDocument) => {
+    void this.ensureConversationHistoryReady(conversationId);
+  }
+
+  private async ensureConversationHistoryReady(conversationId: string): Promise<void> {
+    if (this.isSimulationConversationId(conversationId)) {
+      return;
+    }
+
+    const alreadyLoaded = this.conversationDocumentsState()[conversationId];
+    if (alreadyLoaded) {
+      return;
+    }
+
+    const inFlight = this.loadingConversationDocumentPromises.get(conversationId);
+    if (inFlight) {
+      await inFlight;
+      return;
+    }
+
+    const loadingPromise = firstValueFrom(this.conversationsApiService.getConversationById(conversationId))
+      .then((conversationDocument) => {
         this.conversationDocumentsState.update((currentDocuments) => ({
           ...currentDocuments,
           [conversationId]: conversationDocument
@@ -448,11 +495,16 @@ export class ChatConversationService {
         this.loadedMessagesConversationIds.add(conversationId);
         this.applyConversationDocumentToState(conversationId, conversationDocument);
         this.loadConversationRatings(conversationId);
-      },
-      error: (error: unknown) => {
-        console.error(`Unable to load messages from backend /messages for id=${conversationId}`, error);
-      }
-    });
+      })
+      .catch((error: unknown) => {
+        console.error(`Unable to preload conversation history for id=${conversationId}`, error);
+      })
+      .finally(() => {
+        this.loadingConversationDocumentPromises.delete(conversationId);
+      });
+
+    this.loadingConversationDocumentPromises.set(conversationId, loadingPromise);
+    await loadingPromise;
   }
 
   private loadConversationRatings(conversationId: string): void {
@@ -694,6 +746,99 @@ export class ChatConversationService {
   private extractTextToken(chunk: ChatCompletionsStreamChunk): string {
     const token = chunk.choices?.[0]?.delta?.content;
     return typeof token === 'string' ? token : '';
+  }
+
+  private buildConversationHistoryPayload(
+    conversationId: string
+  ): Array<{ from: 'customer' | 'agent'; text: string }> {
+    const backendRawMessages =
+      this.conversationDocumentsState()[conversationId]?.rawMessages?.map((message) =>
+        this.mapRawMessageToLastMessage(message)
+      ) ?? [];
+    const localRawMessages =
+      this.localRawMessagesState()[conversationId]
+        ?.map((message) => this.mapLocalMessageToLastMessage(message))
+        ?? [];
+
+    return [...backendRawMessages, ...localRawMessages].filter(
+      (message): message is { from: 'customer' | 'agent'; text: string } => message !== null
+    );
+  }
+
+  private mapRawMessageToLastMessage(
+    message: BackendConversationRawMessage
+  ): { from: 'customer' | 'agent'; text: string } | null {
+    const text = message.text.trim();
+    if (!text) {
+      return null;
+    }
+
+    const normalizedDirection = message.direction.trim().toLowerCase();
+
+    if (
+      normalizedDirection === 'incoming' ||
+      normalizedDirection === 'customer_to_agent' ||
+      normalizedDirection === 'customer'
+    ) {
+      return {
+        from: 'customer',
+        text
+      };
+    }
+
+    if (
+      normalizedDirection === 'outgoing' ||
+      normalizedDirection === 'agent_to_customer' ||
+      normalizedDirection === 'agent'
+    ) {
+      return {
+        from: 'agent',
+        text
+      };
+    }
+
+    return null;
+  }
+
+  private mapLocalMessageToLastMessage(
+    message: ChatMessage
+  ): { from: 'customer' | 'agent'; text: string } | null {
+    const text = message.text.trim();
+    if (!text) {
+      return null;
+    }
+
+    if (message.direction === 'incoming') {
+      return {
+        from: 'customer',
+        text
+      };
+    }
+
+    if (message.direction === 'outgoing') {
+      return {
+        from: 'agent',
+        text
+      };
+    }
+
+    return null;
+  }
+
+  private toPromptContentWithActorPrefix(
+    actor: 'customer' | 'agent',
+    text: string
+  ): string {
+    const normalizedText = text
+      .replace(/^\s*(customer|agent)\s*:\s*/i, '')
+      .trim();
+
+    if (!normalizedText) {
+      return actor === 'customer' ? 'Customer:' : 'Agent:';
+    }
+
+    const prefix = actor === 'customer' ? 'Customer:' : 'Agent:';
+    return `${prefix} ${normalizedText}`;
   }
 
   private refreshSimulationConversationLabel(): void {

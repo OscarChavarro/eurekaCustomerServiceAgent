@@ -1,6 +1,7 @@
 import { BadRequestException, Body, Controller, Post, Res } from '@nestjs/common';
 import type {
   StreamChatCompletionsCommand,
+  WrapperChatHint,
   WrapperChatMessage
 } from '../../../application/use-cases/chat-completions/stream-chat-completions.command';
 import { StreamChatCompletionsUseCase } from '../../../application/use-cases/chat-completions/stream-chat-completions.use-case';
@@ -75,7 +76,7 @@ export class ChatCompletionsController {
       throw new BadRequestException(`${WRAPPER_RESTRICTION_USER_MESSAGE} Payload must be a JSON object.`);
     }
 
-    const allowedRootKeys = new Set(['messages', 'max_tokens']);
+    const allowedRootKeys = new Set(['messages', 'hints', 'max_tokens']);
     const receivedRootKeys = Object.keys(body);
     const forbiddenRootKeys = receivedRootKeys.filter((key) => !allowedRootKeys.has(key));
 
@@ -87,7 +88,7 @@ export class ChatCompletionsController {
 
     if (!('messages' in body) || !('max_tokens' in body)) {
       throw new BadRequestException(
-        `${WRAPPER_RESTRICTION_USER_MESSAGE} You must send only "messages" and "max_tokens".`
+        `${WRAPPER_RESTRICTION_USER_MESSAGE} You must include "messages" and "max_tokens".`
       );
     }
 
@@ -97,6 +98,7 @@ export class ChatCompletionsController {
     }
 
     const normalizedMessages = messages.map((message, index) => this.validateMessage(message, index));
+    const hints = this.validateHints(body.hints);
 
     const maxTokensRaw = body.max_tokens;
     if (typeof maxTokensRaw !== 'number' || !Number.isInteger(maxTokensRaw) || maxTokensRaw <= 0) {
@@ -107,6 +109,7 @@ export class ChatCompletionsController {
 
     return {
       messages: normalizedMessages,
+      hints,
       maxTokens: maxTokensRaw
     };
   }
@@ -128,9 +131,15 @@ export class ChatCompletionsController {
       );
     }
 
-    if (message.role !== 'user') {
+    if (
+      message.role !== 'user' &&
+      message.role !== 'system' &&
+      message.role !== 'assistant' &&
+      message.role !== 'customer' &&
+      message.role !== 'agent'
+    ) {
       throw new BadRequestException(
-        `${WRAPPER_RESTRICTION_USER_MESSAGE} messages[${index}].role must be "user".`
+        `${WRAPPER_RESTRICTION_USER_MESSAGE} messages[${index}].role must be "user", "assistant", "system", "customer" or "agent".`
       );
     }
 
@@ -140,8 +149,14 @@ export class ChatCompletionsController {
       );
     }
 
+    const role = message.role === 'assistant' || message.role === 'agent'
+      ? 'assistant'
+      : message.role === 'system'
+        ? 'system'
+        : 'user';
+
     return {
-      role: 'user',
+      role,
       content: message.content
     };
   }
@@ -149,6 +164,34 @@ export class ChatCompletionsController {
   private isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
   }
+
+  private validateHints(hints: unknown): WrapperChatHint | undefined {
+    if (hints === undefined) {
+      return undefined;
+    }
+
+    if (!this.isRecord(hints)) {
+      throw new BadRequestException(`${WRAPPER_RESTRICTION_USER_MESSAGE} "hints" must be an object.`);
+    }
+
+    const normalizedCustomerId =
+      typeof hints.customerId === 'string'
+        ? hints.customerId
+        : typeof hints['customerId:'] === 'string'
+          ? hints['customerId:']
+          : null;
+
+    if (!normalizedCustomerId || normalizedCustomerId.trim().length === 0) {
+      throw new BadRequestException(
+        `${WRAPPER_RESTRICTION_USER_MESSAGE} "hints.customerId" must be a non-empty string.`
+      );
+    }
+
+    return {
+      customerId: normalizedCustomerId.trim()
+    };
+  }
+
   private async flushBeforeEnd(): Promise<void> {
     await new Promise<void>((resolve) => {
       setImmediate(resolve);

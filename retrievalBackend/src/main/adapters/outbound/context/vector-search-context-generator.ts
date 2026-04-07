@@ -1,13 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type {
   ContextGenerator,
+  GenerateContextInput,
   ContextGeneratorMessage
 } from '../../../application/ports/outbound/context/context-generator.port';
 import { ServiceConfig } from '../../../infrastructure/config/service.config';
-import {
-  HeuristicContextBuilderService,
-  type RetrievedChunk
-} from '../../../../application/services/context-builder.service';
 
 interface BgeEmbeddingResponse {
   vector: number[];
@@ -33,15 +32,15 @@ interface QdrantSearchResponse {
 @Injectable()
 export class VectorSearchContextGenerator implements ContextGenerator {
   private static readonly EXPECTED_BGE_VECTOR_DIMENSIONS = 1024;
+  private static readonly PRICE_CATALOG_RELATIVE_PATH = 'retrievalBackend/etc/_eureka/priceCatalog.csv';
   private readonly logger = new Logger(VectorSearchContextGenerator.name);
 
-  constructor(
-    private readonly serviceConfig: ServiceConfig,
-    private readonly contextBuilder: HeuristicContextBuilderService
-  ) {}
+  constructor(private readonly serviceConfig: ServiceConfig) {}
 
-  public async generateContext(messages: ContextGeneratorMessage[]): Promise<string> {
-    const latestUserPrompt = this.extractLatestUserPrompt(messages);
+  public async generateContext(input: GenerateContextInput): Promise<string> {
+    this.logger.log(this.formatPayloadMessagesLog(input.messages));
+
+    const latestUserPrompt = this.extractLatestUserPrompt(input.messages);
     if (!latestUserPrompt) {
       return 'No se encontro un mensaje de usuario para construir contexto. Responde de forma breve y solicita aclaracion.';
     }
@@ -49,12 +48,24 @@ export class VectorSearchContextGenerator implements ContextGenerator {
     const promptVector = await this.generatePromptEmbedding(latestUserPrompt);
     const nearestPoints = await this.searchNearestPoints(promptVector);
     const uniqueAgentResponses = this.extractUniqueAgentResponses(nearestPoints);
-    const retrievedChunks = this.toRetrievedChunks(nearestPoints);
-    const context = this.contextBuilder.buildContext(latestUserPrompt, retrievedChunks);
+    const context = this.composeContext(uniqueAgentResponses);
     this.logger.log(`**** USER PROMPT: ${latestUserPrompt}`);
     this.logger.log(this.formatFlowLog(uniqueAgentResponses, context));
 
     return context;
+  }
+
+  private formatPayloadMessagesLog(messages: ContextGeneratorMessage[]): string {
+    const messageLines =
+      messages.length > 0
+        ? messages.map((message) => `- ${message.role}: ${message.content}`)
+        : ['- (no messages in payload)'];
+
+    return [
+      'Payload messages:',
+      messageLines.join('\n'),
+      '----'
+    ].join('\n');
   }
 
   private extractLatestUserPrompt(messages: ContextGeneratorMessage[]): string | null {
@@ -140,34 +151,9 @@ export class VectorSearchContextGenerator implements ContextGenerator {
     return Array.isArray(payload.result) ? payload.result : [];
   }
 
-  private toRetrievedChunks(points: QdrantPoint[]): RetrievedChunk[] {
-    return points.map((point) => {
-      const chunkMessage =
-        typeof point.payload?.chunkMessage === 'string' ? point.payload.chunkMessage : '';
-      const rawMessages = Array.isArray(point.payload?.rawMessages)
-        ? point.payload.rawMessages
-        : [];
-      const messages = rawMessages
-        .map((rawMessage) => this.toRetrievedChunkMessage(rawMessage))
-        .filter((message): message is RetrievedChunk['messages'][number] => message !== null);
-      const textFromMessages = messages
-        .filter((message) => message.role === 'agent')
-        .map((message) => message.text.trim())
-        .join(' ')
-        .trim();
-      const chunkText = textFromMessages.length > 0 ? textFromMessages : chunkMessage;
-
-      return {
-        text: chunkText,
-        score: point.score,
-        messages
-      };
-    });
-  }
-
   private toRetrievedChunkMessage(
     rawMessage: unknown
-  ): RetrievedChunk['messages'][number] | null {
+  ): { role: 'agent' | 'customer'; text: string } | null {
     if (!rawMessage || typeof rawMessage !== 'object') {
       return null;
     }
@@ -250,5 +236,110 @@ export class VectorSearchContextGenerator implements ContextGenerator {
       context,
       '============'
     ].join('\n');
+  }
+
+  private composeContext(qdrantFindings: string[]): string {
+    const productCatalogHints = this.loadProductCatalogHints();
+    const businessFindings =
+      qdrantFindings.length > 0
+        ? qdrantFindings
+        : ['No hay hallazgos relevantes recuperados desde Qdrant.'];
+
+    return [
+      '# Pistas',
+      '',
+      '## Catálogo de producto',
+      ...productCatalogHints.map((hint) => `- ${hint}`),
+      '',
+      '## Hechos de negocio relevantes para responder al usuario',
+      ...businessFindings.map((finding) => `- ${finding}`),
+      '',
+      'para las siguientes secciones ten en cuenta estas pistas',
+      '',
+      this.serviceConfig.contextGeneratorConfig.naive.contextMessage.trim()
+    ]
+      .map((line) => line.trimEnd())
+      .join('\n');
+  }
+
+  private loadProductCatalogHints(): string[] {
+    const csvPath = this.resolvePriceCatalogPath();
+    const csvContent = readFileSync(csvPath, 'utf-8').trim();
+    const lines = csvContent.split(/\r?\n/).filter((line) => line.trim().length > 0);
+
+    if (lines.length <= 1) {
+      return ['No hay productos cargados en el catálogo.'];
+    }
+
+    const headerLine = lines[0];
+    if (!headerLine) {
+      return ['No hay productos cargados en el catálogo.'];
+    }
+
+    const headers = this.parseCsvLine(headerLine).map((header) => header.trim());
+    const nameIndex = headers.indexOf('name');
+    const priceIndex = headers.indexOf('price_eur');
+    const colorsIndex = headers.indexOf('number_of_colors');
+    const orderIndex = headers.indexOf('colors_in_order');
+
+    if (nameIndex < 0 || priceIndex < 0 || colorsIndex < 0 || orderIndex < 0) {
+      return ['No fue posible interpretar el catálogo de productos.'];
+    }
+
+    return lines.slice(1).map((line) => {
+      const values = this.parseCsvLine(line);
+      const name = values[nameIndex]?.trim() ?? 'Producto sin nombre';
+      const price = values[priceIndex]?.trim() ?? 'N/D';
+      const numberOfColors = values[colorsIndex]?.trim() ?? 'N/D';
+      const colorsInOrder = values[orderIndex]?.trim() ?? 'N/D';
+
+      return `${name} (EUR ${price}, colores=${numberOfColors}, colors_in_order=${colorsInOrder})`;
+    });
+  }
+
+  private resolvePriceCatalogPath(): string {
+    const directPath = resolve(process.cwd(), VectorSearchContextGenerator.PRICE_CATALOG_RELATIVE_PATH);
+    if (existsSync(directPath)) {
+      return directPath;
+    }
+
+    const monorepoPath = resolve(process.cwd(), '..', VectorSearchContextGenerator.PRICE_CATALOG_RELATIVE_PATH);
+    if (existsSync(monorepoPath)) {
+      return monorepoPath;
+    }
+
+    throw new Error(`Price catalog file not found: ${directPath} (or ${monorepoPath}).`);
+  }
+
+  private parseCsvLine(line: string): string[] {
+    const values: string[] = [];
+    let current = '';
+    let insideQuotes = false;
+
+    for (let index = 0; index < line.length; index += 1) {
+      const character = line[index];
+
+      if (character === '"') {
+        if (insideQuotes && line[index + 1] === '"') {
+          current += '"';
+          index += 1;
+          continue;
+        }
+
+        insideQuotes = !insideQuotes;
+        continue;
+      }
+
+      if (character === ',' && !insideQuotes) {
+        values.push(current);
+        current = '';
+        continue;
+      }
+
+      current += character;
+    }
+
+    values.push(current);
+    return values;
   }
 }

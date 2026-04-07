@@ -1,8 +1,12 @@
 export type ContextGeneratorMessage = {
-  role: 'user';
+  role: 'user' | 'assistant' | 'system';
   content: string;
 };
 
+export type GenerateContextInput = {
+  messages: ContextGeneratorMessage[];
+};
+
 export interface ContextGenerator {
-  generateContext(messages: ContextGeneratorMessage[]): Promise<string>;
+  generateContext(input: GenerateContextInput): Promise<string>;
 }

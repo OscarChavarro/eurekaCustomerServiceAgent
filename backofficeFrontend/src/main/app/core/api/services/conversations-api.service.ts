@@ -97,6 +97,9 @@ export type ChatCompletionRequestMessage = {
 
 export type ChatCompletionsRequest = {
   messages: ChatCompletionRequestMessage[];
+  hints?: {
+    customerId: string;
+  };
   maxTokens: number;
 };
 
@@ -201,6 +204,7 @@ export class ConversationsApiService {
         },
         body: JSON.stringify({
           messages: request.messages,
+          hints: request.hints,
           max_tokens: request.maxTokens
         })
       }
