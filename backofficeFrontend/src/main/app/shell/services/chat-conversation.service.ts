@@ -5,7 +5,6 @@ import {
   BackendConversationRawMessage,
   BackendConversationSummary,
   BackendConversationDocument,
-  ChatCompletionsStreamChunk,
   MessageRatingValue,
   RevisionStage,
   MessageRatingsResponse,
@@ -22,7 +21,6 @@ import { EmbedConversationStageRenderer } from './view-stages/embed-conversation
 import { RawConversationStageRenderer } from './view-stages/raw-conversation-stage.renderer';
 import { StructureConversationStageRenderer } from './view-stages/structure-conversation-stage.renderer';
 import type { ChatMessage, ConversationViewMode } from './view-stages/conversation-view.types';
-import { GeneratedTextSensorshipService } from './generated-text-sensorship.service';
 
 export type { ChatMessage, ConversationViewMode };
 
@@ -57,7 +55,6 @@ export class ChatConversationService {
   private readonly structureConversationStageRenderer = inject(StructureConversationStageRenderer);
   private readonly chunkConversationStageRenderer = inject(ChunkConversationStageRenderer);
   private readonly embedConversationStageRenderer = inject(EmbedConversationStageRenderer);
-  private readonly generatedTextSensorshipService = inject(GeneratedTextSensorshipService);
 
   private readonly loadedMessagesConversationIds = new Set<string>();
   private readonly loadingConversationDocumentPromises = new Map<string, Promise<void>>();
@@ -184,54 +181,30 @@ export class ChatConversationService {
     });
     this.pushLocalRawMessage(conversationId, userMessage);
     this.setAgentTyping(conversationId, true);
-    let aggregatedAgentText = '';
-    let doneReceived = false;
 
     try {
-      await this.conversationsApiService.streamChatCompletions(
-        {
-          messages: conversationMessages,
-          hints: {
-            customerId: conversationId
-          },
-          maxTokens: 1000
+      const completionText = await this.conversationsApiService.completeChatCompletions({
+        messages: conversationMessages,
+        hints: {
+          customerId: conversationId
         },
-        {
-          onChunk: (chunk) => {
-            const token = this.extractTextToken(chunk);
+        maxTokens: 1000
+      });
 
-            if (!token) {
-              return;
-            }
+      const finalAgentText = completionText.trim();
 
-            aggregatedAgentText += token;
-          },
-          onDone: () => {
-            doneReceived = true;
-            const finalAgentText = this.generatedTextSensorshipService
-              .sanitizeGeneratedText(aggregatedAgentText)
-              .trim();
-
-            if (finalAgentText) {
-              const agentMessage = this.createLocalRawMessage({
-                direction: 'outgoing',
-                text: finalAgentText,
-                isAiGenerated: true
-              });
-              this.pushLocalRawMessage(conversationId, agentMessage);
-            }
-
-            this.setAgentTyping(conversationId, false);
-          }
-        }
-      );
-    } catch (error: unknown) {
-      console.error('Unable to stream chat completion', error);
-      this.setAgentTyping(conversationId, false);
-    } finally {
-      if (!doneReceived) {
-        this.setAgentTyping(conversationId, false);
+      if (finalAgentText) {
+        const agentMessage = this.createLocalRawMessage({
+          direction: 'outgoing',
+          text: finalAgentText,
+          isAiGenerated: true
+        });
+        this.pushLocalRawMessage(conversationId, agentMessage);
       }
+    } catch (error: unknown) {
+      console.error('Unable to complete chat completion', error);
+    } finally {
+      this.setAgentTyping(conversationId, false);
     }
   }
 
@@ -743,11 +716,6 @@ export class ChatConversationService {
       ...current,
       [conversationId]: isTyping
     }));
-  }
-
-  private extractTextToken(chunk: ChatCompletionsStreamChunk): string {
-    const token = chunk.choices?.[0]?.delta?.content;
-    return typeof token === 'string' ? token : '';
   }
 
   private buildConversationHistoryPayload(conversationId: string): WrapperChatMessage[] {

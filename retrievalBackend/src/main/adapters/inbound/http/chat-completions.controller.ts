@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Post, Res } from '@nestjs/common';
+import { BadGatewayException, BadRequestException, Body, Controller, HttpException, Post } from '@nestjs/common';
 import type {
   StreamChatCompletionsCommand,
   WrapperChatHint,
@@ -9,66 +9,36 @@ import { StreamChatCompletionsUseCase } from '../../../application/use-cases/cha
 const WRAPPER_RESTRICTION_USER_MESSAGE =
   'bad request: this endpoint is not a general-purpose LLM; it is a wrapper that restricts options and fills defaults.';
 type AcceptedInboundRole = 'user' | 'assistant' | 'system' | 'customer' | 'agent';
-type HttpStreamResponse = {
-  status(code: number): HttpStreamResponse;
-  setHeader(name: string, value: string): void;
-  flushHeaders?: () => void;
-  flush?: () => void;
-  write(chunk: Buffer): void;
-  end(chunk?: string): void;
-};
 
 @Controller('v1/chat')
 export class ChatCompletionsController {
   constructor(private readonly streamChatCompletionsUseCase: StreamChatCompletionsUseCase) {}
 
   @Post('completions')
-  public async streamChatCompletions(@Body() body: unknown, @Res() response: HttpStreamResponse): Promise<void> {
+  public async streamChatCompletions(@Body() body: unknown): Promise<unknown> {
     const command = this.parseAndValidatePayload(body);
     const upstreamResponse = await this.streamChatCompletionsUseCase.execute(command);
+    const upstreamRawBody = await upstreamResponse.text();
 
-    if (!upstreamResponse.ok || !upstreamResponse.body) {
-      const errorBody = await upstreamResponse.text();
+    if (!upstreamResponse.ok) {
       const status = upstreamResponse.status || 502;
-      response.status(status);
-      response.setHeader('content-type', 'application/json');
-      response.end(
-        JSON.stringify({
-          message: errorBody || 'Upstream LLM error.'
-        })
+      throw new HttpException(
+        {
+          message: upstreamRawBody || 'Upstream LLM error.'
+        },
+        status
       );
-      return;
     }
 
-    response.status(upstreamResponse.status);
-    response.setHeader('content-type', upstreamResponse.headers.get('content-type') ?? 'text/event-stream');
-    response.setHeader('cache-control', upstreamResponse.headers.get('cache-control') ?? 'no-cache');
-    response.setHeader('connection', 'keep-alive');
-    response.setHeader('x-accel-buffering', 'no');
-
-    if (typeof response.flushHeaders === 'function') {
-      response.flushHeaders();
-    }
-
-    const reader = upstreamResponse.body.getReader();
     try {
-      while (true) {
-        const { done, value } = await reader.read();
-
-        if (value) {
-          response.write(Buffer.from(value));
-          if (typeof response.flush === 'function') {
-            response.flush();
-          }
-        }
-
-        if (done) {
-          break;
-        }
-      }
-    } finally {
-      await this.flushBeforeEnd();
-      response.end();
+      const parsedPayload = JSON.parse(upstreamRawBody) as unknown;
+      return this.sanitizeLlmResponsePayload(parsedPayload);
+    } catch {
+      throw new BadGatewayException({
+        message:
+          'Upstream LLM returned a non-JSON payload. Wrapper requires JSON synchronous responses.',
+        upstreamStatus: upstreamResponse.status
+      });
     }
   }
 
@@ -225,9 +195,75 @@ export class ChatCompletionsController {
     };
   }
 
-  private async flushBeforeEnd(): Promise<void> {
-    await new Promise<void>((resolve) => {
-      setImmediate(resolve);
-    });
+  private sanitizeLlmResponsePayload(payload: unknown): unknown {
+    if (!this.isRecord(payload)) {
+      return payload;
+    }
+
+    const choices = payload.choices;
+    if (!Array.isArray(choices)) {
+      return payload;
+    }
+
+    const sanitizedChoices = choices.map((choice) => this.sanitizeChoice(choice));
+    return {
+      ...payload,
+      choices: sanitizedChoices
+    };
+  }
+
+  private sanitizeChoice(choice: unknown): unknown {
+    if (!this.isRecord(choice)) {
+      return choice;
+    }
+
+    const sanitizedChoice: Record<string, unknown> = { ...choice };
+
+    if (typeof choice.text === 'string') {
+      sanitizedChoice.text = this.sanitizeGeneratedText(choice.text);
+    }
+
+    const message = choice.message;
+    if (this.isRecord(message) && typeof message.content === 'string') {
+      sanitizedChoice.message = {
+        ...message,
+        content: this.sanitizeGeneratedText(message.content)
+      };
+    }
+
+    return sanitizedChoice;
+  }
+
+  private sanitizeGeneratedText(text: string): string {
+    const phrases = text.match(/[^!.]+[!.]?/g) ?? [text];
+
+    const sanitized = phrases
+      .map((phrase) => phrase.trim())
+      .filter((phrase) => phrase.length > 0)
+      .filter((phrase) => !phrase.toLowerCase().includes('genial!'))
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    return this.fixMalformedUrls(sanitized);
+  }
+
+  private fixMalformedUrls(text: string): string {
+    let fixed = text;
+
+    const replacements: Array<[RegExp, string]> = [
+      [/(https?:\/\/\S+)\s+\.(\S+)/gi, '$1.$2'],
+      [/(https?:\/\/\S+)\s+\/(\S+)/gi, '$1/$2'],
+      [/(https?:\/\/\S+)\s+\?(\S+)/gi, '$1?$2'],
+      [/(https?:\/\/\S+)\s+#(\S+)/gi, '$1#$2'],
+      [/(https?:\/\/\S+)\s+&(\S+)/gi, '$1&$2'],
+      [/(https?:\/\/\S+)\s+=(\S+)/gi, '$1=$2']
+    ];
+
+    for (const [pattern, replacement] of replacements) {
+      fixed = fixed.replace(pattern, replacement);
+    }
+
+    return fixed;
   }
 }

@@ -32,7 +32,7 @@ export class StreamChatCompletionsUseCase {
     return this.llmChatCompletionsPort.streamChatCompletion({
       messages: [systemMessage, ...command.messages],
       maxTokens: command.maxTokens,
-      stream: true
+      stream: false
     });
   }
 }
