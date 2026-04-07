@@ -8,6 +8,7 @@ import { StreamChatCompletionsUseCase } from '../../../application/use-cases/cha
 
 const WRAPPER_RESTRICTION_USER_MESSAGE =
   'bad request: this endpoint is not a general-purpose LLM; it is a wrapper that restricts options and fills defaults.';
+type AcceptedInboundRole = 'user' | 'assistant' | 'system' | 'customer' | 'agent';
 type HttpStreamResponse = {
   status(code: number): HttpStreamResponse;
   setHeader(name: string, value: string): void;
@@ -76,7 +77,7 @@ export class ChatCompletionsController {
       throw new BadRequestException(`${WRAPPER_RESTRICTION_USER_MESSAGE} Payload must be a JSON object.`);
     }
 
-    const allowedRootKeys = new Set(['messages', 'hints', 'max_tokens']);
+    const allowedRootKeys = new Set(['messages', 'hints', 'max_tokens', 'maxTokens']);
     const receivedRootKeys = Object.keys(body);
     const forbiddenRootKeys = receivedRootKeys.filter((key) => !allowedRootKeys.has(key));
 
@@ -86,9 +87,9 @@ export class ChatCompletionsController {
       );
     }
 
-    if (!('messages' in body) || !('max_tokens' in body)) {
+    if (!('messages' in body) || (!('max_tokens' in body) && !('maxTokens' in body))) {
       throw new BadRequestException(
-        `${WRAPPER_RESTRICTION_USER_MESSAGE} You must include "messages" and "max_tokens".`
+        `${WRAPPER_RESTRICTION_USER_MESSAGE} You must include "messages" and "max_tokens" (or "maxTokens").`
       );
     }
 
@@ -97,13 +98,24 @@ export class ChatCompletionsController {
       throw new BadRequestException(`${WRAPPER_RESTRICTION_USER_MESSAGE} "messages" must be an array.`);
     }
 
+    if (messages.length === 0) {
+      throw new BadRequestException(`${WRAPPER_RESTRICTION_USER_MESSAGE} "messages" must not be empty.`);
+    }
+
     const normalizedMessages = messages.map((message, index) => this.validateMessage(message, index));
     const hints = this.validateHints(body.hints);
 
-    const maxTokensRaw = body.max_tokens;
+    const maxTokensRaw = body.max_tokens ?? body.maxTokens;
     if (typeof maxTokensRaw !== 'number' || !Number.isInteger(maxTokensRaw) || maxTokensRaw <= 0) {
       throw new BadRequestException(
-        `${WRAPPER_RESTRICTION_USER_MESSAGE} "max_tokens" must be a positive integer.`
+        `${WRAPPER_RESTRICTION_USER_MESSAGE} "max_tokens" (or "maxTokens") must be a positive integer.`
+      );
+    }
+
+    const hasAnyUserMessage = normalizedMessages.some((message) => message.role === 'user');
+    if (!hasAnyUserMessage) {
+      throw new BadRequestException(
+        `${WRAPPER_RESTRICTION_USER_MESSAGE} "messages" must include at least one "user" message.`
       );
     }
 
@@ -131,12 +143,13 @@ export class ChatCompletionsController {
       );
     }
 
+    const inboundRole = message.role as AcceptedInboundRole;
     if (
-      message.role !== 'user' &&
-      message.role !== 'system' &&
-      message.role !== 'assistant' &&
-      message.role !== 'customer' &&
-      message.role !== 'agent'
+      inboundRole !== 'user' &&
+      inboundRole !== 'system' &&
+      inboundRole !== 'assistant' &&
+      inboundRole !== 'customer' &&
+      inboundRole !== 'agent'
     ) {
       throw new BadRequestException(
         `${WRAPPER_RESTRICTION_USER_MESSAGE} messages[${index}].role must be "user", "assistant", "system", "customer" or "agent".`
@@ -149,16 +162,36 @@ export class ChatCompletionsController {
       );
     }
 
-    const role = message.role === 'assistant' || message.role === 'agent'
+    const normalizedContent = message.content.trim();
+    if (normalizedContent.length === 0) {
+      throw new BadRequestException(
+        `${WRAPPER_RESTRICTION_USER_MESSAGE} messages[${index}].content must not be empty.`
+      );
+    }
+
+    const normalizedRole = this.normalizeInboundRole(inboundRole);
+    const role = normalizedRole === 'assistant'
       ? 'assistant'
-      : message.role === 'system'
+      : normalizedRole === 'system'
         ? 'system'
         : 'user';
 
     return {
       role,
-      content: message.content
+      content: normalizedContent
     };
+  }
+
+  private normalizeInboundRole(role: AcceptedInboundRole): 'user' | 'assistant' | 'system' {
+    if (role === 'assistant' || role === 'agent') {
+      return 'assistant';
+    }
+
+    if (role === 'system') {
+      return 'system';
+    }
+
+    return 'user';
   }
 
   private isRecord(value: unknown): value is Record<string, unknown> {

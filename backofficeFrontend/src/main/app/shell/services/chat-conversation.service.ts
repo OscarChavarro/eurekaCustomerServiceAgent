@@ -41,6 +41,11 @@ export type TimeRangeFilter = {
   endMs: number;
 };
 
+type WrapperChatMessage = {
+  role: 'user' | 'assistant';
+  content: string;
+};
+
 @Injectable({ providedIn: 'root' })
 export class ChatConversationService {
   private static readonly SIMULATION_CONVERSATION_ID = 'local-simulation';
@@ -165,14 +170,11 @@ export class ChatConversationService {
 
     const historyMessages = this.buildConversationHistoryPayload(conversationId);
 
-    const conversationMessages: Array<{ role: 'user'; content: string }> = [
-      ...historyMessages.map((message) => ({
-        role: 'user' as const,
-        content: this.toPromptContentWithActorPrefix(message.from, message.text)
-      })),
+    const conversationMessages: WrapperChatMessage[] = [
+      ...historyMessages,
       {
-        role: 'user' as const,
-        content: this.toPromptContentWithActorPrefix('customer', trimmedText)
+        role: 'user',
+        content: trimmedText
       }
     ];
 
@@ -748,9 +750,7 @@ export class ChatConversationService {
     return typeof token === 'string' ? token : '';
   }
 
-  private buildConversationHistoryPayload(
-    conversationId: string
-  ): Array<{ from: 'customer' | 'agent'; text: string }> {
+  private buildConversationHistoryPayload(conversationId: string): WrapperChatMessage[] {
     const backendRawMessages =
       this.conversationDocumentsState()[conversationId]?.rawMessages?.map((message) =>
         this.mapRawMessageToLastMessage(message)
@@ -761,13 +761,13 @@ export class ChatConversationService {
         ?? [];
 
     return [...backendRawMessages, ...localRawMessages].filter(
-      (message): message is { from: 'customer' | 'agent'; text: string } => message !== null
+      (message): message is WrapperChatMessage => message !== null
     );
   }
 
   private mapRawMessageToLastMessage(
     message: BackendConversationRawMessage
-  ): { from: 'customer' | 'agent'; text: string } | null {
+  ): WrapperChatMessage | null {
     const text = message.text.trim();
     if (!text) {
       return null;
@@ -781,8 +781,8 @@ export class ChatConversationService {
       normalizedDirection === 'customer'
     ) {
       return {
-        from: 'customer',
-        text
+        role: 'user',
+        content: text
       };
     }
 
@@ -792,8 +792,8 @@ export class ChatConversationService {
       normalizedDirection === 'agent'
     ) {
       return {
-        from: 'agent',
-        text
+        role: 'assistant',
+        content: text
       };
     }
 
@@ -802,7 +802,7 @@ export class ChatConversationService {
 
   private mapLocalMessageToLastMessage(
     message: ChatMessage
-  ): { from: 'customer' | 'agent'; text: string } | null {
+  ): WrapperChatMessage | null {
     const text = message.text.trim();
     if (!text) {
       return null;
@@ -810,35 +810,19 @@ export class ChatConversationService {
 
     if (message.direction === 'incoming') {
       return {
-        from: 'customer',
-        text
+        role: 'user',
+        content: text
       };
     }
 
     if (message.direction === 'outgoing') {
       return {
-        from: 'agent',
-        text
+        role: 'assistant',
+        content: text
       };
     }
 
     return null;
-  }
-
-  private toPromptContentWithActorPrefix(
-    actor: 'customer' | 'agent',
-    text: string
-  ): string {
-    const normalizedText = text
-      .replace(/^\s*(customer|agent)\s*:\s*/i, '')
-      .trim();
-
-    if (!normalizedText) {
-      return actor === 'customer' ? 'Customer:' : 'Agent:';
-    }
-
-    const prefix = actor === 'customer' ? 'Customer:' : 'Agent:';
-    return `${prefix} ${normalizedText}`;
   }
 
   private refreshSimulationConversationLabel(): void {

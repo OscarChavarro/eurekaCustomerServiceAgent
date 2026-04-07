@@ -91,7 +91,7 @@ export type MessageRatingsResponse = {
 };
 
 export type ChatCompletionRequestMessage = {
-  role: 'user';
+  role: 'user' | 'assistant' | 'system';
   content: string;
 };
 
