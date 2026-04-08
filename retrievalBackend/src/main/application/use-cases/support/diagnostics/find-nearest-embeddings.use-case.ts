@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { NearestEmbeddingsConfigPort } from '../../ports/outbound/nearest-embeddings/nearest-embeddings-config.port';
-import { TOKENS } from '../../ports/tokens';
+import type { NearestEmbeddingsConfigPort } from '../../../ports/outbound/nearest-embeddings/nearest-embeddings-config.port';
+import { TOKENS } from '../../../ports/tokens';
 import type { FindNearestEmbeddingsCommand } from './find-nearest-embeddings.command';
 
 interface BgeEmbeddingResponse {

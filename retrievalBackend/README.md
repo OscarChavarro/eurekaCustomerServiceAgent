@@ -1,29 +1,48 @@
 # retrievalBackend
 
-`retrievalBackend` expone el endpoint wrapper `POST /v1/chat/completions` y centraliza la estrategia de generacion de contexto para LLM.
+`retrievalBackend` exposes the wrapper endpoint `POST /v1/chat/completions` and centralizes the context-generation strategy for the LLM.
+
+## Three-Stage Flow
+
+This retrieval layer runs as a 3-stage sequence:
+
+1. `Context Builder`
+2. `LLM Call`
+3. `Post-Processing Layer`
+
+Sequence:
+
+![Retrieval three-stage flow](./doc/retrieval-3-stage-flow.png)
+
+Diagram source:
+
+- `./doc/retrieval-3-stage-flow.dot`
+- `./doc/retrieval-3-stage-flow.png`
 
 ## Context Generation
 
-La generacion de contexto se organiza como un use case de aplicacion:
+Context generation is organized as an application use case:
 
-- `GenerateContextUseCase` (`src/main/application/use-cases/context-generation`)
-- puerto outbound `ContextGenerator`
-- adapters outbound concretos:
+- `GenerateContextUseCase` (`src/main/application/use-cases/01-context-builder`)
+- `CallLlmChatCompletionsUseCase` (`src/main/application/use-cases/02-llm-call`)
+- `PostProcessChatCompletionsUseCase` (`src/main/application/use-cases/03-post-processing`)
+- outbound port `ContextGenerator`
+- concrete outbound adapters:
   - `NaiveContextGenerator`
   - `VectorSearchContextGenerator`
 
-`StreamChatCompletionsUseCase` delega la construccion del mensaje de sistema en `GenerateContextUseCase` y luego llama al puerto de chat completions.
+`StreamChatCompletionsUseCase` delegates system-message construction to `GenerateContextUseCase`, then calls the chat-completions port.
 
-## Seleccion de Implementacion
+## Implementation Selection
 
-La implementacion activa se selecciona en `secrets.json` bajo `contextGenerator.implementation`.
+The active implementation is selected in `secrets.json` under `contextGenerator.implementation`.
 
-Valores soportados:
+Supported values:
 
 - `naive`
 - `vector-search`
 
-Ejemplo:
+Example:
 
 ```json
 {
@@ -36,27 +55,27 @@ Ejemplo:
 }
 ```
 
-Comportamiento actual:
+Current behavior:
 
-- `naive`: carga el archivo en `contextGenerator.naive.contextFilePath`, concatena lineas con espacios y retorna ese contexto (ademas imprime el contexto generado en consola).
+- `naive`: loads the file from `contextGenerator.naive.contextFilePath`, concatenates lines with spaces, and returns that context (also logs the generated context).
 - `vector-search`:
-  1. toma el ultimo prompt del usuario;
-  2. llama a BGE (`embedding`) para convertir prompt a vector;
-  3. consulta Qdrant (`qdrant`) para recuperar chunks similares;
-  4. arma un contexto de sistema en espanol con evidencia recuperada;
-  5. imprime el contexto generado en consola.
+  1. takes the latest user prompt;
+  2. calls BGE (`embedding`) to convert the prompt into a vector;
+  3. queries Qdrant (`qdrant`) to retrieve similar chunks;
+  4. builds a Spanish system context with retrieved evidence;
+  5. logs the generated context.
 
-## Configuracion para `vector-search`
+## Configuration for `vector-search`
 
-`secrets.json` incluye:
+`secrets.json` includes:
 
-- `embedding.provider|host|port` (servicio BGE)
+- `embedding.provider|host|port` (BGE service)
 - `qdrant.url|apiKey|collectionName`
 - `contextGenerator.vectorSearch.maxMatches`
 
 ## Startup Validation
 
-En el arranque se ejecuta validacion de conectividad con BGE:
+On startup, a BGE connectivity validation runs:
 
-- si `contextGenerator.implementation` es `vector-search`, valida llamada real a `/embed`.
-- si esta en `naive`, la validacion BGE se omite de forma explicita.
+- if `contextGenerator.implementation` is `vector-search`, it validates a real call to `/embed`.
+- if it is `naive`, BGE validation is explicitly skipped.

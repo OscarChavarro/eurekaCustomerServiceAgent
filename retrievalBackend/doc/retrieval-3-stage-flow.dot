@@ -1,0 +1,38 @@
+digraph RetrievalThreeStageFlow {
+  graph [
+    rankdir=LR,
+    bgcolor="white",
+    labelloc="t",
+    label="Retrieval Backend - Three-Stage Flow",
+    fontsize=18,
+    fontname="Helvetica"
+  ];
+
+  node [
+    shape=box,
+    style="rounded,filled",
+    fillcolor="#f8fafc",
+    color="#334155",
+    fontname="Helvetica",
+    fontsize=11
+  ];
+
+  edge [
+    color="#475569",
+    fontname="Helvetica",
+    fontsize=10,
+    arrowsize=0.8
+  ];
+
+  start [label="Request\nPOST /v1/chat/completions", fillcolor="#e2e8f0"];
+
+  stage1 [label="1) Context Builder\n- Reads message history\n- Generates operational context\n- Prepares system prompt", fillcolor="#dbeafe"];
+
+  stage2 [label="2) LLM Call\n- Assembles messages\n- Calls upstream /chat/completions\n- Receives raw response", fillcolor="#dcfce7"];
+
+  stage3 [label="3) Post-Processing Layer\n- Sanitizes content\n- Fixes malformed URLs\n- Appends used_context_lines (optional)", fillcolor="#fef3c7"];
+
+  end [label="Final JSON response\nfor frontend", fillcolor="#e2e8f0"];
+
+  start -> stage1 -> stage2 -> stage3 -> end;
+}

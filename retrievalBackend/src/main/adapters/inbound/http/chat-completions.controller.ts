@@ -3,8 +3,9 @@ import type {
   StreamChatCompletionsCommand,
   WrapperChatHint,
   WrapperChatMessage
-} from '../../../application/use-cases/chat-completions/stream-chat-completions.command';
-import { StreamChatCompletionsUseCase } from '../../../application/use-cases/chat-completions/stream-chat-completions.use-case';
+} from '../../../application/use-cases/02-llm-call/stream-chat-completions.command';
+import { StreamChatCompletionsUseCase } from '../../../application/use-cases/02-llm-call/stream-chat-completions.use-case';
+import { PostProcessChatCompletionsUseCase } from '../../../application/use-cases/03-post-processing/post-process-chat-completions.use-case';
 
 const WRAPPER_RESTRICTION_USER_MESSAGE =
   'bad request: this endpoint is not a general-purpose LLM; it is a wrapper that restricts options and fills defaults.';
@@ -12,12 +13,15 @@ type AcceptedInboundRole = 'user' | 'assistant' | 'system' | 'customer' | 'agent
 
 @Controller('v1/chat')
 export class ChatCompletionsController {
-  constructor(private readonly streamChatCompletionsUseCase: StreamChatCompletionsUseCase) {}
+  constructor(
+    private readonly streamChatCompletionsUseCase: StreamChatCompletionsUseCase,
+    private readonly postProcessChatCompletionsUseCase: PostProcessChatCompletionsUseCase
+  ) {}
 
   @Post('completions')
   public async streamChatCompletions(@Body() body: unknown): Promise<unknown> {
     const command = this.parseAndValidatePayload(body);
-    const { upstreamResponse, usedContextLines } = await this.streamChatCompletionsUseCase.execute(command);
+    const { upstreamResponse, contextMessage } = await this.streamChatCompletionsUseCase.execute(command);
     const upstreamRawBody = await upstreamResponse.text();
 
     if (!upstreamResponse.ok) {
@@ -31,9 +35,11 @@ export class ChatCompletionsController {
     }
 
     try {
-      const parsedPayload = JSON.parse(upstreamRawBody) as unknown;
-      const sanitizedPayload = this.sanitizeLlmResponsePayload(parsedPayload);
-      return this.attachUsedContextLinesIfRequested(sanitizedPayload, command.showUsedContext, usedContextLines);
+      return this.postProcessChatCompletionsUseCase.execute({
+        llmRawBody: upstreamRawBody,
+        showUsedContext: command.showUsedContext,
+        contextMessage
+      });
     } catch {
       throw new BadGatewayException({
         message:
@@ -201,92 +207,5 @@ export class ChatCompletionsController {
     return {
       customerId: normalizedCustomerId.trim()
     };
-  }
-
-  private sanitizeLlmResponsePayload(payload: unknown): unknown {
-    if (!this.isRecord(payload)) {
-      return payload;
-    }
-
-    const choices = payload.choices;
-    if (!Array.isArray(choices)) {
-      return payload;
-    }
-
-    const sanitizedChoices = choices.map((choice) => this.sanitizeChoice(choice));
-    return {
-      ...payload,
-      choices: sanitizedChoices
-    };
-  }
-
-  private attachUsedContextLinesIfRequested(
-    payload: unknown,
-    showUsedContext: boolean,
-    usedContextLines: string[] | undefined
-  ): unknown {
-    if (!showUsedContext || !this.isRecord(payload)) {
-      return payload;
-    }
-
-    return {
-      ...payload,
-      used_context_lines: usedContextLines ?? []
-    };
-  }
-
-  private sanitizeChoice(choice: unknown): unknown {
-    if (!this.isRecord(choice)) {
-      return choice;
-    }
-
-    const sanitizedChoice: Record<string, unknown> = { ...choice };
-
-    if (typeof choice.text === 'string') {
-      sanitizedChoice.text = this.sanitizeGeneratedText(choice.text);
-    }
-
-    const message = choice.message;
-    if (this.isRecord(message) && typeof message.content === 'string') {
-      sanitizedChoice.message = {
-        ...message,
-        content: this.sanitizeGeneratedText(message.content)
-      };
-    }
-
-    return sanitizedChoice;
-  }
-
-  private sanitizeGeneratedText(text: string): string {
-    const phrases = text.match(/[^!.]+[!.]?/g) ?? [text];
-
-    const sanitized = phrases
-      .map((phrase) => phrase.trim())
-      .filter((phrase) => phrase.length > 0)
-      .filter((phrase) => !phrase.toLowerCase().includes('genial!'))
-      .join(' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-
-    return this.fixMalformedUrls(sanitized);
-  }
-
-  private fixMalformedUrls(text: string): string {
-    let fixed = text;
-
-    const replacements: Array<[RegExp, string]> = [
-      [/(https?:\/\/\S+)\s+\.(\S+)/gi, '$1.$2'],
-      [/(https?:\/\/\S+)\s+\/(\S+)/gi, '$1/$2'],
-      [/(https?:\/\/\S+)\s+\?(\S+)/gi, '$1?$2'],
-      [/(https?:\/\/\S+)\s+#(\S+)/gi, '$1#$2'],
-      [/(https?:\/\/\S+)\s+&(\S+)/gi, '$1&$2'],
-      [/(https?:\/\/\S+)\s+=(\S+)/gi, '$1=$2']
-    ];
-
-    for (const [pattern, replacement] of replacements) {
-      fixed = fixed.replace(pattern, replacement);
-    }
-
-    return fixed;
   }
 }

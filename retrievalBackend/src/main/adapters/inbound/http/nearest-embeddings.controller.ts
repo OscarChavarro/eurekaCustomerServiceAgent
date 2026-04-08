@@ -1,6 +1,6 @@
 import { BadGatewayException, BadRequestException, Body, Controller, Post } from '@nestjs/common';
-import type { FindNearestEmbeddingsCommand } from '../../../application/use-cases/nearest-embeddings/find-nearest-embeddings.command';
-import { FindNearestEmbeddingsUseCase } from '../../../application/use-cases/nearest-embeddings/find-nearest-embeddings.use-case';
+import type { FindNearestEmbeddingsCommand } from '../../../application/use-cases/support/diagnostics/find-nearest-embeddings.command';
+import { FindNearestEmbeddingsUseCase } from '../../../application/use-cases/support/diagnostics/find-nearest-embeddings.use-case';
 
 @Controller()
 export class NearestEmbeddingsController {
@@ -55,4 +55,3 @@ export class NearestEmbeddingsController {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
   }
 }
-
