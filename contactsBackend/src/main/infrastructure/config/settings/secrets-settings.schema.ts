@@ -10,6 +10,10 @@ export const secretsSettingsSchema = z.object({
     client_secret: z.string().trim().min(1),
     redirect_uris: z.array(z.string().trim().min(1)).min(1)
   }),
+  cors: z.object({
+    allowedOrigins: z.array(z.string().trim().min(1)).min(1),
+    allowedNetworkCidr: z.string().trim().min(1).optional()
+  }),
   googleAuthSession: z
     .object({
       pendingStates: z

@@ -33,6 +33,10 @@ export const SHELL_TRANSLATIONS = {
     en: 'modo time',
     es: 'modo time'
   },
+  MODE_CONTACTS_TAB_ARIA: {
+    en: 'contacts mode',
+    es: 'modo contactos'
+  },
   CHAT_MODE_LABEL: {
     en: 'chat mode',
     es: 'modo chat'
@@ -41,9 +45,77 @@ export const SHELL_TRANSLATIONS = {
     en: 'time mode',
     es: 'modo time'
   },
+  CONTACTS_MODE_LABEL: {
+    en: 'contacts mode',
+    es: 'modo contactos'
+  },
   CONVERSATION_LIST_ARIA: {
     en: 'Conversation list',
     es: 'Lista de conversaciones'
+  },
+  CONTACTS_PANEL_ARIA: {
+    en: 'Contacts panel',
+    es: 'Panel de contactos'
+  },
+  CONTACTS_TABLE_TITLE: {
+    en: 'Contacts',
+    es: 'Contactos'
+  },
+  CONTACTS_TABLE_CONTACT_NAME_HEADER: {
+    en: 'Contact name',
+    es: 'Nombre de contacto'
+  },
+  CONTACTS_TABLE_PHONE_NUMBERS_HEADER: {
+    en: 'Phone numbers',
+    es: 'Numeros de telefono'
+  },
+  CONTACTS_TABLE_COUNTRY_HEADER: {
+    en: 'Country',
+    es: 'Pais'
+  },
+  CONTACTS_WORKBOOK_TABS_ARIA: {
+    en: 'Contacts workbook tabs',
+    es: 'Pestanas de libro de contactos'
+  },
+  CONTACTS_WORKBOOK_CONTACTS_WITH_CONVERSATIONS: {
+    en: 'Contacts with conversations',
+    es: 'Contactos con conversaciones'
+  },
+  CONTACTS_WORKBOOK_CONVERSATIONS_WITHOUT_CONTACTS: {
+    en: 'Conversations with no contacts',
+    es: 'Conversaciones sin contactos'
+  },
+  CONTACTS_WORKBOOK_CONTACTS_WITHOUT_CONVERSATIONS: {
+    en: 'Contacts without conversations',
+    es: 'Contactos sin conversaciones'
+  },
+  CONTACTS_TABLE_LOADING: {
+    en: 'Loading contacts...',
+    es: 'Cargando contactos...'
+  },
+  CONTACTS_TABLE_ERROR: {
+    en: 'Unable to load contacts.',
+    es: 'No se pudieron cargar los contactos.'
+  },
+  CONTACTS_TABLE_EMPTY: {
+    en: 'No contacts available.',
+    es: 'No hay contactos disponibles.'
+  },
+  CONTACTS_TABLE_UNKNOWN_NAME: {
+    en: '(No name)',
+    es: '(Sin nombre)'
+  },
+  CONTACTS_SORT_ASC: {
+    en: 'Sort ascending',
+    es: 'Orden ascendente'
+  },
+  CONTACTS_SORT_DESC: {
+    en: 'Sort descending',
+    es: 'Orden descendente'
+  },
+  CONTACTS_SORT_DISABLED: {
+    en: 'Disable sorting',
+    es: 'Desactivar orden'
   },
   TIME_PANEL_ARIA: {
     en: 'Time panel',

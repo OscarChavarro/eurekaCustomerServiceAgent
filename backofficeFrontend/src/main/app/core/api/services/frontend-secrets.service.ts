@@ -17,6 +17,9 @@ export class FrontendSecretsService {
     if (!loadedSecrets.backend?.baseUrl?.trim()) {
       throw new Error('Missing backend.baseUrl in secrets.json');
     }
+    if (!loadedSecrets.contactsBackend?.baseUrl?.trim()) {
+      throw new Error('Missing contactsBackend.baseUrl in secrets.json');
+    }
     if (!loadedSecrets.retrievalBackend?.baseUrl?.trim()) {
       throw new Error('Missing retrievalBackend.baseUrl in secrets.json');
     }
@@ -27,6 +30,12 @@ export class FrontendSecretsService {
     this.secrets = {
       backend: {
         baseUrl: this.normalizeHttpBaseUrl(loadedSecrets.backend.baseUrl, 'backend.baseUrl')
+      },
+      contactsBackend: {
+        baseUrl: this.normalizeHttpBaseUrl(
+          loadedSecrets.contactsBackend.baseUrl,
+          'contactsBackend.baseUrl'
+        )
       },
       retrievalBackend: {
         baseUrl: this.normalizeHttpBaseUrl(
@@ -49,6 +58,14 @@ export class FrontendSecretsService {
     }
 
     return this.secrets.backend.baseUrl;
+  }
+
+  public get contactsBackendBaseUrl(): string {
+    if (!this.secrets) {
+      throw new Error('Frontend secrets not loaded yet.');
+    }
+
+    return this.secrets.contactsBackend.baseUrl;
   }
 
   public get staticAssetsBaseUrl(): string {

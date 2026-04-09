@@ -13,6 +13,11 @@ export type GoogleOauthWebConfig = {
   redirectUri: string;
 };
 
+export type CorsConfig = {
+  allowedOrigins: string[];
+  allowedNetworkCidr: string | null;
+};
+
 @Injectable()
 export class ServiceConfig {
   constructor(
@@ -46,6 +51,15 @@ export class ServiceConfig {
     };
   }
 
+  public get corsConfig(): CorsConfig {
+    const cors = this.secretsConfig.values.cors;
+
+    return {
+      allowedOrigins: cors.allowedOrigins.map((origin) => this.normalizeOrigin(origin)),
+      allowedNetworkCidr: this.normalizeCidr(cors.allowedNetworkCidr)
+    };
+  }
+
   private readPositiveInt(name: string, fallback: number): number {
     const rawValue = process.env[name];
 
@@ -65,5 +79,25 @@ export class ServiceConfig {
   private normalizeUrl(url: string): string {
     const parsed = new URL(url);
     return parsed.toString().replace(/\/$/, '');
+  }
+
+  private normalizeOrigin(origin: string): string {
+    const parsed = new URL(origin);
+
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      throw new Error(`Invalid CORS origin "${origin}". It must use http:// or https://`);
+    }
+
+    return parsed.origin;
+  }
+
+  private normalizeCidr(cidr: string | undefined): string | null {
+    const normalized = cidr?.trim();
+
+    if (!normalized) {
+      return null;
+    }
+
+    return normalized;
   }
 }

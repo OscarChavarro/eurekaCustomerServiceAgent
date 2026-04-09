@@ -1,0 +1,141 @@
+<section class="contacts-panel" [attr.aria-label]="contactsPanelAriaLabel()">
+  <div class="spreadsheet-table-wrapper">
+    <div
+      class="spreadsheet-table-scroll"
+      tabindex="0"
+      (click)="onTableContainerClick($event)"
+      (keydown)="onTableKeydown($event)"
+    >
+      <table class="spreadsheet-table">
+        <thead>
+          <tr>
+            <th class="row-index-header">#</th>
+            <th>
+              <div class="th-content">
+                <span>{{ contactNameHeaderLabel() }}</span>
+                <button
+                  type="button"
+                  class="sort-button"
+                  [class.active]="isSortActive('contactName')"
+                  (click)="onSortToggle('contactName')"
+                  [attr.aria-label]="getSortAriaLabel('contactName')"
+                >
+                  <span class="material-symbols-outlined">{{ getSortIcon('contactName') }}</span>
+                </button>
+              </div>
+            </th>
+            <th>
+              <div class="th-content">
+                <span>{{ phoneNumbersHeaderLabel() }}</span>
+                <button
+                  type="button"
+                  class="sort-button"
+                  [class.active]="isSortActive('phoneNumbers')"
+                  (click)="onSortToggle('phoneNumbers')"
+                  [attr.aria-label]="getSortAriaLabel('phoneNumbers')"
+                >
+                  <span class="material-symbols-outlined">{{ getSortIcon('phoneNumbers') }}</span>
+                </button>
+              </div>
+            </th>
+            <th>
+              <div class="th-content">
+                <span>{{ countryHeaderLabel() }}</span>
+                <button
+                  type="button"
+                  class="sort-button"
+                  [class.active]="isSortActive('country')"
+                  (click)="onSortToggle('country')"
+                  [attr.aria-label]="getSortAriaLabel('country')"
+                >
+                  <span class="material-symbols-outlined">{{ getSortIcon('country') }}</span>
+                </button>
+              </div>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          @if (isLoading()) {
+            <tr>
+              <td colspan="4" class="state-row">{{ contactsLoadingLabel() }}</td>
+            </tr>
+          } @else if (hasError()) {
+            <tr>
+              <td colspan="4" class="state-row is-error">{{ contactsErrorLabel() }}</td>
+            </tr>
+          } @else if (visibleRows().length === 0) {
+            <tr>
+              <td colspan="4" class="state-row">{{ contactsEmptyLabel() }}</td>
+            </tr>
+          } @else {
+            @for (
+              contact of visibleRows();
+              track trackByContact($index, contact);
+              let rowIndex = $index
+            ) {
+              <tr
+                class="contact-row"
+                [class.is-selected]="isRowSelected(contact)"
+                (click)="selectRow(contact)"
+              >
+                <td class="row-index-cell">{{ rowIndex + 1 }}</td>
+                <td>{{ contactNameValue(contact) }}</td>
+                <td>{{ phoneNumbersValue(contact) }}</td>
+                <td class="country-cell" [attr.aria-label]="countryCellValue(contact)">
+                  @if (countryFlags(contact).length === 0) {
+                    <span class="country-empty">-</span>
+                  } @else {
+                    <span class="country-flags">
+                      @for (country of countryFlags(contact); track trackByCountryFlag($index, country)) {
+                        <img
+                          class="country-flag"
+                          [src]="country.flagSvgUrl"
+                          [alt]="country.label"
+                          [title]="country.label"
+                          loading="lazy"
+                        />
+                      }
+                    </span>
+                  }
+                </td>
+              </tr>
+            }
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <footer class="workbook-tabs" role="tablist" [attr.aria-label]="workbookTabsAriaLabel()">
+    <button
+      type="button"
+      role="tab"
+      class="workbook-tab"
+      [class.is-active]="isWorkbookTabActive('contactsWithConversations')"
+      [attr.aria-selected]="isWorkbookTabActive('contactsWithConversations')"
+      (click)="selectWorkbookTab('contactsWithConversations')"
+    >
+      {{ contactsWithConversationsTabLabel() }}
+    </button>
+    <button
+      type="button"
+      role="tab"
+      class="workbook-tab"
+      [class.is-active]="isWorkbookTabActive('conversationsWithoutContacts')"
+      [attr.aria-selected]="isWorkbookTabActive('conversationsWithoutContacts')"
+      (click)="selectWorkbookTab('conversationsWithoutContacts')"
+    >
+      {{ conversationsWithoutContactsTabLabel() }}
+    </button>
+    <button
+      type="button"
+      role="tab"
+      class="workbook-tab"
+      [class.is-active]="isWorkbookTabActive('contactsWithoutConversations')"
+      [attr.aria-selected]="isWorkbookTabActive('contactsWithoutConversations')"
+      (click)="selectWorkbookTab('contactsWithoutConversations')"
+    >
+      {{ contactsWithoutConversationsTabLabel() }}
+    </button>
+  </footer>
+</section>

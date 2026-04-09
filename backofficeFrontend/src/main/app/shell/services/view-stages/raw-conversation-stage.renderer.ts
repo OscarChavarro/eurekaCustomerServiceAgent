@@ -14,11 +14,13 @@ export class RawConversationStageRenderer implements ConversationStageRenderer {
   private readonly imageExtensions = new Set(['jpg', 'jpeg', 'gif', 'webp', 'png']);
 
   render(document: BackendConversationDocument): ChatMessage[] {
+    const assetConversationLabel = this.resolveAssetConversationLabel(document);
+
     return (document.rawMessages ?? []).map((rawMessage) =>
       this.messageBubbleFactory.createFromRaw(rawMessage, {
         text: rawMessage.text,
         imageUrl: this.buildImageUrl(
-          document._id,
+          assetConversationLabel,
           rawMessage.normalizedFields?.messageDate,
           rawMessage.sentAt,
           rawMessage.normalizedFields?.attachment
@@ -31,7 +33,7 @@ export class RawConversationStageRenderer implements ConversationStageRenderer {
   }
 
   private buildImageUrl(
-    conversationId: string,
+    assetConversationLabel: string,
     messageDate: string | null | undefined,
     sentAt: string | null,
     attachment: string | null | undefined
@@ -47,11 +49,42 @@ export class RawConversationStageRenderer implements ConversationStageRenderer {
       return undefined;
     }
 
-    const relativePath = `WhatsApp - ${conversationId}/${formattedDate} - ${conversationId} - ${trimmedAttachment}`;
+    const relativePath = `WhatsApp - ${assetConversationLabel}/${formattedDate} - ${assetConversationLabel} - ${trimmedAttachment}`;
     return this.toNormalizedHttpUrl(
       this.frontendSecretsService.staticAssetsBaseUrl,
       relativePath
     );
+  }
+
+  private resolveAssetConversationLabel(document: BackendConversationDocument): string {
+    const contactName = this.toNonEmptyString(document.contactName);
+    if (contactName) {
+      return contactName;
+    }
+
+    const sourceFile = this.toNonEmptyString(document.sourceFile);
+    if (sourceFile) {
+      const fileName = sourceFile.split(/[\\/]/).pop() ?? sourceFile;
+      const extractedLabel = fileName
+        .replace(/\.csv$/i, '')
+        .replace(/^whatsapp\s*-\s*/i, '')
+        .trim();
+
+      if (extractedLabel.length > 0) {
+        return extractedLabel;
+      }
+    }
+
+    return document._id;
+  }
+
+  private toNonEmptyString(value: unknown): string | null {
+    if (typeof value !== 'string') {
+      return null;
+    }
+
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
   }
 
   private isImageAttachment(attachment: string): boolean {

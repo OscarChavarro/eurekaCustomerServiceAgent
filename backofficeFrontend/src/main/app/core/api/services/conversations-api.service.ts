@@ -44,6 +44,8 @@ export type BackendConversationSummary = {
 
 export type BackendConversationDocument = {
   _id: string;
+  contactName?: string | null;
+  sourceFile?: string | null;
   rawMessages?: BackendConversationRawMessage[];
   cleanedMessages?: BackendConversationCleanMessage[];
   structuredMessages?: BackendConversationStructuredMessage[];

@@ -23,6 +23,17 @@
       >
         <span class="material-symbols-outlined" aria-hidden="true">calendar_month</span>
       </button>
+      <button
+        type="button"
+        role="tab"
+        class="mode-tab"
+        [class.is-active]="operationMode() === 'contacts'"
+        [attr.aria-selected]="operationMode() === 'contacts'"
+        [attr.aria-label]="contactsModeAriaLabel()"
+        (click)="setOperationMode('contacts')"
+      >
+        <span class="material-symbols-outlined" aria-hidden="true">groups</span>
+      </button>
     </div>
 
     <div class="sidebar-bottom-actions">
@@ -92,11 +103,7 @@
   </aside>
 
   <section class="workspace-panel">
-    @if (!isTimeMode()) {
-      <div class="chat-panels">
-        <ng-container [ngTemplateOutlet]="chatPanelsTemplate"></ng-container>
-      </div>
-    } @else {
+    @if (isTimeMode()) {
       <div class="time-mode-layout" #timeModeLayout [class.is-chat-hidden]="isTimeModeChatHidden()">
         <section
           class="time-panel-host"
@@ -119,6 +126,12 @@
             <ng-container [ngTemplateOutlet]="chatPanelsTemplate"></ng-container>
           </div>
         }
+      </div>
+    } @else if (isContactsMode()) {
+      <app-contacts-panel></app-contacts-panel>
+    } @else {
+      <div class="chat-panels">
+        <ng-container [ngTemplateOutlet]="chatPanelsTemplate"></ng-container>
       </div>
     }
   </section>

@@ -34,10 +34,11 @@ import {
   ChatMessage,
   ConversationViewMode,
 } from '../../services/chat-conversation.service';
+import { ContactsPanelComponent } from '../contacts-panel/contacts-panel.component';
 
 @Component({
   selector: 'app-shell-chat',
-  imports: [CommonModule, TimePanelComponent, TimeRangeSelectorComponent],
+  imports: [CommonModule, TimePanelComponent, TimeRangeSelectorComponent, ContactsPanelComponent],
   templateUrl: './app-shell-chat.component.html',
   styleUrls: [
     './app-shell-chat.workspace.component.sass',
@@ -105,6 +106,7 @@ export class AppShellChatComponent implements OnDestroy {
   protected readonly embedNearestBlocks = this.embedNearestBlocksState.asReadonly();
   protected readonly embedNearestLoading = this.embedNearestLoadingState.asReadonly();
   protected readonly isTimeMode = computed(() => this.operationModeState() === 'time');
+  protected readonly isContactsMode = computed(() => this.operationModeState() === 'contacts');
   protected readonly isTimeModeChatHidden = this.chatHiddenInTimeModeState.asReadonly();
   protected readonly isTimeRangeSelectorOpen = this.timeRangeSelectorOpenState.asReadonly();
   protected readonly selectedTimeRange = this.selectedTimeRangeState.asReadonly();
@@ -240,6 +242,10 @@ export class AppShellChatComponent implements OnDestroy {
 
   protected timeModeAriaLabel(): string {
     return this.t(I18N_KEYS.shell.MODE_TIME_TAB_ARIA);
+  }
+
+  protected contactsModeAriaLabel(): string {
+    return this.t(I18N_KEYS.shell.MODE_CONTACTS_TAB_ARIA);
   }
 
   protected mainMenuAriaLabel(): string {
@@ -1133,7 +1139,7 @@ export class AppShellChatComponent implements OnDestroy {
   }
 }
 
-type OperationMode = 'chat' | 'time';
+type OperationMode = 'chat' | 'time' | 'contacts';
 
 type TextSegment =
   | { type: 'text'; value: string }

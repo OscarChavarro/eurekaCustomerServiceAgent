@@ -1,0 +1,227 @@
+:host
+  display: block
+  height: 100%
+  min-height: 0
+
+.contacts-panel
+  width: 100%
+  height: 100%
+  min-height: 0
+  display: flex
+  flex-direction: column
+  overflow: hidden
+  background: #ffffff
+
+.spreadsheet-table-wrapper
+  width: 100%
+  flex: 1 1 auto
+  display: flex
+  flex-direction: column
+  min-height: 0
+  overflow: hidden
+  background: #ffffff
+
+.spreadsheet-table-scroll
+  flex: 1 1 auto
+  height: 100%
+  min-height: 0
+  overflow: auto
+
+.spreadsheet-table
+  width: 100%
+  min-width: 620px
+  border-collapse: collapse
+  table-layout: fixed
+  font-family: 'Arial', 'Helvetica Neue', Helvetica, sans-serif
+  font-size: 0.95rem
+  color: #1f2937
+
+.spreadsheet-table th:nth-child(1),
+.spreadsheet-table td:nth-child(1)
+  width: 46px
+
+.spreadsheet-table th:nth-child(2),
+.spreadsheet-table td:nth-child(2)
+  width: 32%
+
+.spreadsheet-table th:nth-child(3),
+.spreadsheet-table td:nth-child(3)
+  width: 46%
+
+.spreadsheet-table th:nth-child(4),
+.spreadsheet-table td:nth-child(4)
+  width: 22%
+
+.spreadsheet-table thead th
+  background: #f1f3f4
+  border: 1px solid #bcbec0
+  border-top: 0
+  padding: 0.28rem 0.5rem
+  text-transform: uppercase
+  font-size: 0.86rem
+  letter-spacing: 0.02em
+  text-align: left
+  font-weight: 700
+  position: sticky
+  top: 0
+  z-index: 2
+
+.spreadsheet-table thead th.row-index-header
+  padding: 0
+  text-align: center
+  border-left: 0
+
+.th-content
+  display: flex
+  align-items: center
+  justify-content: space-between
+  gap: 0.5rem
+
+.sort-button
+  width: 1.7rem
+  height: 1.7rem
+  border: 0
+  background: transparent
+  color: #7e868f
+  border-radius: 999px
+  cursor: pointer
+  padding: 0
+  display: inline-flex
+  align-items: center
+  justify-content: center
+
+.sort-button .material-symbols-outlined
+  font-size: 1.2rem
+  line-height: 1
+
+.sort-button:hover
+  background: #e6eaef
+
+.sort-button.active
+  background: #e8f0fe
+  color: #1967d2
+
+.spreadsheet-table tbody td
+  border: 1px solid #d0d0d0
+  padding: 0.3rem 0.55rem
+  vertical-align: middle
+  white-space: nowrap
+  overflow: hidden
+  text-overflow: ellipsis
+  background: #ffffff
+
+.spreadsheet-table tbody tr.contact-row:hover td
+  background: #eef4ff
+
+.spreadsheet-table tbody tr.contact-row.is-selected td
+  background: #dbe9ff
+
+.spreadsheet-table tbody td:nth-child(1)
+  width: 46px
+  padding: 0
+  text-align: center
+  color: #3c4043
+  font-size: 0.82rem
+  background: #f1f3f4 !important
+  border-left: 0
+  font-variant-numeric: tabular-nums
+
+.spreadsheet-table tbody tr.contact-row:hover td:nth-child(1)
+  background: #f1f3f4 !important
+
+.spreadsheet-table tbody tr.contact-row.is-selected td:nth-child(1)
+  background: #dbe9ff !important
+
+.spreadsheet-table tbody td:nth-child(3)
+  color: #526170
+
+.country-cell
+  padding: 0 !important
+  margin: 0
+  text-align: left
+  line-height: 0
+  text-align: center
+  color: #1f2937
+
+.country-flags
+  display: flex
+  align-items: center
+  justify-content: center
+  flex-wrap: wrap
+  gap: 0
+  width: 100%
+  height: 100%
+  padding: 0
+  margin: 0
+
+.country-flag
+  display: block
+  width: auto
+  height: 100%
+  max-height: 1.75rem
+  border-radius: 0
+  box-shadow: none
+  padding: 0
+  margin: 0
+  object-fit: cover
+
+.country-empty
+  color: #5f6368
+  line-height: 1.2
+
+.state-row
+  text-align: center
+  padding: 0.85rem
+  color: #5f6368
+  font-style: italic
+
+.state-row.is-error
+  color: #991b1b
+
+.workbook-tabs
+  display: flex
+  align-items: flex-start
+  gap: 0.2rem
+  padding: 0 0.3rem
+  min-height: 2.7rem
+  overflow-x: auto
+  overflow-y: hidden
+  border-bottom: 1px solid #bcbec0
+  background: #d9dde2
+
+.workbook-tab
+  border: 1px solid transparent
+  border-bottom: 0
+  background: #e7eaee
+  color: #4b535c
+  font-family: 'Arial', 'Helvetica Neue', Helvetica, sans-serif
+  font-size: 0.95rem
+  line-height: 1
+  padding: 0 0.8rem
+  height: 2.15rem
+  margin: 0 0 0.3rem
+  border-radius: 0 0 0.45rem 0.45rem
+  cursor: pointer
+  white-space: nowrap
+
+.workbook-tab:hover
+  background: #f0f2f5
+
+.workbook-tab.is-active
+  border-color: #bcbec0
+  background: #ffffff
+  color: #1b4d9b
+  font-weight: 700
+
+@media (max-width: 900px)
+  .spreadsheet-table
+    min-width: 520px
+
+  .spreadsheet-table tbody td
+    white-space: normal
+
+  .spreadsheet-table tbody td:nth-child(1)
+    white-space: nowrap
+
+  .workbook-tab
+    font-size: 0.85rem
