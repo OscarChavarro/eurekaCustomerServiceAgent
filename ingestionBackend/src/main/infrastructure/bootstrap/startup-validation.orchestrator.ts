@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { BgeConnectivityStartupValidator } from './validators/bge-connectivity-startup.validator';
+import { ContactsBackendConnectivityStartupValidator } from './validators/contacts-backend-connectivity-startup.validator';
 import { MongoConnectivityStartupValidator } from './validators/mongo-connectivity-startup.validator';
 import { ProcessedConversationsFolderStartupValidator } from './validators/processed-conversations-folder-startup.validator';
 import { QdrantConnectivityStartupValidator } from './validators/qdrant-connectivity-startup.validator';
@@ -23,6 +24,7 @@ export type StartupValidationResult = {
 export class StartupValidationOrchestrator {
   constructor(
     private readonly processedConversationsFolderStartupValidator: ProcessedConversationsFolderStartupValidator,
+    private readonly contactsBackendConnectivityStartupValidator: ContactsBackendConnectivityStartupValidator,
     private readonly mongoConnectivityStartupValidator: MongoConnectivityStartupValidator,
     private readonly qdrantConnectivityStartupValidator: QdrantConnectivityStartupValidator,
     private readonly bgeConnectivityStartupValidator: BgeConnectivityStartupValidator
@@ -31,6 +33,7 @@ export class StartupValidationOrchestrator {
   public async validateAll(): Promise<StartupValidationResult> {
     const validators = [
       this.processedConversationsFolderStartupValidator,
+      this.contactsBackendConnectivityStartupValidator,
       this.mongoConnectivityStartupValidator,
       this.qdrantConnectivityStartupValidator,
       this.bgeConnectivityStartupValidator

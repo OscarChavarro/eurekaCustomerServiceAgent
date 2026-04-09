@@ -59,12 +59,16 @@ const FIELD_TRANSLATION_TABLE: Record<string, TranslatableField> = {
 export class ConversationCsvRecordTranslatorService {
   public translate(record: ConversationCsvRawRecord): RawConversationMessage {
     const normalizedFields = this.normalizeFields(record.fields);
+    const conversationIdFromFile = this.toNullableString(record.conversationId ?? '');
     const fallbackConversationId = basename(record.sourceFile, '.csv');
-    const conversationId = normalizedFields.chatSession ?? fallbackConversationId;
+    const conversationId =
+      conversationIdFromFile ?? normalizedFields.chatSession ?? fallbackConversationId;
     const text = normalizedFields.text ?? '';
+    const contactName = this.toNullableString(record.contactName ?? '');
 
     return new RawConversationMessage(
       conversationId,
+      contactName,
       this.buildExternalId(conversationId, record.rowNumber),
       this.parseDate(normalizedFields.sentDate ?? normalizedFields.messageDate),
       normalizedFields.senderName ?? normalizedFields.senderId,

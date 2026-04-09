@@ -1,6 +1,9 @@
 import { Module } from '@nestjs/common';
+import { ContactsDirectoryIndexService } from './adapters/inbound/csv/contacts-directory-index.service';
 import { FileSystemConversationCsvSourceAdapter } from './adapters/inbound/csv/file-system-conversation-csv-source.adapter';
+import { ImazingCsvFileNameService } from './adapters/inbound/csv/imazing-csv-file-name.service';
 import { IngestionController } from './adapters/inbound/http/ingestion.controller';
+import { HttpContactsDirectoryAdapter } from './adapters/outbound/contacts/http-contacts-directory.adapter';
 import { FileSystemProcessedConversationStageStoreAdapter } from './adapters/outbound/debug/file-system-processed-conversation-stage-store.adapter';
 import { BgeEmbeddingAdapter } from './adapters/outbound/embeddings/bge-embedding.adapter';
 import { MongoClientProvider } from './adapters/outbound/mongo/mongo-client.provider';
@@ -15,6 +18,7 @@ import { ConversationStructuringService } from './application/use-cases/kwoledge
 import { KwoledgeIngestionUseCase } from './application/use-cases/kwoledge-ingestion/kwoledge-ingestion.use-case';
 import { StartupValidationOrchestrator } from './infrastructure/bootstrap/startup-validation.orchestrator';
 import { BgeConnectivityStartupValidator } from './infrastructure/bootstrap/validators/bge-connectivity-startup.validator';
+import { ContactsBackendConnectivityStartupValidator } from './infrastructure/bootstrap/validators/contacts-backend-connectivity-startup.validator';
 import { MongoConnectivityStartupValidator } from './infrastructure/bootstrap/validators/mongo-connectivity-startup.validator';
 import { ProcessedConversationsFolderStartupValidator } from './infrastructure/bootstrap/validators/processed-conversations-folder-startup.validator';
 import { QdrantConnectivityStartupValidator } from './infrastructure/bootstrap/validators/qdrant-connectivity-startup.validator';
@@ -30,10 +34,13 @@ import { SettingsConfig } from './infrastructure/config/settings/settings.config
     ServiceConfig,
     MongoClientProvider,
     ProcessedConversationsFolderStartupValidator,
+    ContactsBackendConnectivityStartupValidator,
     MongoConnectivityStartupValidator,
     QdrantConnectivityStartupValidator,
     BgeConnectivityStartupValidator,
     StartupValidationOrchestrator,
+    ContactsDirectoryIndexService,
+    ImazingCsvFileNameService,
     ConversationCsvRecordTranslatorService,
     ConversationMessageCleaningService,
     ConversationStructuringService,
@@ -46,6 +53,10 @@ import { SettingsConfig } from './infrastructure/config/settings/settings.config
     {
       provide: TOKENS.EmbeddingPort,
       useClass: BgeEmbeddingAdapter
+    },
+    {
+      provide: TOKENS.ContactsDirectoryPort,
+      useClass: HttpContactsDirectoryAdapter
     },
     {
       provide: TOKENS.VectorStorePort,

@@ -98,6 +98,7 @@ type EmbedStageMessage = {
 
 type ProcessedConversationStages = {
   conversationId: string;
+  contactName: string | null;
   rawMessages: RawStageMessage[];
   cleanedMessages: CleanedStageMessage[];
   structuredMessages: StructuredStageMessage[];
@@ -330,6 +331,7 @@ export class KwoledgeIngestionUseCase {
   ): ProcessedConversationStages {
     return {
       conversationId,
+      contactName: this.resolveConversationContactName(rawMessages),
       rawMessages: rawMessages.map((message) => this.toRawStageMessage(message)),
       cleanedMessages: cleanedMessages.map((message) => this.toCleanedStageMessage(message)),
       structuredMessages: structuredTurns.map((turn) => this.toStructuredStageMessage(turn)),
@@ -448,6 +450,7 @@ export class KwoledgeIngestionUseCase {
   private buildConversationMetadata(rawMessages: RawConversationMessage[]): {
     createdAt: Date;
     source: string;
+    contactName: string | null;
     firstMessageDate: string | null;
     lastMessageDate: string | null;
     lastMessageText: string | null;
@@ -481,6 +484,7 @@ export class KwoledgeIngestionUseCase {
     return {
       createdAt: new Date(),
       source: rawMessages[0]?.sourceFile ?? 'unknown',
+      contactName: this.resolveConversationContactName(rawMessages),
       firstMessageDate,
       lastMessageDate,
       lastMessageText:
@@ -488,6 +492,16 @@ export class KwoledgeIngestionUseCase {
         timelineMessages[timelineMessages.length - 1]?.normalizedFields.text ??
         null
     };
+  }
+
+  private resolveConversationContactName(rawMessages: RawConversationMessage[]): string | null {
+    for (const rawMessage of rawMessages) {
+      if (rawMessage.contactName) {
+        return rawMessage.contactName;
+      }
+    }
+
+    return null;
   }
 
   private toRawStageMessage(rawMessage: RawConversationMessage): RawStageMessage {

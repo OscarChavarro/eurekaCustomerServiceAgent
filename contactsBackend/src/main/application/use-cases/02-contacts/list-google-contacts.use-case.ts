@@ -27,14 +27,24 @@ export class ListGoogleContactsUseCase {
 
     const collected: GoogleContact[] = [];
     let pageToken: string | undefined;
-    let loops = 0;
+    const seenPageTokens = new Set<string>();
 
-    do {
+    while (true) {
       const page = await this.googlePeoplePort.listContacts(accessToken, command.pageSize, pageToken);
       collected.push(...page.contacts);
-      pageToken = page.nextPageToken;
-      loops += 1;
-    } while (pageToken && loops < 10);
+      const nextPageToken = this.toValidPageToken(page.nextPageToken);
+
+      if (!nextPageToken) {
+        break;
+      }
+
+      if (seenPageTokens.has(nextPageToken)) {
+        throw new Error('Detected repeated Google People API nextPageToken while listing contacts.');
+      }
+
+      seenPageTokens.add(nextPageToken);
+      pageToken = nextPageToken;
+    }
 
     return {
       contacts: collected.map((contact) => ({
@@ -42,5 +52,15 @@ export class ListGoogleContactsUseCase {
         phoneNumbers: contact.phoneNumbers
       }))
     };
+  }
+
+  private toValidPageToken(pageToken: string | undefined): string | undefined {
+    const normalizedPageToken = pageToken?.trim();
+
+    if (!normalizedPageToken) {
+      return undefined;
+    }
+
+    return normalizedPageToken;
   }
 }

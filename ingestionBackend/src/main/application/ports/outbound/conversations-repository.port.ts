@@ -32,6 +32,7 @@ export type ChunkedConversationStageMessage = {
 export type ConversationMetadata = {
   createdAt: Date;
   source: string;
+  contactName: string | null;
   firstMessageDate: string | null;
   lastMessageDate: string | null;
   lastMessageText: string | null;

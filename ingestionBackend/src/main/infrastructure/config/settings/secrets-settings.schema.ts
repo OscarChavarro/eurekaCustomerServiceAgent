@@ -8,6 +8,13 @@ export const secretsSettingsSchema = z.object({
       return normalizedValue && normalizedValue.length > 0 ? normalizedValue : null;
     })
   }),
+  contactsBackend: z
+    .object({
+      url: z.string().trim().min(1).default('http://localhost:3669')
+    })
+    .default({
+      url: 'http://localhost:3669'
+    }),
   embedding: z.object({
     provider: z.string().trim().min(1),
     host: z.string().trim().min(1),

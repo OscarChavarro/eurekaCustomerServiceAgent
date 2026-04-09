@@ -1,18 +1,61 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { parse } from 'csv-parse/sync';
 import { promises as fs } from 'node:fs';
-import { basename, extname, isAbsolute, join, resolve } from 'node:path';
+import { basename, dirname, extname, isAbsolute, join, resolve } from 'node:path';
 import type {
   ConversationCsvSourcePort,
   ConversationCsvRawRecord
 } from '../../../application/ports/inbound/conversation-csv-source.port';
+import type { ContactsDirectoryPort } from '../../../application/ports/outbound/contacts-directory.port';
+import { TOKENS } from '../../../application/ports/tokens';
+import { ContactsDirectoryIndexService } from './contacts-directory-index.service';
+import { ImazingCsvFileNameService } from './imazing-csv-file-name.service';
+
+type ProcessableCsvFile = {
+  kind: 'processable';
+  csvPath: string;
+  sourceFile: string;
+  conversationId: string;
+  contactName: string | null;
+  foundInContactsHashmap: boolean;
+  matchedWithUnicodeReplacementRetry: boolean;
+};
+
+type UnsupportedCsvFile = {
+  kind: 'unsupported';
+  sourceFile: string;
+  movedToPath: string;
+  foundInContactsHashmap: boolean;
+  matchedWithUnicodeReplacementRetry: boolean;
+};
+
+type CsvFileResolution = ProcessableCsvFile | UnsupportedCsvFile;
+
+type ContactsDirectoryLoadSummary = {
+  contactsCount: number;
+  indexedNames: number;
+};
 
 @Injectable()
 export class FileSystemConversationCsvSourceAdapter implements ConversationCsvSourcePort {
   private readonly logger = new Logger(FileSystemConversationCsvSourceAdapter.name);
+  private contactsByNameIndex = new Map<string, string[]>();
+  private contactsByImazingUnicodeReplacementNameIndex = new Map<string, string[]>();
+
+  constructor(
+    @Inject(TOKENS.ContactsDirectoryPort)
+    private readonly contactsDirectoryPort: ContactsDirectoryPort,
+    private readonly contactsDirectoryIndexService: ContactsDirectoryIndexService,
+    private readonly imazingCsvFileNameService: ImazingCsvFileNameService
+  ) {}
 
   public async readFromPath(path: string): Promise<ConversationCsvRawRecord[]> {
     const resolvedPath = this.resolveInputPath(path);
+    const contactsDirectoryLoadSummary = await this.loadContactsDirectory();
+    this.logger.log(
+      `Imported ${contactsDirectoryLoadSummary.contactsCount} contacts into contacts hashmap. Indexed names: ${contactsDirectoryLoadSummary.indexedNames}`
+    );
+
     const pathStats = await fs.stat(resolvedPath);
     const rawRecords: ConversationCsvRawRecord[] = [];
 
@@ -21,10 +64,28 @@ export class FileSystemConversationCsvSourceAdapter implements ConversationCsvSo
         throw new Error(`Path is a file but not a CSV file: ${resolvedPath}`);
       }
 
-      this.logger.log(`[1/1] Reading CSV file: ${basename(resolvedPath)}`);
-      const csvRecords = await this.readCsvFile(resolvedPath, basename(resolvedPath));
+      const resolution = await this.resolveCsvFile(resolvedPath);
+
+      if (resolution.kind === 'unsupported') {
+        this.logger.warn(
+          `[1/1] Unsupported contact CSV skipped and moved to: ${resolution.movedToPath}. Found in contacts hashmap: ${this.toYesNo(resolution.foundInContactsHashmap)}. Unicode replacement retry used: ${this.toYesNo(resolution.matchedWithUnicodeReplacementRetry)}.`
+        );
+        return rawRecords;
+      }
+
+      this.logger.log(
+        `[1/1] Reading CSV file: ${resolution.sourceFile}. Found in contacts hashmap: ${this.toYesNo(resolution.foundInContactsHashmap)}. Unicode replacement retry used: ${this.toYesNo(resolution.matchedWithUnicodeReplacementRetry)}.`
+      );
+      const csvRecords = await this.readCsvFile(
+        resolution.csvPath,
+        resolution.sourceFile,
+        resolution.conversationId,
+        resolution.contactName
+      );
       rawRecords.push(...csvRecords);
-      this.logger.log(`[1/1] Loaded rows: ${csvRecords.length} from ${basename(resolvedPath)}`);
+      this.logger.log(
+        `[1/1] Loaded rows: ${csvRecords.length} from ${resolution.sourceFile}. Found in contacts hashmap: ${this.toYesNo(resolution.foundInContactsHashmap)}. Unicode replacement retry used: ${this.toYesNo(resolution.matchedWithUnicodeReplacementRetry)}.`
+      );
       return rawRecords;
     }
 
@@ -45,19 +106,198 @@ export class FileSystemConversationCsvSourceAdapter implements ConversationCsvSo
     for (const [index, csvFileName] of csvFileNames.entries()) {
       const current = index + 1;
       const csvPath = join(resolvedPath, csvFileName);
-      const csvRecords = await this.readCsvFile(csvPath, csvFileName);
+      const resolution = await this.resolveCsvFile(csvPath);
+
+      if (resolution.kind === 'unsupported') {
+        this.logger.warn(
+          `[${current}/${csvFileNames.length}] Unsupported CSV skipped and moved to: ${resolution.movedToPath}. Found in contacts hashmap: ${this.toYesNo(resolution.foundInContactsHashmap)}. Unicode replacement retry used: ${this.toYesNo(resolution.matchedWithUnicodeReplacementRetry)}.`
+        );
+        continue;
+      }
+
+      const csvRecords = await this.readCsvFile(
+        resolution.csvPath,
+        resolution.sourceFile,
+        resolution.conversationId,
+        resolution.contactName
+      );
       rawRecords.push(...csvRecords);
       this.logger.log(
-        `[${current}/${csvFileNames.length}] Loaded rows: ${csvRecords.length} from ${csvFileName}`
+        `[${current}/${csvFileNames.length}] Loaded rows: ${csvRecords.length} from ${resolution.sourceFile}. Found in contacts hashmap: ${this.toYesNo(resolution.foundInContactsHashmap)}. Unicode replacement retry used: ${this.toYesNo(resolution.matchedWithUnicodeReplacementRetry)}.`
       );
     }
 
     return rawRecords;
   }
 
+  private async loadContactsDirectory(): Promise<ContactsDirectoryLoadSummary> {
+    const contacts = await this.contactsDirectoryPort.listContacts();
+    this.contactsByNameIndex = this.contactsDirectoryIndexService.buildNameToPhonesIndex(contacts);
+    this.contactsByImazingUnicodeReplacementNameIndex =
+      this.contactsDirectoryIndexService.buildImazingUnicodeReplacementNameToPhonesIndex(contacts);
+
+    return {
+      contactsCount: contacts.length,
+      indexedNames: this.contactsByNameIndex.size
+    };
+  }
+
+  private async resolveCsvFile(csvPath: string): Promise<CsvFileResolution> {
+    const sourceFile = basename(csvPath);
+    const sourceLabel = this.imazingCsvFileNameService.extractConversationLabel(sourceFile);
+    const mappedPhone = this.contactsDirectoryIndexService.resolvePreferredPhoneNumber(
+      sourceLabel,
+      this.contactsByNameIndex
+    );
+
+    if (mappedPhone) {
+      const normalizedMappedPhone = this.imazingCsvFileNameService.normalizePhoneLabel(mappedPhone);
+
+      if (normalizedMappedPhone) {
+        const renamedPath = await this.renameCsvToPhone(csvPath, normalizedMappedPhone);
+        const renamedSourceFile = basename(renamedPath);
+
+        return {
+          kind: 'processable',
+          csvPath: renamedPath,
+          sourceFile: renamedSourceFile,
+          conversationId: normalizedMappedPhone,
+          contactName: sourceLabel,
+          foundInContactsHashmap: true,
+          matchedWithUnicodeReplacementRetry: false
+        };
+      }
+    }
+
+    const mappedPhoneByUnicodeReplacementRetry =
+      this.contactsDirectoryIndexService.resolvePreferredPhoneNumberWithImazingUnicodeReplacement(
+        sourceLabel,
+        this.contactsByImazingUnicodeReplacementNameIndex
+      );
+
+    if (mappedPhoneByUnicodeReplacementRetry) {
+      const normalizedMappedPhoneByUnicodeReplacementRetry =
+        this.imazingCsvFileNameService.normalizePhoneLabel(mappedPhoneByUnicodeReplacementRetry);
+
+      if (normalizedMappedPhoneByUnicodeReplacementRetry) {
+        const renamedPath = await this.renameCsvToPhone(
+          csvPath,
+          normalizedMappedPhoneByUnicodeReplacementRetry
+        );
+        const renamedSourceFile = basename(renamedPath);
+
+        return {
+          kind: 'processable',
+          csvPath: renamedPath,
+          sourceFile: renamedSourceFile,
+          conversationId: normalizedMappedPhoneByUnicodeReplacementRetry,
+          contactName: sourceLabel,
+          foundInContactsHashmap: true,
+          matchedWithUnicodeReplacementRetry: true
+        };
+      }
+    }
+
+    const normalizedPhoneLabel = this.imazingCsvFileNameService.normalizePhoneLabel(sourceLabel);
+
+    if (normalizedPhoneLabel) {
+      const renamedPath = await this.renameCsvToPhone(csvPath, normalizedPhoneLabel);
+      const renamedSourceFile = basename(renamedPath);
+
+      return {
+        kind: 'processable',
+        csvPath: renamedPath,
+        sourceFile: renamedSourceFile,
+        conversationId: normalizedPhoneLabel,
+        contactName: null,
+        foundInContactsHashmap: false,
+        matchedWithUnicodeReplacementRetry: false
+      };
+    }
+
+    const movedToPath = await this.moveToUnsupportedFolder(csvPath);
+
+    return {
+      kind: 'unsupported',
+      sourceFile,
+      movedToPath,
+      foundInContactsHashmap: false,
+      matchedWithUnicodeReplacementRetry: false
+    };
+  }
+
+  private toYesNo(value: boolean): 'yes' | 'no' {
+    return value ? 'yes' : 'no';
+  }
+
+  private async renameCsvToPhone(csvPath: string, phoneNumber: string): Promise<string> {
+    const targetFileName = this.imazingCsvFileNameService.buildPhoneCsvFileName(phoneNumber);
+    const targetPath = join(dirname(csvPath), targetFileName);
+
+    if (csvPath === targetPath) {
+      return csvPath;
+    }
+
+    try {
+      await fs.access(targetPath);
+      throw new Error(
+        `Cannot rename ${csvPath} to ${targetPath} because target file already exists.`
+      );
+    } catch (error) {
+      const nodeError = error as NodeJS.ErrnoException;
+      if (nodeError.code && nodeError.code !== 'ENOENT') {
+        throw error;
+      }
+    }
+
+    await fs.rename(csvPath, targetPath);
+
+    this.logger.log(`Renamed CSV file based on contacts directory: ${csvPath} -> ${targetPath}`);
+
+    return targetPath;
+  }
+
+  private async moveToUnsupportedFolder(csvPath: string): Promise<string> {
+    const unsupportedFolderPath = resolve(process.cwd(), 'etc', '_chatsEureka', 'csv_unsupported');
+    await fs.mkdir(unsupportedFolderPath, { recursive: true });
+
+    const sourceFile = basename(csvPath);
+    let targetPath = join(unsupportedFolderPath, sourceFile);
+
+    if (targetPath === csvPath) {
+      return targetPath;
+    }
+
+    targetPath = await this.ensureAvailableTargetPath(targetPath);
+    await fs.rename(csvPath, targetPath);
+
+    return targetPath;
+  }
+
+  private async ensureAvailableTargetPath(targetPath: string): Promise<string> {
+    try {
+      await fs.access(targetPath);
+    } catch (error) {
+      const nodeError = error as NodeJS.ErrnoException;
+      if (nodeError.code === 'ENOENT') {
+        return targetPath;
+      }
+
+      throw error;
+    }
+
+    const extension = extname(targetPath);
+    const nameWithoutExtension =
+      extension.length > 0 ? targetPath.slice(0, -extension.length) : targetPath;
+
+    return `${nameWithoutExtension}__${Date.now()}${extension}`;
+  }
+
   private async readCsvFile(
     csvPath: string,
-    sourceFile: string
+    sourceFile: string,
+    conversationId: string,
+    contactName: string | null
   ): Promise<ConversationCsvRawRecord[]> {
     const csvContent = await fs.readFile(csvPath, 'utf-8');
     const rows = parse(csvContent, {
@@ -71,6 +311,8 @@ export class FileSystemConversationCsvSourceAdapter implements ConversationCsvSo
     return rows.map((row, rowIndex) => ({
       sourceFile,
       rowNumber: rowIndex + 1,
+      conversationId,
+      contactName,
       fields: this.normalizeFieldValues(row)
     }));
   }

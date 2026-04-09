@@ -26,6 +26,7 @@ export class NormalizedConversationCsvFields {
 export class RawConversationMessage {
   constructor(
     public readonly conversationId: string,
+    public readonly contactName: string | null,
     public readonly externalId: string,
     public readonly sentAt: Date | null,
     public readonly sender: string | null,

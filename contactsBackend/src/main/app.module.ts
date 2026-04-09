@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AuthGoogleController } from './adapters/inbound/http/auth-google.controller';
 import { ContactsController } from './adapters/inbound/http/contacts.controller';
+import { HealthController } from './adapters/inbound/http/health.controller';
 import { FileSystemGoogleAuthSessionStoreAdapter } from './adapters/outbound/auth/file-system-google-auth-session-store.adapter';
 import { GooglePeopleApiAdapter } from './adapters/outbound/google/google-people-api.adapter';
 import { TOKENS } from './application/ports/tokens';
@@ -16,7 +17,7 @@ import { SecretsConfig } from './infrastructure/config/settings/secrets.config';
 import { SettingsConfig } from './infrastructure/config/settings/settings.config';
 
 @Module({
-  controllers: [AuthGoogleController, ContactsController],
+  controllers: [AuthGoogleController, ContactsController, HealthController],
   providers: [
     SettingsConfig,
     SecretsConfig,

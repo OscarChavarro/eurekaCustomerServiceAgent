@@ -9,6 +9,10 @@ export type EmbeddingConfig = {
   port: number;
 };
 
+export type ContactsBackendConfig = {
+  url: string;
+};
+
 export type MongoConfig = {
   host: string;
   port: number;
@@ -43,6 +47,14 @@ export class ServiceConfig {
 
   public get qdrantConnectionFailurePauseMs(): number {
     return this.settingsConfig.values.service.qdrantConnectionFailurePauseMinutes * 60_000;
+  }
+
+  public get contactsBackendConfig(): ContactsBackendConfig {
+    const url = process.env.CONTACTS_BACKEND_URL?.trim() || this.secretsConfig.values.contactsBackend.url;
+
+    return {
+      url: this.normalizeUrl(url)
+    };
   }
 
   public get embeddingConfig(): EmbeddingConfig {

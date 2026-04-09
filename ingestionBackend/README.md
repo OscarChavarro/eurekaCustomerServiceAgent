@@ -196,6 +196,18 @@ or using the included Bruno endpoint.
 - A directory path: processes all `.csv` files in that directory.
 - A single `.csv` file path: processes only that file.
 
+### Contact-aware CSV resolution
+
+Before reading CSV files, ingestion loads `GET /contacts` from `contactsBackend` into an in-memory map.
+
+Per CSV file:
+- The conversation label is extracted from the filename by removing `WhatsApp/Whatsapp - ` prefix and `.csv`.
+- If the label is a contact name found in the map, the file is renamed to `Whatsapp - <phone>.csv`, the conversation is ingested with `conversationId=<phone>`, and `contactName=<original name>`.
+- If the label is already a phone-like value (`0-9`, space, `(`, `)`, `-`), it is ingested as-is with `contactName=null`.
+- If the label is a contact name and no phone mapping exists, the file is moved to `etc/_chatsEureka/csv_unsupported` and skipped.
+
+When one contact name maps to multiple phone numbers, ingestion prefers numbers with area code (and avoids the shortest variant).
+
 ## Development
 
 ```bash
@@ -209,5 +221,8 @@ npm run start:dev
 - Non-secret settings: `src/main/infrastructure/config/settings/environment.json`
 - Secret/runtime settings: `secrets.json` (use `secrets-example.json` as template)
 - Processed conversations output folder name is configured with `service.processedConversationsFolderName`.
+- contactsBackend base URL is configured with `contactsBackend.url` (default `http://localhost:3669`).
 - Embedding service secrets are configured under `embedding.provider`, `embedding.host`, and `embedding.port`.
 - MongoDB secrets are configured under `mongo.host`, `mongo.port`, `mongo.database`, `mongo.username`, and `mongo.password`.
+
+Startup validation now includes `GET /health` against `contactsBackend`.
