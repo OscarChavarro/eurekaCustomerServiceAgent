@@ -1,0 +1,9 @@
+{
+  "api": {
+    "httpPort": 3669
+  },
+  "service": {
+    "oauthStateTtlMinutes": 15,
+    "authSessionFilePath": "./output/google-auth-session.json"
+  }
+}

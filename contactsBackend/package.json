@@ -1,0 +1,45 @@
+{
+  "name": "contacts-backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "NestJS contacts backend using Google OAuth2 and Google People API.",
+  "license": "UNLICENSED",
+  "scripts": {
+    "build": "nest build",
+    "start": "node dist/main.js",
+    "start:dev": "nest start --watch",
+    "prepare": "cd .. && husky install .husky",
+    "lint": "eslint \"src/**/*.ts\" --max-warnings=0",
+    "lint:fix": "npm run lint -- --fix",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "arch:check": "depcruise --config .dependency-cruiser.cjs src/main --output-type err-long",
+    "arch:graph": "mkdir -p doc/architecture && depcruise --config .dependency-cruiser.cjs src/main --output-type dot | dot -T svg > doc/architecture/dependency-graph.svg"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.0.0",
+    "@nestjs/core": "^11.0.0",
+    "@nestjs/platform-express": "^11.0.0",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.2",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.20.0",
+    "@nestjs/cli": "^11.0.0",
+    "@nestjs/schematics": "^11.0.0",
+    "@types/node": "^22.10.2",
+    "@typescript-eslint/eslint-plugin": "^8.23.0",
+    "@typescript-eslint/parser": "^8.23.0",
+    "dependency-cruiser": "^16.10.4",
+    "eslint": "^9.20.1",
+    "eslint-config-prettier": "^10.0.1",
+    "husky": "^9.1.7",
+    "prettier": "^3.4.2",
+    "ts-loader": "^9.5.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.23.0"
+  }
+}

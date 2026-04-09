@@ -26,11 +26,20 @@ Components view:
 
 ![Eureka architecture](./doc/architecture/eureka-architecture.png)
 
+Project READMEs:
+
+- [backofficeFrontend README](./backofficeFrontend/README.md)
+- [backofficeBackend README](./backofficeBackend/README.md)
+- [retrievalBackend README](./retrievalBackend/README.md)
+- [ingestionBackend README](./ingestionBackend/README.md)
+- [contactsBackend README](./contactsBackend/README.md)
+
 ### Current Scope (v1)
 
 - `backofficeFrontend` and `backofficeBackend` for customer-service operations.
 - `retrievalBackend` for `/v1/chat/completions` wrapper and retrieval-oriented LLM orchestration.
 - `ingestionBackend` processing `iMazing` CSV exports.
+- `contactsBackend` for Google OAuth2 and customer-contact operations through Google People API.
 - `bge` for embeddings and `Qdrant` for vector storage.
 - `MongoDb` for operational persistence.
 - `nginx` for static asset serving.

@@ -1,0 +1,26 @@
+meta {
+  name: Upsert Contact
+  type: http
+  seq: 2
+}
+
+put {
+  url: {{baseUrl}}/contacts/upsert
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Test Contact",
+    "phoneNumber": "+34600111222"
+  }
+}
+
+vars:pre-request {
+  baseUrl: http://localhost:3669
+}

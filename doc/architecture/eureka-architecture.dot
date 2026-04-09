@@ -154,6 +154,20 @@ digraph EurekaArchitecture {
     fillcolor="#e8f8ef"
   ];
 
+  contacts_backend [
+    label=<
+      <TABLE BORDER="0" CELLBORDER="0" CELLPADDING="2" CELLSPACING="0">
+        <TR>
+          <TD><IMG SRC="doc/architecture/fizgon.png"/></TD>
+          <TD ALIGN="LEFT">contactsBackend</TD>
+        </TR>
+      </TABLE>
+    >,
+    margin="0.08,0.05",
+    style="rounded,filled",
+    fillcolor="#e8f8ef"
+  ];
+
   wix [
     label=<
       <TABLE BORDER="0" CELLBORDER="0" CELLPADDING="2" CELLSPACING="0">
@@ -180,6 +194,31 @@ digraph EurekaArchitecture {
     fillcolor="#f3f4f6"
   ];
 
+  google_people_api [
+    label=<
+      <TABLE BORDER="0" CELLBORDER="0" CELLPADDING="2" CELLSPACING="0">
+        <TR>
+          <TD><IMG SRC="doc/architecture/googleContacts.png"/></TD>
+          <TD ALIGN="LEFT">Google People API</TD>
+        </TR>
+      </TABLE>
+    >,
+    margin="0.08,0.05"
+  ];
+
+  customer_service_contacts [
+    label=<
+      <TABLE BORDER="0" CELLBORDER="0" CELLPADDING="2" CELLSPACING="0">
+        <TR>
+          <TD><IMG SRC="doc/architecture/googleContacts.png"/></TD>
+          <TD ALIGN="LEFT">Customer service account contacts</TD>
+        </TR>
+      </TABLE>
+    >,
+    margin="0.08,0.05",
+    shape=cylinder
+  ];
+
   whatsapp [
     label=<
       <TABLE BORDER="0" CELLBORDER="0" CELLPADDING="2" CELLSPACING="0">
@@ -195,8 +234,8 @@ digraph EurekaArchitecture {
   { rank=same; customer_service_agent; browser; }
   { rank=same; backoffice_frontend; nginx; }
   { rank=same; backoffice_backend; notification_message_sender; }
-  { rank=same; ingestion_backend; retrieval_backend; catalog; }
-  { rank=same; bge; qdrant; mongodb; llama_cpp; }
+  { rank=same; ingestion_backend; retrieval_backend; contacts_backend; catalog; }
+  { rank=same; bge; qdrant; mongodb; llama_cpp; google_people_api; customer_service_contacts; }
   { rank=max; imazing; wix; }
 
   customer_service_agent -> browser [dir=both, xlabel="uses"];
@@ -210,6 +249,9 @@ digraph EurekaArchitecture {
   imazing -> ingestion_backend [xlabel="CSV import"];
   ingestion_backend -> bge [xlabel="embed text"];
   ingestion_backend -> qdrant [xlabel="store vectors"];
+  ingestion_backend -> contacts_backend [xlabel="sync contacts"];
+  contacts_backend -> google_people_api [xlabel="OAuth2 + contacts ops"];
+  google_people_api -> customer_service_contacts [xlabel="reads/writes contacts"];
 
   backoffice_backend -> notification_message_sender [xlabel="enqueue notifications"];
   notification_message_sender -> whatsapp [xlabel="send messages"];

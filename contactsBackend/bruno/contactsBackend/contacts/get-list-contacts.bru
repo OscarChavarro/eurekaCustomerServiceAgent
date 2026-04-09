@@ -1,0 +1,19 @@
+meta {
+  name: List Contacts
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/contacts?pageSize=100
+  body: none
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+vars:pre-request {
+  baseUrl: http://localhost:3669
+}

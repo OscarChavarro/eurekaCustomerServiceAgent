@@ -1,10 +1,12 @@
 #!/bin/sh
 set -e
 
-for backend in ingestionBackend backofficeBackend retrievalBackend; do
+for backend in ingestionBackend backofficeBackend retrievalBackend contactsBackend; do
   echo "Running arch:check in ${backend}"
   (cd "$backend" && npm run arch:check)
+done
 
+for backend in ingestionBackend backofficeBackend retrievalBackend; do
   echo "Running lint in ${backend}"
   (cd "$backend" && npm run lint)
 done
