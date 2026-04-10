@@ -414,6 +414,17 @@ export class ChatConversationService {
     this.rerenderLoadedConversations();
   }
 
+  public resolveTimePanelConversationLabel(conversationId: string): string {
+    const summary = this.conversationSummariesState()[conversationId];
+    const phoneNumber = this.normalizeConversationPhoneNumber(conversationId);
+    const linkedContactName = this.resolvePreferredLinkedContactName(
+      phoneNumber,
+      summary?.contactName
+    );
+
+    return this.resolveConversationDisplayName(linkedContactName, phoneNumber);
+  }
+
   private loadConversationIds(): void {
     this.conversationsApiService.getConversationIds().subscribe({
       next: (summaries) => {

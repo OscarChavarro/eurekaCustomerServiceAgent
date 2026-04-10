@@ -43,7 +43,8 @@ export class TimeCursorModel {
       left.time.getTime() === right.time.getTime() &&
       left.x === right.x &&
       left.y === right.y &&
-      left.conversationName === right.conversationName
+      left.conversationId === right.conversationId &&
+      left.conversationLabel === right.conversationLabel
     );
   }
 }

@@ -65,7 +65,7 @@ export class TimePanelComponent implements AfterViewInit, OnChanges, OnDestroy {
         endMs: range.endTime.getTime()
       };
     },
-    () => this.timeCursorModel.getValue()?.conversationName ?? null
+    () => this.timeCursorModel.getValue()?.conversationId ?? null
   );
   private readonly timeRangeRenderer = new CanvasTimeRangeRenderer(this.model, this.timeRangeModel);
   private readonly timeCursorRenderer = new CanvasTimeCursorRenderer(this.timeCursorModel);
@@ -84,7 +84,8 @@ export class TimePanelComponent implements AfterViewInit, OnChanges, OnDestroy {
   private readonly timeCursorController = new TimeCursorController(
     this.timeCursorModel,
     this.model,
-    () => this.lastRenderMetrics
+    () => this.lastRenderMetrics,
+    (conversationId) => this.chatConversationService.resolveTimePanelConversationLabel(conversationId)
   );
   private readonly conversationLoader = new TimelineConversationLoader();
   private cleanupModelSubscription?: () => void;

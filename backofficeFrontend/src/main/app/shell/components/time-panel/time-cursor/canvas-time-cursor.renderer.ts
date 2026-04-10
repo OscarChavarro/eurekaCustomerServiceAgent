@@ -16,8 +16,14 @@ export class CanvasTimeCursorRenderer {
     this.drawVerticalLine(context, x, metrics);
     this.drawTimeLabel(context, x, metrics, cursor.time);
 
-    if (cursor.conversationName) {
-      this.drawConversationLabel(context, cursor.x + 12, cursor.y + 16, cursor.conversationName, metrics.mainRect);
+    if (cursor.conversationLabel) {
+      this.drawConversationLabel(
+        context,
+        cursor.x + 12,
+        cursor.y + 16,
+        cursor.conversationLabel,
+        metrics.mainRect
+      );
     }
   }
 
@@ -57,10 +63,10 @@ export class CanvasTimeCursorRenderer {
     context: CanvasRenderingContext2D,
     x: number,
     y: number,
-    conversationName: string,
+    conversationLabel: string,
     mainRect: { x: number; y: number; width: number; height: number }
   ): void {
-    const label = conversationName;
+    const label = conversationLabel;
     context.font = '11px system-ui, sans-serif';
     context.textBaseline = 'middle';
     const textWidth = context.measureText(label).width;

@@ -3,12 +3,14 @@ import { TimelineModelStore } from '../timeline/timeline-model.store';
 import type { TimelineRenderMetrics } from '../timeline/timeline.types';
 
 type MetricsGetter = () => TimelineRenderMetrics | null;
+type ConversationLabelResolver = (conversationId: string) => string;
 
 export class TimeCursorController {
   constructor(
     private readonly model: TimeCursorModel,
     private readonly timelineModel: TimelineModelStore,
-    private readonly getMetrics: MetricsGetter
+    private readonly getMetrics: MetricsGetter,
+    private readonly resolveConversationLabel?: ConversationLabelResolver
   ) {}
 
   public onMouseMove(event: MouseEvent): void {
@@ -29,19 +31,24 @@ export class TimeCursorController {
     const clampedX = this.clamp(x, metrics.mainRect.x, metrics.mainRect.x + metrics.mainRect.width);
     const timeMs = timelineState.timeOffsetMs + ((clampedX - metrics.mainRect.x) / timelineState.pixelsPerSecond) * 1_000;
 
-    let conversationName: string | null = null;
+    let conversationId: string | null = null;
+    let conversationLabel: string | null = null;
     if (this.isInsideRect(metrics.mainRect, x, y)) {
       const visualRowIndex = Math.floor((timelineState.scrollY + y - metrics.mainRect.y) / timelineState.rowHeightPx);
       const logicalRowIndex = timelineState.segments.length - 1 - visualRowIndex;
       const segment = timelineState.segments[logicalRowIndex];
-      conversationName = segment?.id ?? null;
+      conversationId = segment?.id ?? null;
+      conversationLabel = conversationId
+        ? this.resolveConversationLabel?.(conversationId) ?? conversationId
+        : null;
     }
 
     this.model.setValue({
       time: new Date(timeMs),
       x,
       y,
-      conversationName
+      conversationId,
+      conversationLabel
     });
   }
 

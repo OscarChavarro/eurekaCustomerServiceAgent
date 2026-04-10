@@ -4,7 +4,8 @@ export type TimeCursorValue = {
   time: Date;
   x: number;
   y: number;
-  conversationName: string | null;
+  conversationId: string | null;
+  conversationLabel: string | null;
 };
 
 export type TimeCursorRenderGeometry = {
