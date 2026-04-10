@@ -13,6 +13,10 @@ export type ContactsBackendConfig = {
   url: string;
 };
 
+export type StaticAssetsConfig = {
+  baseUrl: string;
+};
+
 export type MongoConfig = {
   host: string;
   port: number;
@@ -63,6 +67,14 @@ export class ServiceConfig {
 
     return {
       url: this.normalizeUrl(url)
+    };
+  }
+
+  public get staticAssetsConfig(): StaticAssetsConfig {
+    const baseUrl = process.env.STATIC_ASSETS_BASE_URL?.trim() || this.secretsConfig.values.staticAssets.baseUrl;
+
+    return {
+      baseUrl: this.normalizeUrl(baseUrl)
     };
   }
 

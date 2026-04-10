@@ -25,6 +25,7 @@ import { ContactsBackendConnectivityStartupValidator } from './infrastructure/bo
 import { MongoConnectivityStartupValidator } from './infrastructure/bootstrap/validators/mongo-connectivity-startup.validator';
 import { ProcessedConversationsFolderStartupValidator } from './infrastructure/bootstrap/validators/processed-conversations-folder-startup.validator';
 import { QdrantConnectivityStartupValidator } from './infrastructure/bootstrap/validators/qdrant-connectivity-startup.validator';
+import { WhisperFfmpegStartupValidator } from './infrastructure/bootstrap/validators/whisper-ffmpeg-startup.validator';
 import { ServiceConfig } from './infrastructure/config/service.config';
 import { SecretsConfig } from './infrastructure/config/settings/secrets.config';
 import { SettingsConfig } from './infrastructure/config/settings/settings.config';
@@ -39,6 +40,7 @@ import { SettingsConfig } from './infrastructure/config/settings/settings.config
     ProcessedConversationsFolderStartupValidator,
     ContactsBackendConnectivityStartupValidator,
     MongoConnectivityStartupValidator,
+    WhisperFfmpegStartupValidator,
     QdrantConnectivityStartupValidator,
     BgeConnectivityStartupValidator,
     StartupValidationOrchestrator,

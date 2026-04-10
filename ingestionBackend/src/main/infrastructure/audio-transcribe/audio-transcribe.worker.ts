@@ -1,0 +1,295 @@
+import { promises as fs } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { parentPort, workerData } from 'node:worker_threads';
+import type { AudioTranscribeResult } from '../../application/use-cases/audio-transcribe/audio-transcribe.result';
+
+type WorkerRequestMessage = {
+  type: 'transcribe';
+  jobId: number;
+  url: string;
+};
+
+type WorkerResultMessage = {
+  type: 'result';
+  jobId: number;
+  payload: AudioTranscribeResult;
+};
+
+type WorkerErrorMessage = {
+  type: 'error';
+  jobId: number;
+  message: string;
+};
+
+type WhisperSegment = {
+  start?: number;
+  end?: number;
+  text?: string;
+};
+
+type WhisperJsonPayload = {
+  text?: string;
+  language?: string;
+  segments?: WhisperSegment[];
+};
+
+type WorkerStaticContext = {
+  workerIndex: number;
+  tempAudioFilePath: string;
+  tempJsonFilePath: string;
+};
+
+const context = createWorkerContext();
+
+if (!parentPort) {
+  process.exit(1);
+}
+
+parentPort.on('message', (message: WorkerRequestMessage) => {
+  void handleIncomingMessage(message);
+});
+
+async function handleIncomingMessage(message: WorkerRequestMessage): Promise<void> {
+  if (!message || message.type !== 'transcribe') {
+    return;
+  }
+
+  try {
+    const payload = await transcribeUrlToPayload(message.url, context);
+    const result: WorkerResultMessage = {
+      type: 'result',
+      jobId: message.jobId,
+      payload
+    };
+    parentPort?.postMessage(result);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const failureMessage: WorkerErrorMessage = {
+      type: 'error',
+      jobId: message.jobId,
+      message: errorMessage
+    };
+    parentPort?.postMessage(failureMessage);
+  }
+}
+
+async function transcribeUrlToPayload(
+  url: string,
+  staticContext: WorkerStaticContext
+): Promise<AudioTranscribeResult> {
+  let transcriptionText = '';
+  let language = 'unknown';
+  let totalTimeInSeconds = 0;
+  let bars: number[] = [];
+  let hasError = false;
+
+  try {
+    await downloadOpusFile(url, staticContext.tempAudioFilePath);
+    const whisperRun = runWhisper(staticContext.tempAudioFilePath);
+
+    if (!whisperRun.success) {
+      hasError = true;
+      transcriptionText = whisperRun.message;
+    } else {
+      const whisperPayload = await readWhisperJson(staticContext.tempJsonFilePath);
+      const normalizedText = normalizeText(whisperPayload.text);
+      transcriptionText = normalizedText;
+
+      if (typeof whisperPayload.language === 'string' && whisperPayload.language.trim().length > 0) {
+        language = whisperPayload.language.trim().toLowerCase();
+      }
+
+      totalTimeInSeconds = resolveDurationFromSegments(whisperPayload.segments);
+      bars = buildBarsFromSegments(whisperPayload.segments, totalTimeInSeconds);
+    }
+  } catch (error) {
+    hasError = true;
+    transcriptionText = error instanceof Error ? error.message : String(error);
+  } finally {
+    await cleanupTempFile(staticContext.tempAudioFilePath);
+    await cleanupTempFile(staticContext.tempJsonFilePath);
+  }
+
+  if (hasError) {
+    return {
+      type: 'noise',
+      transcription: transcriptionText || 'Whisper transcription failed.',
+      totalTimeInSeconds,
+      language,
+      bars
+    };
+  }
+
+  const type: AudioTranscribeResult['type'] = transcriptionText.length > 0 ? 'voice' : 'empty';
+
+  return {
+    type,
+    transcription: transcriptionText,
+    totalTimeInSeconds,
+    language,
+    bars
+  };
+}
+
+async function downloadOpusFile(url: string, targetPath: string): Promise<void> {
+  const response = await fetch(url, {
+    method: 'GET',
+    signal: AbortSignal.timeout(30_000)
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `Could not download .opus file from ${url}. Status ${response.status} ${response.statusText}.`
+    );
+  }
+
+  const arrayBuffer = await response.arrayBuffer();
+  await fs.writeFile(targetPath, Buffer.from(arrayBuffer));
+}
+
+function runWhisper(audioFilePath: string): { success: true } | { success: false; message: string } {
+  const whisperModel = process.env.WHISPER_MODEL?.trim() || 'base';
+  const outputDir = dirname(audioFilePath);
+  const args = [
+    audioFilePath,
+    '--model',
+    whisperModel,
+    '--output_format',
+    'json',
+    '--output_dir',
+    outputDir,
+    '--verbose',
+    'False',
+    '--fp16',
+    'False'
+  ];
+
+  const execution = spawnSync('whisper', args, {
+    encoding: 'utf-8',
+    timeout: 300_000
+  });
+
+  if (execution.error) {
+    return {
+      success: false,
+      message: `Unable to execute whisper: ${execution.error.message}`
+    };
+  }
+
+  if (execution.status !== 0) {
+    const details = execution.stderr?.trim() || execution.stdout?.trim() || 'unknown whisper error';
+    return {
+      success: false,
+      message: `Whisper failed for file ${audioFilePath}. ${details}`
+    };
+  }
+
+  return { success: true };
+}
+
+async function readWhisperJson(jsonPath: string): Promise<WhisperJsonPayload> {
+  const raw = await fs.readFile(jsonPath, 'utf-8');
+  const parsed = JSON.parse(raw) as unknown;
+
+  if (!parsed || typeof parsed !== 'object') {
+    throw new Error('Invalid Whisper JSON output.');
+  }
+
+  return parsed as WhisperJsonPayload;
+}
+
+function resolveDurationFromSegments(segments: WhisperSegment[] | undefined): number {
+  if (!Array.isArray(segments) || segments.length === 0) {
+    return 0;
+  }
+
+  let maxEnd = 0;
+  for (const segment of segments) {
+    if (!segment || typeof segment.end !== 'number' || !Number.isFinite(segment.end)) {
+      continue;
+    }
+    if (segment.end > maxEnd) {
+      maxEnd = segment.end;
+    }
+  }
+
+  return Number(maxEnd.toFixed(3));
+}
+
+function buildBarsFromSegments(
+  segments: WhisperSegment[] | undefined,
+  totalTimeInSeconds: number
+): number[] {
+  if (!Array.isArray(segments) || segments.length === 0 || totalTimeInSeconds <= 0) {
+    return [];
+  }
+
+  const barsCount = 48;
+  const interval = totalTimeInSeconds / barsCount;
+  const bars: number[] = [];
+
+  for (let barIndex = 0; barIndex < barsCount; barIndex += 1) {
+    const barStart = interval * barIndex;
+    const barEnd = barStart + interval;
+    let occupancy = 0;
+
+    for (const segment of segments) {
+      if (
+        !segment ||
+        typeof segment.start !== 'number' ||
+        typeof segment.end !== 'number' ||
+        !Number.isFinite(segment.start) ||
+        !Number.isFinite(segment.end)
+      ) {
+        continue;
+      }
+
+      const overlapStart = Math.max(barStart, segment.start);
+      const overlapEnd = Math.min(barEnd, segment.end);
+
+      if (overlapEnd > overlapStart) {
+        occupancy += overlapEnd - overlapStart;
+      }
+    }
+
+    const normalized = Math.max(0, Math.min(1, occupancy / interval));
+    bars.push(Number(normalized.toFixed(3)));
+  }
+
+  return bars;
+}
+
+function normalizeText(text: string | undefined): string {
+  if (typeof text !== 'string') {
+    return '';
+  }
+
+  return text.trim();
+}
+
+async function cleanupTempFile(filePath: string): Promise<void> {
+  try {
+    await fs.unlink(filePath);
+  } catch {
+    // ignore cleanup errors
+  }
+}
+
+function createWorkerContext(): WorkerStaticContext {
+  const rawWorkerIndex = (workerData as { workerIndex?: unknown } | undefined)?.workerIndex;
+  const workerIndex =
+    typeof rawWorkerIndex === 'number' && Number.isInteger(rawWorkerIndex) && rawWorkerIndex > 0
+      ? rawWorkerIndex
+      : 1;
+
+  const tmpDir = process.env.TMPDIR?.trim() || '/tmp';
+  const tempAudioFilePath = join(tmpDir, `audio-transcribe-worker-${workerIndex}.opus`);
+  const tempJsonFilePath = join(tmpDir, `audio-transcribe-worker-${workerIndex}.json`);
+
+  return {
+    workerIndex,
+    tempAudioFilePath,
+    tempJsonFilePath
+  };
+}

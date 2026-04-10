@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { cpus } from 'node:os';
+import { join } from 'node:path';
 import { Worker } from 'node:worker_threads';
 import type { AudioTranscribeWorkerPoolPort } from '../../application/ports/outbound/audio-transcribe-worker-pool.port';
 import type { AudioTranscribeResult } from '../../application/use-cases/audio-transcribe/audio-transcribe.result';
@@ -36,47 +37,6 @@ type WorkerResponseMessage = WorkerResultMessage | WorkerErrorMessage;
 @Injectable()
 export class AudioTranscribeWorkerPoolService
 implements AudioTranscribeWorkerPoolPort, OnModuleInit, OnModuleDestroy {
-  private static readonly WORKER_CODE = `
-    const { parentPort } = require('node:worker_threads');
-    function cpuHeavyLoop(input) {
-      let acc = 0;
-      const seed = input.length + 17;
-      for (let i = 0; i < 750000; i += 1) {
-        acc = (acc + ((i * seed) % 97)) % 1000003;
-      }
-      return acc;
-    }
-    function buildPayload(url) {
-      const cpuScore = cpuHeavyLoop(url);
-      const bars = [0.12,0.28,0.42,0.31,0.36,0.57,0.66,0.58,0.44,0.33,0.26,0.18].map((v, index) => {
-        const jitter = ((cpuScore + index * 13) % 9) * 0.004;
-        return Number((Math.min(1, v + jitter)).toFixed(3));
-      });
-      return {
-        type: 'voice',
-        transcription: 'Mock transcription generated from worker thread. Pending real transcription pipeline.',
-        totalTimeInSeconds: 10,
-        language: 'es',
-        bars
-      };
-    }
-    if (!parentPort) {
-      process.exit(1);
-    }
-    parentPort.on('message', (message) => {
-      if (!message || message.type !== 'transcribe') {
-        return;
-      }
-      try {
-        const payload = buildPayload(String(message.url || ''));
-        parentPort.postMessage({ type: 'result', jobId: message.jobId, payload });
-      } catch (error) {
-        const messageText = error instanceof Error ? error.message : 'Unknown worker error';
-        parentPort.postMessage({ type: 'error', jobId: message.jobId, message: messageText });
-      }
-    });
-  `;
-
   private readonly logger = new Logger(AudioTranscribeWorkerPoolService.name);
   private readonly workers: Worker[] = [];
   private readonly idleWorkerIndexes: number[] = [];
@@ -86,6 +46,7 @@ implements AudioTranscribeWorkerPoolPort, OnModuleInit, OnModuleDestroy {
   private dispatching = false;
   private initialized = false;
   private shuttingDown = false;
+  private readonly workerScriptPath = join(__dirname, 'audio-transcribe.worker.js');
 
   constructor(private readonly serviceConfig: ServiceConfig) {}
 
@@ -164,7 +125,11 @@ implements AudioTranscribeWorkerPoolPort, OnModuleInit, OnModuleDestroy {
   private createWorker(index: number): void {
     this.removeIdleWorkerIndex(index);
 
-    const worker = new Worker(AudioTranscribeWorkerPoolService.WORKER_CODE, { eval: true });
+    const worker = new Worker(this.workerScriptPath, {
+      workerData: {
+        workerIndex: index + 1
+      }
+    });
     this.workers[index] = worker;
     this.idleWorkerIndexes.push(index);
 
@@ -253,7 +218,7 @@ implements AudioTranscribeWorkerPoolPort, OnModuleInit, OnModuleDestroy {
           if (!nextJob) {
             break;
           }
-          this.completeJob(nextJob, this.buildMainThreadMockPayload(nextJob.url));
+          this.completeJob(nextJob, this.buildNoWorkersPayload(nextJob.url));
           continue;
         }
 
@@ -275,6 +240,9 @@ implements AudioTranscribeWorkerPoolPort, OnModuleInit, OnModuleDestroy {
         }
 
         this.inFlightByWorkerIndex.set(workerIndex, nextJob);
+        this.logger.log(
+          `[AudioTranscribeWorker-${workerIndex + 1}] Processing URL: ${this.toDecodedUrl(nextJob.url)}`
+        );
 
         const requestMessage: WorkerRequestMessage = {
           type: 'transcribe',
@@ -288,22 +256,15 @@ implements AudioTranscribeWorkerPoolPort, OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private buildMainThreadMockPayload(url: string): AudioTranscribeResult {
-    const urlLength = url.length;
-    const bars = [0.14, 0.3, 0.41, 0.34, 0.26, 0.47, 0.61, 0.56, 0.43, 0.31, 0.24, 0.17].map(
-      (value, index) => {
-        const jitter = ((urlLength + index * 11) % 7) * 0.004;
-        return Number((Math.min(1, value + jitter)).toFixed(3));
-      }
-    );
-
+  private buildNoWorkersPayload(url: string): AudioTranscribeResult {
+    void url;
     return {
-      type: 'voice',
+      type: 'noise',
       transcription:
-        'Mock transcription generated on main thread fallback. Pending real transcription pipeline.',
-      totalTimeInSeconds: 10,
-      language: 'es',
-      bars
+        'Transcription workers are disabled (transcriptionWorkersCapacity resolved to 0).',
+      totalTimeInSeconds: 0,
+      language: 'unknown',
+      bars: []
     };
   }
 
@@ -333,5 +294,13 @@ implements AudioTranscribeWorkerPoolPort, OnModuleInit, OnModuleDestroy {
     const filtered = this.idleWorkerIndexes.filter((value) => value !== index);
     this.idleWorkerIndexes.length = 0;
     this.idleWorkerIndexes.push(...filtered);
+  }
+
+  private toDecodedUrl(url: string): string {
+    try {
+      return decodeURIComponent(url);
+    } catch {
+      return url;
+    }
   }
 }

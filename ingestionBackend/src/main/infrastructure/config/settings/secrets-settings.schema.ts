@@ -15,6 +15,9 @@ export const secretsSettingsSchema = z.object({
     .default({
       url: 'http://localhost:3669'
     }),
+  staticAssets: z.object({
+    baseUrl: z.string().trim().min(1)
+  }),
   embedding: z.object({
     provider: z.string().trim().min(1),
     host: z.string().trim().min(1),

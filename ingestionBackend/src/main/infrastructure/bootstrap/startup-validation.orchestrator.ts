@@ -4,6 +4,7 @@ import { ContactsBackendConnectivityStartupValidator } from './validators/contac
 import { MongoConnectivityStartupValidator } from './validators/mongo-connectivity-startup.validator';
 import { ProcessedConversationsFolderStartupValidator } from './validators/processed-conversations-folder-startup.validator';
 import { QdrantConnectivityStartupValidator } from './validators/qdrant-connectivity-startup.validator';
+import { WhisperFfmpegStartupValidator } from './validators/whisper-ffmpeg-startup.validator';
 
 type StartupValidationSuccess = {
   validatorName: string;
@@ -24,6 +25,7 @@ export type StartupValidationResult = {
 export class StartupValidationOrchestrator {
   constructor(
     private readonly processedConversationsFolderStartupValidator: ProcessedConversationsFolderStartupValidator,
+    private readonly whisperFfmpegStartupValidator: WhisperFfmpegStartupValidator,
     private readonly contactsBackendConnectivityStartupValidator: ContactsBackendConnectivityStartupValidator,
     private readonly mongoConnectivityStartupValidator: MongoConnectivityStartupValidator,
     private readonly qdrantConnectivityStartupValidator: QdrantConnectivityStartupValidator,
@@ -33,6 +35,7 @@ export class StartupValidationOrchestrator {
   public async validateAll(): Promise<StartupValidationResult> {
     const validators = [
       this.processedConversationsFolderStartupValidator,
+      this.whisperFfmpegStartupValidator,
       this.contactsBackendConnectivityStartupValidator,
       this.mongoConnectivityStartupValidator,
       this.qdrantConnectivityStartupValidator,
