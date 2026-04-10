@@ -379,6 +379,7 @@
               [class.incoming]="message.direction === 'incoming'"
               [class.outgoing]="message.direction === 'outgoing'"
               [class.system]="message.direction === 'system'"
+              [class.has-audio]="!!message.audioFileName"
               [class.has-rating]="!!selectedReaction(currentConversation.id, message)"
               [class.group-start]="isGroupStart(currentConversation.messages, $index)"
               [class.group-end]="isGroupEnd(currentConversation.messages, $index)"
@@ -447,12 +448,15 @@
                   </div>
                 </div>
               }
-              @if (message.imageUrl) {
-                <img
-                  class="message-image"
-                  [src]="message.imageUrl"
-                  alt="attachment image"
-                  loading="lazy"
+              @if (message.mediaUrl) {
+                <app-image [mediaUrl]="message.mediaUrl" />
+              }
+              @if (message.audioFileName) {
+                <app-audio
+                  [messageId]="message.id"
+                  [direction]="message.direction"
+                  [resourceUrl]="message.audioResourceUrl"
+                  (playbackEnded)="onAudioPlaybackEnded(currentConversation.id, $index)"
                 />
               }
               @if (message.showRawStrikethrough) {

@@ -1,0 +1,45 @@
+<div
+  class="audio-attachment"
+  [class.is-outgoing]="direction() === 'outgoing'"
+  [class.is-incoming]="direction() !== 'outgoing'"
+>
+  <div class="audio-main">
+    <div class="waveform-row">
+      <button
+        type="button"
+        class="audio-control"
+        [attr.aria-label]="isPlaying() ? 'Pause audio' : 'Play audio'"
+        [disabled]="!hasPlayableResource()"
+        (click)="togglePlayback()"
+      >
+        <span class="material-icons" aria-hidden="true">
+          {{ isPlaying() ? 'pause' : 'play_arrow' }}
+        </span>
+      </button>
+
+      <div class="audio-waveform" aria-hidden="true">
+        @for (bar of waveformBars; track bar) {
+          <span class="wave-bar"></span>
+        }
+        <span
+          class="audio-progress-dot"
+          [style.left.%]="normalizedProgressPercent()"
+        ></span>
+      </div>
+
+      <button
+        type="button"
+        class="speed-control"
+        [attr.aria-label]="'Playback speed: ' + activeSpeedLabel()"
+        (click)="toggleSpeed()"
+      >
+        {{ activeSpeedLabel() }}
+      </button>
+    </div>
+
+    <div class="audio-times">
+      <span>{{ currentTimeLabel() }}</span>
+      <span>{{ totalTimeLabel() }}</span>
+    </div>
+  </div>
+</div>

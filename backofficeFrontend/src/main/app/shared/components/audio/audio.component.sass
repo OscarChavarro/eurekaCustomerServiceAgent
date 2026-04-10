@@ -1,0 +1,98 @@
+.audio-attachment
+  width: 100%
+  margin-bottom: 0.4rem
+
+.audio-control
+  border: 0
+  background: transparent
+  color: rgb(87 97 106 / 92%)
+  width: 2rem
+  height: 2rem
+  padding: 0
+  display: inline-flex
+  align-items: center
+  justify-content: center
+  cursor: pointer
+
+.audio-control:disabled
+  cursor: not-allowed
+  opacity: 0.55
+
+.audio-control .material-icons
+  font-size: 1.92rem
+  line-height: 1
+
+.audio-main
+  width: 100%
+  min-width: 0
+  display: grid
+  gap: 0.3rem
+
+.waveform-row
+  width: 100%
+  min-width: 0
+  display: grid
+  grid-template-columns: auto 1fr auto
+  gap: 0.5rem
+  align-items: center
+  padding: 0 0.35rem
+
+.audio-waveform
+  position: relative
+  display: flex
+  justify-content: space-between
+  gap: 0
+  align-items: center
+  min-height: 1.65rem
+  width: 100%
+
+.wave-bar
+  display: block
+  width: 0.12rem
+  min-width: 0.12rem
+  max-width: 0.12rem
+  height: 0.92rem
+  border-radius: 2px
+  background: rgb(111 120 129 / 42%)
+
+.audio-progress-dot
+  position: absolute
+  top: 50%
+  transform: translate(-50%, -50%)
+  width: 1.08rem
+  height: 1.08rem
+  border-radius: 50%
+  background: #2aa7f0
+  box-shadow: 0 1px 4px rgb(0 0 0 / 18%)
+
+.speed-control
+  border: 0
+  border-radius: 999px
+  background: rgb(92 101 109 / 92%)
+  color: #ffffff
+  font-weight: 700
+  font-size: 0.675rem
+  padding: 0.24rem 0.48rem
+  min-width: 2.25rem
+  text-align: center
+  cursor: pointer
+
+.audio-times
+  display: flex
+  justify-content: space-between
+  align-items: center
+  font-size: 0.66rem
+  color: rgb(76 88 97 / 72%)
+  padding: 0 0.08rem
+
+.audio-attachment.is-outgoing .audio-control
+  color: rgb(84 113 87 / 78%)
+
+.audio-attachment.is-outgoing .wave-bar
+  background: rgb(114 137 112 / 40%)
+
+.audio-attachment.is-outgoing .speed-control
+  background: rgb(93 108 97 / 88%)
+
+.audio-attachment.is-outgoing .audio-times
+  color: rgb(81 100 81 / 72%)

@@ -624,10 +624,19 @@ export class KwoledgeIngestionUseCase {
   }
 
   private buildLimits(messages: CleanedConversationMessage[]): KwoledgeIngestionLimits {
-    const dates = messages
-      .map((message) => message.sentAt)
-      .filter((sentAt): sentAt is Date => sentAt !== null)
-      .map((sentAt) => sentAt.getTime());
+    let minDateMs: number | null = null;
+    let maxDateMs: number | null = null;
+
+    for (const message of messages) {
+      const sentAt = message.sentAt;
+      if (!sentAt) {
+        continue;
+      }
+
+      const sentAtMs = sentAt.getTime();
+      minDateMs = minDateMs === null ? sentAtMs : Math.min(minDateMs, sentAtMs);
+      maxDateMs = maxDateMs === null ? sentAtMs : Math.max(maxDateMs, sentAtMs);
+    }
 
     const conversationCounts = new Map<string, number>();
     for (const message of messages) {
@@ -654,8 +663,8 @@ export class KwoledgeIngestionUseCase {
     }
 
     return new KwoledgeIngestionLimits(
-      dates.length > 0 ? new Date(Math.min(...dates)).toISOString() : null,
-      dates.length > 0 ? new Date(Math.max(...dates)).toISOString() : null,
+      minDateMs !== null ? new Date(minDateMs).toISOString() : null,
+      maxDateMs !== null ? new Date(maxDateMs).toISOString() : null,
       conversationWithMostMessages
     );
   }

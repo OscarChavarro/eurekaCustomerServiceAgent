@@ -12,7 +12,9 @@ import type { ChatMessage, MessageReviewStage } from './conversation-view.types'
 type CreateFromRawOverrides = {
   directionRaw?: string;
   text?: string;
-  imageUrl?: string;
+  mediaUrl?: string;
+  audioFileName?: string;
+  audioResourceUrl?: string;
   stageLabel?: string;
   backgroundColor?: string;
   rawText?: string;
@@ -50,7 +52,9 @@ export class MessageBubbleFactory {
       backgroundColor: overrides.backgroundColor,
       rawText: overrides.rawText,
       showRawStrikethrough: overrides.showRawStrikethrough,
-      imageUrl: overrides.imageUrl,
+      mediaUrl: overrides.mediaUrl,
+      audioFileName: overrides.audioFileName,
+      audioResourceUrl: overrides.audioResourceUrl,
       reviewStage: overrides.reviewStage,
       reviewStageId: overrides.reviewStageId
     };

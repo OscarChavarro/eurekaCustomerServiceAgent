@@ -12,6 +12,7 @@ export class RawConversationStageRenderer implements ConversationStageRenderer {
   private readonly messageBubbleFactory = inject(MessageBubbleFactory);
   private readonly frontendSecretsService = inject(FrontendSecretsService);
   private readonly imageExtensions = new Set(['jpg', 'jpeg', 'gif', 'webp', 'png']);
+  private readonly audioExtensions = new Set(['opus']);
   private static readonly WHATSAPP_PREFIX = /^whatsapp\s*-\s*/i;
 
   render(document: BackendConversationDocument): ChatMessage[] {
@@ -20,8 +21,17 @@ export class RawConversationStageRenderer implements ConversationStageRenderer {
     return (document.rawMessages ?? []).map((rawMessage) =>
       this.messageBubbleFactory.createFromRaw(rawMessage, {
         text: rawMessage.text,
-        imageUrl: filePattern
+        mediaUrl: filePattern
           ? this.buildImageUrl(
+            filePattern,
+            rawMessage.normalizedFields?.messageDate,
+            rawMessage.sentAt,
+            rawMessage.normalizedFields?.attachment
+          )
+          : undefined,
+        audioFileName: this.resolveAudioAttachmentName(rawMessage.normalizedFields?.attachment),
+        audioResourceUrl: filePattern
+          ? this.buildAudioUrl(
             filePattern,
             rawMessage.normalizedFields?.messageDate,
             rawMessage.sentAt,
@@ -44,6 +54,35 @@ export class RawConversationStageRenderer implements ConversationStageRenderer {
     const trimmedAttachment = attachment?.trim();
 
     if (!trimmedAttachment || !this.isImageAttachment(trimmedAttachment)) {
+      return undefined;
+    }
+
+    const formattedDate = this.formatAssetDate(messageDate, sentAt);
+    if (!formattedDate) {
+      return undefined;
+    }
+
+    const assetConversation = this.resolveAssetConversationFromPattern(filePattern);
+    if (!assetConversation) {
+      return undefined;
+    }
+
+    const relativePath = `${assetConversation.folderName}/${formattedDate} - ${assetConversation.label} - ${trimmedAttachment}`;
+    return this.toNormalizedHttpUrl(
+      this.frontendSecretsService.staticAssetsBaseUrl,
+      relativePath
+    );
+  }
+
+  private buildAudioUrl(
+    filePattern: string,
+    messageDate: string | null | undefined,
+    sentAt: string | null,
+    attachment: string | null | undefined
+  ): string | undefined {
+    const trimmedAttachment = attachment?.trim();
+
+    if (!trimmedAttachment || !this.isAudioAttachment(trimmedAttachment)) {
       return undefined;
     }
 
@@ -110,6 +149,25 @@ export class RawConversationStageRenderer implements ConversationStageRenderer {
   private isImageAttachment(attachment: string): boolean {
     const extension = attachment.split('.').pop()?.toLowerCase();
     return !!extension && this.imageExtensions.has(extension);
+  }
+
+  private isAudioAttachment(attachment: string): boolean {
+    const extension = attachment.split('.').pop()?.toLowerCase();
+    return !!extension && this.audioExtensions.has(extension);
+  }
+
+  private resolveAudioAttachmentName(attachment: string | null | undefined): string | undefined {
+    const trimmedAttachment = attachment?.trim();
+    if (!trimmedAttachment) {
+      return undefined;
+    }
+
+    const extension = trimmedAttachment.split('.').pop()?.toLowerCase();
+    if (!extension || !this.audioExtensions.has(extension)) {
+      return undefined;
+    }
+
+    return trimmedAttachment;
   }
 
   private formatAssetDate(

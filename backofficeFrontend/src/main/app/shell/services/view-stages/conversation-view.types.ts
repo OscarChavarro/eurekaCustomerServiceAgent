@@ -13,7 +13,9 @@ export type ChatMessage = {
   status?: 'sent' | 'delivered' | 'read';
   rawText?: string;
   showRawStrikethrough?: boolean;
-  imageUrl?: string;
+  mediaUrl?: string;
+  audioFileName?: string;
+  audioResourceUrl?: string;
   reviewStage?: MessageReviewStage;
   reviewStageId?: string;
 };

@@ -7,8 +7,10 @@ import {
   inject,
   OnInit,
   OnDestroy,
+  QueryList,
   signal,
-  ViewChild
+  ViewChild,
+  ViewChildren
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, NavigationEnd, Router } from '@angular/router';
@@ -31,6 +33,8 @@ import {
   TimeRangeSelection,
   TimeRangeSelectorComponent
 } from '../../../shared/components/time-range-selector/time-range-selector.component';
+import { AudioComponent } from '../../../shared/components/audio/audio.component';
+import { ImageComponent } from '../../../shared/components/image/image.component';
 import {
   ChatConversation,
   ChatConversationService,
@@ -46,7 +50,14 @@ import {
 
 @Component({
   selector: 'app-shell-chat',
-  imports: [CommonModule, TimePanelComponent, TimeRangeSelectorComponent, ContactsPanelComponent],
+  imports: [
+    CommonModule,
+    TimePanelComponent,
+    TimeRangeSelectorComponent,
+    ContactsPanelComponent,
+    AudioComponent,
+    ImageComponent
+  ],
   templateUrl: './app-shell-chat.component.html',
   styleUrls: [
     './app-shell-chat.workspace.component.sass',
@@ -92,6 +103,7 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
   @ViewChild('messagesArea') private messagesAreaRef?: ElementRef<HTMLDivElement>;
   @ViewChild('composerInput') private composerInputRef?: ElementRef<HTMLInputElement>;
   @ViewChild('timeModeLayout') private timeModeLayoutRef?: ElementRef<HTMLDivElement>;
+  @ViewChildren(AudioComponent) private audioComponents?: QueryList<AudioComponent>;
 
   protected readonly conversations = this.chatConversationService.conversations;
   protected readonly activeConversation = this.chatConversationService.activeConversation;
@@ -715,6 +727,45 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
     }
 
     return next.direction !== current.direction;
+  }
+
+  protected onAudioPlaybackEnded(conversationId: string, messageIndex: number): void {
+    const activeConversation = this.activeConversation();
+    if (!activeConversation || activeConversation.id !== conversationId) {
+      return;
+    }
+
+    const messages = activeConversation.messages;
+    const nextMessage = activeConversation.messages[messageIndex + 1];
+    if (!nextMessage || !nextMessage.audioResourceUrl) {
+      return;
+    }
+
+    const nextAudioOrdinal = this.resolveAudioOrdinalAtMessageIndex(messages, messageIndex + 1);
+    if (nextAudioOrdinal < 0) {
+      return;
+    }
+
+    queueMicrotask(() => {
+      const audioComponent = this.audioComponents?.toArray()[nextAudioOrdinal];
+      audioComponent?.playFromAutoAdvance();
+    });
+  }
+
+  private resolveAudioOrdinalAtMessageIndex(messages: ChatMessage[], targetIndex: number): number {
+    if (targetIndex < 0 || targetIndex >= messages.length) {
+      return -1;
+    }
+
+    let audioOrdinal = -1;
+
+    for (let index = 0; index <= targetIndex; index += 1) {
+      if (messages[index]?.audioResourceUrl) {
+        audioOrdinal += 1;
+      }
+    }
+
+    return audioOrdinal;
   }
 
   protected getTextSegments(text: string | undefined): TextSegment[] {
