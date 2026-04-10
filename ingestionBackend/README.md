@@ -196,6 +196,19 @@ or using the included Bruno endpoint.
 - A directory path: processes all `.csv` files in that directory.
 - A single `.csv` file path: processes only that file.
 
+## Speech To Text (Whisper)
+
+To support transcription of WhatsApp attached audios (`.opus`) into text, install Whisper:
+
+```bash
+pip install openai-whisper
+```
+
+Also install `ffmpeg`, required to decode and process `.opus` audio files before transcription.
+
+This project uses Whisper to transcribe audio attachments from conversations.
+The generated transcription text is integrated back into the conversation as if it had been written as a normal message.
+
 ### Contact-aware CSV resolution
 
 Before reading CSV files, ingestion loads `GET /contacts` from `contactsBackend` into an in-memory map.

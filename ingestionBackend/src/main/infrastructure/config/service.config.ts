@@ -49,6 +49,15 @@ export class ServiceConfig {
     return this.settingsConfig.values.service.qdrantConnectionFailurePauseMinutes * 60_000;
   }
 
+  public get transcriptionWorkersCapacity(): number {
+    return this.readIntInRange(
+      'TRANSCRIPTION_WORKERS_CAPACITY',
+      this.settingsConfig.values.service.transcriptionWorkersCapacity,
+      0,
+      100
+    );
+  }
+
   public get contactsBackendConfig(): ContactsBackendConfig {
     const url = process.env.CONTACTS_BACKEND_URL?.trim() || this.secretsConfig.values.contactsBackend.url;
 
@@ -107,6 +116,22 @@ export class ServiceConfig {
 
     if (!Number.isInteger(parsed) || parsed <= 0) {
       throw new Error(`${name} must be a positive integer.`);
+    }
+
+    return parsed;
+  }
+
+  private readIntInRange(name: string, fallback: number, min: number, max: number): number {
+    const rawValue = process.env[name];
+
+    if (!rawValue) {
+      return fallback;
+    }
+
+    const parsed = Number.parseInt(rawValue, 10);
+
+    if (!Number.isInteger(parsed) || parsed < min || parsed > max) {
+      throw new Error(`${name} must be an integer between ${min} and ${max}.`);
     }
 
     return parsed;

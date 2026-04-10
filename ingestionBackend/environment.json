@@ -1,5 +1,6 @@
 {
-  "api": {
-    "httpPort": 3666
+  "service": {
+    "port": 3666,
+    "transcriptionWorkersCapacity": 100
   }
 }

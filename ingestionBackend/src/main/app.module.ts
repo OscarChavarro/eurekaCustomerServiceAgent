@@ -3,6 +3,7 @@ import { ContactsDirectoryIndexService } from './adapters/inbound/csv/contacts-d
 import { FileSystemConversationCsvSourceAdapter } from './adapters/inbound/csv/file-system-conversation-csv-source.adapter';
 import { ImazingCsvFileNameService } from './adapters/inbound/csv/imazing-csv-file-name.service';
 import { IngestionController } from './adapters/inbound/http/ingestion.controller';
+import { TranscribeController } from './adapters/inbound/http/transcribe.controller';
 import { HttpContactsDirectoryAdapter } from './adapters/outbound/contacts/http-contacts-directory.adapter';
 import { FileSystemProcessedConversationStageStoreAdapter } from './adapters/outbound/debug/file-system-processed-conversation-stage-store.adapter';
 import { BgeEmbeddingAdapter } from './adapters/outbound/embeddings/bge-embedding.adapter';
@@ -16,7 +17,9 @@ import { ConversationCsvRecordTranslatorService } from './application/use-cases/
 import { ConversationMessageCleaningService } from './application/use-cases/kwoledge-ingestion/conversation-message-cleaning.service';
 import { ConversationStructuringService } from './application/use-cases/kwoledge-ingestion/conversation-structuring.service';
 import { KwoledgeIngestionUseCase } from './application/use-cases/kwoledge-ingestion/kwoledge-ingestion.use-case';
+import { AudioTranscribeUseCase } from './application/use-cases/audio-transcribe/audio-transcribe.use-case';
 import { StartupValidationOrchestrator } from './infrastructure/bootstrap/startup-validation.orchestrator';
+import { AudioTranscribeWorkerPoolService } from './infrastructure/audio-transcribe/audio-transcribe-worker-pool.service';
 import { BgeConnectivityStartupValidator } from './infrastructure/bootstrap/validators/bge-connectivity-startup.validator';
 import { ContactsBackendConnectivityStartupValidator } from './infrastructure/bootstrap/validators/contacts-backend-connectivity-startup.validator';
 import { MongoConnectivityStartupValidator } from './infrastructure/bootstrap/validators/mongo-connectivity-startup.validator';
@@ -27,7 +30,7 @@ import { SecretsConfig } from './infrastructure/config/settings/secrets.config';
 import { SettingsConfig } from './infrastructure/config/settings/settings.config';
 
 @Module({
-  controllers: [IngestionController],
+  controllers: [IngestionController, TranscribeController],
   providers: [
     SettingsConfig,
     SecretsConfig,
@@ -39,6 +42,7 @@ import { SettingsConfig } from './infrastructure/config/settings/settings.config
     QdrantConnectivityStartupValidator,
     BgeConnectivityStartupValidator,
     StartupValidationOrchestrator,
+    AudioTranscribeWorkerPoolService,
     ContactsDirectoryIndexService,
     ImazingCsvFileNameService,
     ConversationCsvRecordTranslatorService,
@@ -46,6 +50,11 @@ import { SettingsConfig } from './infrastructure/config/settings/settings.config
     ConversationStructuringService,
     ConversationChunkingService,
     KwoledgeIngestionUseCase,
+    AudioTranscribeUseCase,
+    {
+      provide: TOKENS.AudioTranscribeWorkerPoolPort,
+      useExisting: AudioTranscribeWorkerPoolService
+    },
     {
       provide: TOKENS.ConversationCsvSourcePort,
       useClass: FileSystemConversationCsvSourceAdapter

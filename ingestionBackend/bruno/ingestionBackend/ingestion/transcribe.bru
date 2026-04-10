@@ -1,0 +1,25 @@
+meta {
+  name: Transcribe Audio
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/transcribe
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "url": "http://192.168.1.3/eureka/WhatsApp%20-%20%E2%80%AA%2B34%C2%A0603%C2%A043%C2%A061%C2%A060%E2%80%AC/2025-04-10%2012%2039%2009%20-%20%E2%80%AA%2B34%C2%A0603%C2%A043%C2%A061%C2%A060%E2%80%AC%20-%200b04c87e-9789-427b-8895-908fdbb06a58.opus"
+  }
+}
+
+vars:pre-request {
+  baseUrl: http://localhost:3666
+}
