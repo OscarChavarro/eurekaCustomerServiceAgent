@@ -12,6 +12,18 @@ export class GetConversationIdsUseCase implements GetConversationIdsUseCasePort 
   ) {}
 
   public async execute(): Promise<GetConversationIdsResult> {
-    return this.conversationsReadRepository.getConversationIds();
+    const summaries = await this.conversationsReadRepository.getConversationIds();
+
+    return summaries.map((summary) => ({
+      ...summary,
+      contactName:
+        typeof summary.contactName === 'string' && summary.contactName.trim().length > 0
+          ? summary.contactName.trim()
+          : null,
+      filePattern:
+        typeof summary.filePattern === 'string' && summary.filePattern.trim().length > 0
+          ? summary.filePattern.trim()
+          : null
+    }));
   }
 }

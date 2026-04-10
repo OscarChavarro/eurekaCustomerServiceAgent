@@ -10,9 +10,16 @@ import {
   MessageRatingsResponse,
   ConversationsApiService
 } from '../../core/api/services/conversations-api.service';
+import { type BackendContact } from '../../core/api/services/contacts-api.service';
 import { I18nService } from '../../core/i18n/services/i18n.service';
 import { I18N_KEYS } from '../../core/i18n/translations/i18n-keys.const';
 import { I18nStateService } from '../../core/i18n/services/i18n-state.service';
+import { ContactsDirectoryStore } from '../../core/state/contacts-directory.store';
+import {
+  canonicalizePhoneNumber,
+  normalizeConversationSourceId,
+  phonesMatchDigits
+} from '../../core/phone/phone-normalization.utils';
 import { ChunkConversationStageRenderer } from './view-stages/chunk-conversation-stage.renderer';
 import { CleanConversationStageRenderer } from './view-stages/clean-conversation-stage.renderer';
 import type { ConversationStageRenderer } from './view-stages/conversation-stage-renderer.interface';
@@ -27,6 +34,10 @@ export type { ChatMessage, ConversationViewMode };
 export interface ChatConversation {
   id: string;
   contactName: string;
+  linkedContactName: string | null;
+  filePattern: string | null;
+  originalPhoneNumber: string;
+  phoneNumber: string;
   contactAvatar: string;
   lastMessagePreview: string;
   lastMessageAt: string;
@@ -48,6 +59,7 @@ type WrapperChatMessage = {
 export class ChatConversationService {
   private static readonly SIMULATION_CONVERSATION_ID = 'local-simulation';
   private readonly conversationsApiService = inject(ConversationsApiService);
+  private readonly contactsDirectoryStore = inject(ContactsDirectoryStore);
   private readonly i18nService = inject(I18nService);
   private readonly i18nStateService = inject(I18nStateService);
   private readonly rawConversationStageRenderer = inject(RawConversationStageRenderer);
@@ -64,6 +76,7 @@ export class ChatConversationService {
   private readonly conversationRatingsState = signal<
     Record<string, MessageRatingsResponse['ratings']>
   >({});
+  private readonly contactNameByPhoneDigitsState = signal<Record<string, string>>({});
   private readonly localRawMessagesState = signal<Record<string, ChatMessage[]>>({});
   private readonly agentTypingState = signal<Record<string, boolean>>({});
   private readonly viewModeState = signal<ConversationViewMode>('raw');
@@ -82,6 +95,10 @@ export class ChatConversationService {
     'conv-ana': {
       id: 'conv-ana',
       contactName: 'Ana Ruiz',
+      linkedContactName: 'Ana Ruiz',
+      filePattern: 'WhatsApp - Ana Ruiz',
+      originalPhoneNumber: '+34600000000',
+      phoneNumber: '+34600000000',
       contactAvatar: 'AR',
       lastMessagePreview: 'Perfecto, hoy a las 17:00 te envio los documentos.',
       lastMessageAt: formatSentAt('2026-04-05T17:02:00', this.i18nStateService.selectedLanguage()),
@@ -257,8 +274,16 @@ export class ChatConversationService {
         this.refreshSimulationConversationLabel();
         this.refreshConversationSummaries();
         this.rerenderLoadedConversations();
-      },
-      { allowSignalWrites: true }
+      }
+    );
+
+    effect(
+      () => {
+        const contacts = this.contactsDirectoryStore.contacts();
+        this.contactNameByPhoneDigitsState.set(this.buildContactNameByPhoneDigitsLookup(contacts));
+        this.refreshConversationSummaries();
+        this.rerenderLoadedConversations();
+      }
     );
 
     this.loadConversationIds();
@@ -347,7 +372,11 @@ export class ChatConversationService {
       if (existingConversation) {
         const updatedConversation: ChatConversation = {
           ...existingConversation,
-          contactName: this.getSimulationConversationName(language)
+          contactName: this.getSimulationConversationName(language),
+          linkedContactName: null,
+          filePattern: null,
+          originalPhoneNumber: ChatConversationService.SIMULATION_CONVERSATION_ID,
+          phoneNumber: ChatConversationService.SIMULATION_CONVERSATION_ID
         };
 
         return [
@@ -359,6 +388,10 @@ export class ChatConversationService {
       const simulationConversation: ChatConversation = {
         id: simulationConversationId,
         contactName: this.getSimulationConversationName(language),
+        linkedContactName: null,
+        filePattern: null,
+        originalPhoneNumber: simulationConversationId,
+        phoneNumber: simulationConversationId,
         contactAvatar: 'LL',
         lastMessagePreview: '',
         lastMessageAt: formatSentAt(new Date().toISOString(), language),
@@ -384,11 +417,12 @@ export class ChatConversationService {
   private loadConversationIds(): void {
     this.conversationsApiService.getConversationIds().subscribe({
       next: (summaries) => {
+        const normalizedSummaries = summaries.map((summary) => this.normalizeConversationSummary(summary));
         this.conversationSummariesState.set(
-          Object.fromEntries(summaries.map((summary) => [summary.id, summary]))
+          Object.fromEntries(normalizedSummaries.map((summary) => [summary.id, summary]))
         );
         const normalizedConversations = this.sortConversationsByRecency(
-          summaries.map((summary) => this.buildConversation(summary))
+          normalizedSummaries.map((summary) => this.buildConversation(summary))
         );
 
         this.conversationState.set(normalizedConversations);
@@ -415,6 +449,19 @@ export class ChatConversationService {
     });
   }
 
+  private normalizeConversationSummary(summary: BackendConversationSummary): BackendConversationSummary {
+    return {
+      ...summary,
+      contactName: this.resolveLinkedContactName(summary.contactName),
+      filePattern: this.resolveFilePattern(summary.filePattern),
+      msg: typeof summary.msg === 'string' ? summary.msg : null,
+      firstMessageDate:
+        typeof summary.firstMessageDate === 'string' ? summary.firstMessageDate : null,
+      lastMessageDate:
+        typeof summary.lastMessageDate === 'string' ? summary.lastMessageDate : null
+    };
+  }
+
   private buildConversation(summary: BackendConversationSummary): ChatConversation {
     const conversationId = summary.id;
     const predefinedMock = this.mockConversationById[conversationId];
@@ -423,11 +470,22 @@ export class ChatConversationService {
       return predefinedMock;
     }
 
-    const avatar = this.buildAvatarFromId(conversationId);
+    const phoneNumber = this.normalizeConversationPhoneNumber(conversationId);
+    const originalPhoneNumber = this.extractOriginalConversationPhoneNumber(conversationId);
+    const linkedContactName = this.resolveLinkedContactName(
+      summary.contactName,
+      this.findContactNameByPhoneNumber(phoneNumber)
+    );
+    const displayName = this.resolveConversationDisplayName(linkedContactName, phoneNumber);
+    const avatar = this.buildAvatarFromLabel(displayName);
 
     return {
       id: conversationId,
-      contactName: conversationId,
+      contactName: displayName,
+      linkedContactName,
+      filePattern: summary.filePattern,
+      originalPhoneNumber,
+      phoneNumber,
       contactAvatar: avatar,
       lastMessagePreview:
         summary.msg ?? this.getConversationSyncedPlaceholder(this.i18nStateService.selectedLanguage()),
@@ -463,13 +521,22 @@ export class ChatConversationService {
 
     const loadingPromise = firstValueFrom(this.conversationsApiService.getConversationById(conversationId))
       .then((conversationDocument) => {
+        const summary = this.conversationSummariesState()[conversationId];
+        const enrichedConversationDocument: BackendConversationDocument = {
+          ...conversationDocument,
+          filePattern: this.resolveFilePattern(
+            conversationDocument.filePattern,
+            summary?.filePattern
+          )
+        };
+
         this.conversationDocumentsState.update((currentDocuments) => ({
           ...currentDocuments,
-          [conversationId]: conversationDocument
+          [conversationId]: enrichedConversationDocument
         }));
 
         this.loadedMessagesConversationIds.add(conversationId);
-        this.applyConversationDocumentToState(conversationId, conversationDocument);
+        this.applyConversationDocumentToState(conversationId, enrichedConversationDocument);
         this.loadConversationRatings(conversationId);
       })
       .catch((error: unknown) => {
@@ -509,16 +576,23 @@ export class ChatConversationService {
     conversationId: string,
     conversationDocument: BackendConversationDocument
   ): void {
+    const summary = this.conversationSummariesState()[conversationId];
+    const effectiveDocument: BackendConversationDocument = {
+      ...conversationDocument,
+      filePattern: this.resolveFilePattern(
+        conversationDocument.filePattern,
+        summary?.filePattern
+      )
+    };
     const renderer = this.stageRenderers[this.viewModeState()];
     const renderedMessages = this.mergeWithLocalRawMessages(
       conversationId,
-      renderer.render(conversationDocument)
+      renderer.render(effectiveDocument)
     );
     const fallbackMessages = renderedMessages.length > 0 ? renderedMessages : this.defaultMockMessages;
     const localRawMessages = this.localRawMessagesState()[conversationId] ?? [];
     const lastLocalRawMessage = localRawMessages[localRawMessages.length - 1];
-    const lastRawMessage = conversationDocument.rawMessages?.[conversationDocument.rawMessages.length - 1];
-    const summary = this.conversationSummariesState()[conversationId];
+    const lastRawMessage = effectiveDocument.rawMessages?.[effectiveDocument.rawMessages.length - 1];
     const language = this.i18nStateService.selectedLanguage();
 
     this.conversationState.update((conversations) =>
@@ -527,8 +601,29 @@ export class ChatConversationService {
           return conversation;
         }
 
+        const phoneNumber = this.normalizeConversationPhoneNumber(conversationId);
+        const originalPhoneNumber = this.extractOriginalConversationPhoneNumber(conversationId);
+        const linkedContactName = this.resolveLinkedContactName(
+          effectiveDocument.contactName,
+          summary?.contactName,
+          this.findContactNameByPhoneNumber(phoneNumber),
+          conversation.linkedContactName
+        );
+        const filePattern = this.resolveFilePattern(
+          effectiveDocument.filePattern,
+          summary?.filePattern,
+          conversation.filePattern
+        );
+        const displayName = this.resolveConversationDisplayName(linkedContactName, phoneNumber);
+
         return {
           ...conversation,
+          contactName: displayName,
+          linkedContactName,
+          filePattern,
+          originalPhoneNumber,
+          phoneNumber,
+          contactAvatar: this.buildAvatarFromLabel(displayName),
           messages: fallbackMessages,
           lastMessagePreview:
             lastLocalRawMessage?.text ||
@@ -557,11 +652,40 @@ export class ChatConversationService {
           return conversation;
         }
 
-        const renderedMessages = renderer.render(conversationDocument);
+        const effectiveDocument: BackendConversationDocument = {
+          ...conversationDocument,
+          filePattern: this.resolveFilePattern(
+            conversationDocument.filePattern,
+            this.conversationSummariesState()[conversation.id]?.filePattern
+          )
+        };
+
+        const renderedMessages = renderer.render(effectiveDocument);
         const mergedMessages = this.mergeWithLocalRawMessages(conversation.id, renderedMessages);
+        const summary = this.conversationSummariesState()[conversation.id];
+        const phoneNumber = this.normalizeConversationPhoneNumber(conversation.id);
+        const originalPhoneNumber = this.extractOriginalConversationPhoneNumber(conversation.id);
+        const linkedContactName = this.resolveLinkedContactName(
+          effectiveDocument.contactName,
+          summary?.contactName,
+          this.findContactNameByPhoneNumber(phoneNumber),
+          conversation.linkedContactName
+        );
+        const filePattern = this.resolveFilePattern(
+          effectiveDocument.filePattern,
+          summary?.filePattern,
+          conversation.filePattern
+        );
+        const displayName = this.resolveConversationDisplayName(linkedContactName, phoneNumber);
 
         return {
           ...conversation,
+          contactName: displayName,
+          linkedContactName,
+          filePattern,
+          originalPhoneNumber,
+          phoneNumber,
+          contactAvatar: this.buildAvatarFromLabel(displayName),
           messages: mergedMessages.length > 0 ? mergedMessages : this.defaultMockMessages
         };
       }))
@@ -582,9 +706,24 @@ export class ChatConversationService {
 
         const localRawMessages = this.localRawMessagesState()[conversation.id] ?? [];
         const lastLocalRawMessage = localRawMessages[localRawMessages.length - 1];
+        const phoneNumber = this.normalizeConversationPhoneNumber(conversation.id);
+        const originalPhoneNumber = this.extractOriginalConversationPhoneNumber(conversation.id);
+        const linkedContactName = this.resolveLinkedContactName(
+          summary.contactName,
+          this.findContactNameByPhoneNumber(phoneNumber),
+          conversation.linkedContactName
+        );
+        const filePattern = this.resolveFilePattern(summary.filePattern, conversation.filePattern);
+        const displayName = this.resolveConversationDisplayName(linkedContactName, phoneNumber);
 
         return {
           ...conversation,
+          contactName: displayName,
+          linkedContactName,
+          filePattern,
+          originalPhoneNumber,
+          phoneNumber,
+          contactAvatar: this.buildAvatarFromLabel(displayName),
           lastMessagePreview:
             lastLocalRawMessage?.text || summary.msg || conversation.lastMessagePreview,
           lastMessageAt:
@@ -596,50 +735,157 @@ export class ChatConversationService {
 
   private sortConversationsByRecency(conversations: ChatConversation[]): ChatConversation[] {
     return [...conversations].sort((left, right) => {
-      const leftTimestamp = this.getConversationRecencyTimestamp(left.id);
-      const rightTimestamp = this.getConversationRecencyTimestamp(right.id);
+      const leftHasContactName = !!this.resolveLinkedContactName(left.linkedContactName);
+      const rightHasContactName = !!this.resolveLinkedContactName(right.linkedContactName);
 
-      if (leftTimestamp === rightTimestamp) {
-        return left.id.localeCompare(right.id);
+      if (leftHasContactName !== rightHasContactName) {
+        return leftHasContactName ? -1 : 1;
       }
 
-      return rightTimestamp - leftTimestamp;
+      const leftLabel = this.getVisibleConversationSortLabel(left);
+      const rightLabel = this.getVisibleConversationSortLabel(right);
+      const labelComparison = leftLabel.localeCompare(rightLabel, undefined, {
+        sensitivity: 'base',
+        numeric: true
+      });
+
+      if (labelComparison !== 0) {
+        return labelComparison;
+      }
+
+      return left.id.localeCompare(right.id, undefined, {
+        sensitivity: 'base',
+        numeric: true
+      });
     });
   }
 
-  private getConversationRecencyTimestamp(conversationId: string): number {
-    if (this.isSimulationConversationId(conversationId)) {
-      return Number.MAX_SAFE_INTEGER;
-    }
-
-    const localRawMessages = this.localRawMessagesState()[conversationId] ?? [];
-    const lastLocalRawMessage = localRawMessages[localRawMessages.length - 1];
-
-    if (lastLocalRawMessage?.sentAt) {
-      return this.toTimestamp(lastLocalRawMessage.sentAt);
-    }
-
-    const document = this.conversationDocumentsState()[conversationId];
-    const lastRawMessage = document?.rawMessages?.[document.rawMessages.length - 1];
-
-    if (lastRawMessage?.sentAt) {
-      return this.toTimestamp(lastRawMessage.sentAt);
-    }
-
-    const summaryDate = this.conversationSummariesState()[conversationId]?.lastMessageDate;
-    return summaryDate ? this.toTimestamp(summaryDate) : 0;
+  private getVisibleConversationSortLabel(conversation: ChatConversation): string {
+    return this.resolveLinkedContactName(
+      conversation.linkedContactName,
+      conversation.phoneNumber,
+      conversation.contactName,
+      conversation.id
+    ) ?? conversation.id;
   }
 
-  private toTimestamp(rawDate: string): number {
-    const normalizedDate =
-      rawDate.includes(' ') && !rawDate.includes('T') ? rawDate.replace(' ', 'T') : rawDate;
-    const timestamp = new Date(normalizedDate).getTime();
+  private normalizeConversationPhoneNumber(conversationId: string): string {
+    const normalized = this.extractOriginalConversationPhoneNumber(conversationId);
+    const canonical = canonicalizePhoneNumber(normalized);
 
-    return Number.isNaN(timestamp) ? 0 : timestamp;
+    if (canonical) {
+      return canonical.normalizedValue;
+    }
+
+    return normalized.length > 0 ? normalized : conversationId;
   }
 
-  private buildAvatarFromId(conversationId: string): string {
-    const alphanumeric = conversationId.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+  private extractOriginalConversationPhoneNumber(conversationId: string): string {
+    return normalizeConversationSourceId(conversationId);
+  }
+
+  private buildContactNameByPhoneDigitsLookup(contacts: BackendContact[]): Record<string, string> {
+    const lookup: Record<string, string> = {};
+
+    for (const contact of contacts) {
+      const contactName = this.pickFirstContactName(contact.names);
+      if (!contactName) {
+        continue;
+      }
+
+      for (const rawPhone of contact.phoneNumbers) {
+        const canonical = canonicalizePhoneNumber(rawPhone);
+        if (!canonical?.digitsOnly) {
+          continue;
+        }
+
+        if (!(canonical.digitsOnly in lookup)) {
+          lookup[canonical.digitsOnly] = contactName;
+        }
+      }
+    }
+
+    return lookup;
+  }
+
+  private pickFirstContactName(names: string[]): string | null {
+    for (const name of names) {
+      if (typeof name !== 'string') {
+        continue;
+      }
+
+      const trimmed = name.trim();
+      if (trimmed.length > 0) {
+        return trimmed;
+      }
+    }
+
+    return null;
+  }
+
+  private findContactNameByPhoneNumber(phoneNumber: string): string | null {
+    const canonicalPhone = canonicalizePhoneNumber(phoneNumber);
+    const digits = canonicalPhone?.digitsOnly ?? phoneNumber.replace(/\D+/g, '');
+
+    if (!digits) {
+      return null;
+    }
+
+    const lookup = this.contactNameByPhoneDigitsState();
+    const directMatch = lookup[digits];
+    if (directMatch) {
+      return directMatch;
+    }
+
+    for (const [candidateDigits, contactName] of Object.entries(lookup)) {
+      if (phonesMatchDigits(candidateDigits, digits)) {
+        return contactName;
+      }
+    }
+
+    return null;
+  }
+
+  private resolveLinkedContactName(...candidates: unknown[]): string | null {
+    for (const candidate of candidates) {
+      if (typeof candidate !== 'string') {
+        continue;
+      }
+
+      const trimmed = candidate.trim();
+      if (trimmed.length > 0) {
+        return trimmed;
+      }
+    }
+
+    return null;
+  }
+
+  private resolveFilePattern(...candidates: unknown[]): string | null {
+    for (const candidate of candidates) {
+      if (typeof candidate !== 'string') {
+        continue;
+      }
+
+      const trimmed = candidate.trim();
+      if (trimmed.length > 0) {
+        return trimmed;
+      }
+    }
+
+    return null;
+  }
+
+  private resolveConversationDisplayName(contactName: string | null, phoneNumber: string): string {
+    if (contactName) {
+      return contactName;
+    }
+
+    return phoneNumber;
+  }
+
+  private buildAvatarFromLabel(label: string): string {
+    const alphanumeric = label.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
 
     if (alphanumeric.length >= 2) {
       return alphanumeric.slice(0, 2);
@@ -808,7 +1054,11 @@ export class ChatConversationService {
 
         return {
           ...conversation,
-          contactName: this.getSimulationConversationName(language)
+          contactName: this.getSimulationConversationName(language),
+          linkedContactName: null,
+          filePattern: null,
+          originalPhoneNumber: ChatConversationService.SIMULATION_CONVERSATION_ID,
+          phoneNumber: ChatConversationService.SIMULATION_CONVERSATION_ID
         };
       })
     );

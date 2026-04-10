@@ -5,11 +5,14 @@ import {
   ElementRef,
   HostListener,
   inject,
+  OnInit,
   OnDestroy,
   signal,
   ViewChild
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { ActivatedRoute, NavigationEnd, Router } from '@angular/router';
+import { Subscription, filter, startWith } from 'rxjs';
 import { take } from 'rxjs/operators';
 
 import {
@@ -46,12 +49,14 @@ import { ContactsPanelComponent } from '../contacts-panel/contacts-panel.compone
     './app-shell-chat.messages.component.sass'
   ],
 })
-export class AppShellChatComponent implements OnDestroy {
+export class AppShellChatComponent implements OnInit, OnDestroy {
   private readonly chatConversationService = inject(ChatConversationService);
   private readonly conversationsApiService = inject(ConversationsApiService);
   private readonly i18nService = inject(I18nService);
   private readonly i18nStateService = inject(I18nStateService);
   private readonly phoneCountryI18nService = inject(PhoneCountryI18nService);
+  private readonly router = inject(Router);
+  private readonly activatedRoute = inject(ActivatedRoute);
   private readonly searchTermState = signal<string>('');
   private readonly composerMessageState = signal<string>('');
   private readonly languageDropdownOpenState = signal<boolean>(false);
@@ -70,12 +75,14 @@ export class AppShellChatComponent implements OnDestroy {
   private readonly embedNearestBlocksState = signal<NearestEmbeddingsPoint[]>([]);
   private readonly embedNearestLoadingState = signal<boolean>(false);
   private readonly operationModeState = signal<OperationMode>('chat');
+  private readonly selectedContactPhoneSlugState = signal<string | null>(null);
   private readonly chatHiddenInTimeModeState = signal<boolean>(false);
   private readonly timeRangeSelectorOpenState = signal<boolean>(false);
   private readonly selectedTimeRangeState = signal<TimeRangeSelection | null>(null);
   private readonly timeRangeRequestSequenceState = signal<number>(0);
   private readonly timePaneTopRatioState = signal<number>(0.5);
   private isDraggingTimeSplit = false;
+  private routeSyncSubscription: Subscription | null = null;
   @ViewChild('messagesArea') private messagesAreaRef?: ElementRef<HTMLDivElement>;
   @ViewChild('composerInput') private composerInputRef?: ElementRef<HTMLInputElement>;
   @ViewChild('timeModeLayout') private timeModeLayoutRef?: ElementRef<HTMLDivElement>;
@@ -101,6 +108,7 @@ export class AppShellChatComponent implements OnDestroy {
   protected readonly openConversationDeleteMenuId = this.openConversationDeleteMenuIdState.asReadonly();
   protected readonly languageDropdownOpen = this.languageDropdownOpenState.asReadonly();
   protected readonly operationMode = this.operationModeState.asReadonly();
+  protected readonly selectedContactPhoneSlug = this.selectedContactPhoneSlugState.asReadonly();
   protected readonly isEmbedMode = computed(() => this.viewMode() === 'embed');
   protected readonly embedNumberOfPoints = this.embedNumberOfPointsState.asReadonly();
   protected readonly embedNearestBlocks = this.embedNearestBlocksState.asReadonly();
@@ -143,9 +151,17 @@ export class AppShellChatComponent implements OnDestroy {
       return this.conversations();
     }
 
-    return this.conversations().filter((conversation) =>
-      conversation.id.toLowerCase().includes(normalizedSearchTerm)
-    );
+    return this.conversations().filter((conversation) => {
+      const searchableText = [
+        conversation.id,
+        conversation.contactName,
+        conversation.phoneNumber
+      ]
+        .join(' ')
+        .toLowerCase();
+
+      return searchableText.includes(normalizedSearchTerm);
+    });
   });
 
   private readonly autoScrollEffectRef = effect(() => {
@@ -188,8 +204,7 @@ export class AppShellChatComponent implements OnDestroy {
       if (firstVisibleConversation) {
         this.chatConversationService.setActiveConversation(firstVisibleConversation.id);
       }
-    },
-    { allowSignalWrites: true }
+    }
   );
 
   private readonly resetEmbedDebugStateEffectRef = effect(
@@ -199,9 +214,19 @@ export class AppShellChatComponent implements OnDestroy {
       this.embedSelectedBlockState.set(null);
       this.embedNearestBlocksState.set([]);
       this.embedNearestLoadingState.set(false);
-    },
-    { allowSignalWrites: true }
+    }
   );
+
+  ngOnInit(): void {
+    this.routeSyncSubscription = this.router.events
+      .pipe(
+        filter((event): event is NavigationEnd => event instanceof NavigationEnd),
+        startWith(null)
+      )
+      .subscribe(() => {
+        this.syncOperationModeWithRoute();
+      });
+  }
 
   protected setSearchTerm(searchTerm: string): void {
     this.searchTermState.set(searchTerm);
@@ -340,6 +365,10 @@ export class AppShellChatComponent implements OnDestroy {
     return this.t(I18N_KEYS.shell.ONLINE_STATUS);
   }
 
+  protected openConversationContactAriaLabel(): string {
+    return this.t(I18N_KEYS.shell.OPEN_CONVERSATION_CONTACT_ARIA);
+  }
+
   protected searchOrNewChatPlaceholder(): string {
     return this.t(I18N_KEYS.shell.SEARCH_OR_NEW_CHAT_PLACEHOLDER);
   }
@@ -386,6 +415,30 @@ export class AppShellChatComponent implements OnDestroy {
     }
 
     return stageLabel;
+  }
+
+  protected canOpenConversationContact(conversation: ChatConversation): boolean {
+    if (!conversation.linkedContactName) {
+      return false;
+    }
+
+    if (conversation.id === 'local-simulation') {
+      return false;
+    }
+
+    return this.toPhoneSlug(conversation.phoneNumber) !== null;
+  }
+
+  protected openConversationContact(event: MouseEvent, conversation: ChatConversation): void {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const phoneSlug = this.toPhoneSlug(conversation.phoneNumber);
+    if (!phoneSlug) {
+      return;
+    }
+
+    void this.router.navigate(['/contacts', phoneSlug]);
   }
 
   protected selectConversation(conversationId: string): void {
@@ -465,7 +518,12 @@ export class AppShellChatComponent implements OnDestroy {
   }
 
   protected setOperationMode(mode: OperationMode): void {
-    this.operationModeState.set(mode);
+    if (mode === 'contacts') {
+      void this.router.navigate(['/contacts']);
+      return;
+    }
+
+    void this.router.navigate([`/${mode}`]);
   }
 
   protected onTimeSplitDragStart(event: MouseEvent): void {
@@ -535,6 +593,8 @@ export class AppShellChatComponent implements OnDestroy {
 
   ngOnDestroy(): void {
     this.removeTimeSplitDragListeners();
+    this.routeSyncSubscription?.unsubscribe();
+    this.routeSyncSubscription = null;
   }
 
   @HostListener('window:keydown', ['$event'])
@@ -589,8 +649,9 @@ export class AppShellChatComponent implements OnDestroy {
     return conversation.id;
   }
 
-  protected trackByMessage(_: number, message: ChatMessage): string {
-    return message.id;
+  protected trackByMessage(index: number, message: ChatMessage): string {
+    const normalizedId = typeof message.id === 'string' ? message.id.trim() : '';
+    return normalizedId.length > 0 ? `${normalizedId}::${index}` : `message::${index}`;
   }
 
   protected isGroupStart(messages: ChatMessage[], index: number): boolean {
@@ -910,6 +971,66 @@ export class AppShellChatComponent implements OnDestroy {
 
     this.clearPhoneLookupTimer();
     this.phoneTooltip.set(null);
+  }
+
+  private syncOperationModeWithRoute(): void {
+    const routePath = this.activatedRoute.snapshot.routeConfig?.path ?? '';
+    this.operationModeState.set(this.resolveOperationModeFromRoutePath(routePath));
+    this.selectedContactPhoneSlugState.set(
+      this.normalizePhoneSlug(this.activatedRoute.snapshot.paramMap.get('phoneSlug'))
+    );
+  }
+
+  private resolveOperationModeFromRoutePath(path: string): OperationMode {
+    if (path.startsWith('time')) {
+      return 'time';
+    }
+
+    if (path.startsWith('contacts') || path.startsWith('contact') || path.startsWith('conversations')) {
+      return 'contacts';
+    }
+
+    return 'chat';
+  }
+
+  private normalizePhoneSlug(phoneSlug: string | null): string | null {
+    if (!phoneSlug) {
+      return null;
+    }
+
+    const normalized = phoneSlug.trim().toLowerCase();
+
+    if (/^plus-\d+$/.test(normalized)) {
+      return normalized;
+    }
+
+    if (/^\d+$/.test(normalized)) {
+      return normalized;
+    }
+
+    return null;
+  }
+
+  private toPhoneSlug(phone: string): string | null {
+    if (typeof phone !== 'string') {
+      return null;
+    }
+
+    const trimmed = phone.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const firstDigitIndex = trimmed.search(/\d/);
+    const firstPlusIndex = trimmed.indexOf('+');
+    const hasCountryCode = firstPlusIndex >= 0 && firstPlusIndex < firstDigitIndex;
+    const digits = trimmed.replace(/\D+/g, '');
+
+    if (!digits) {
+      return null;
+    }
+
+    return hasCountryCode ? `plus-${digits}` : digits;
   }
 
   private t(key: (typeof I18N_KEYS)['shell'][keyof (typeof I18N_KEYS)['shell']]): string {

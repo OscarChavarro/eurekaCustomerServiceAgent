@@ -32,6 +32,7 @@ export class RawConversationMessage {
     public readonly sender: string | null,
     public readonly text: string,
     public readonly sourceFile: string,
+    public readonly filePattern: string | null,
     public readonly rowNumber: number,
     public readonly direction: MessageDirection,
     public readonly normalizedFields: NormalizedConversationCsvFields

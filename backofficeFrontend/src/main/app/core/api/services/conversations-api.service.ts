@@ -37,6 +37,8 @@ export type BackendConversationChunkMessage = {
 
 export type BackendConversationSummary = {
   id: string;
+  contactName: string | null;
+  filePattern: string | null;
   msg: string | null;
   firstMessageDate: string | null;
   lastMessageDate: string | null;
@@ -45,6 +47,7 @@ export type BackendConversationSummary = {
 export type BackendConversationDocument = {
   _id: string;
   contactName?: string | null;
+  filePattern?: string | null;
   sourceFile?: string | null;
   rawMessages?: BackendConversationRawMessage[];
   cleanedMessages?: BackendConversationCleanMessage[];

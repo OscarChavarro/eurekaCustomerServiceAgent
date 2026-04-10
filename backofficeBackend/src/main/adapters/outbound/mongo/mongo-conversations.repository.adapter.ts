@@ -5,6 +5,8 @@ import { MongoClientProvider } from './mongo-client.provider';
 
 type MongoConversationDocument = {
   _id: string;
+  contactName?: unknown;
+  filePattern?: unknown;
   lastMessageText?: unknown;
   firstMessageDate?: unknown;
   lastMessageDate?: unknown;
@@ -22,13 +24,28 @@ export class MongoConversationsRepositoryAdapter implements ConversationsReadRep
       .find(
         {},
         {
-          projection: { _id: 1, lastMessageText: 1, firstMessageDate: 1, lastMessageDate: 1 }
+          projection: {
+            _id: 1,
+            contactName: 1,
+            filePattern: 1,
+            lastMessageText: 1,
+            firstMessageDate: 1,
+            lastMessageDate: 1
+          }
         }
       )
       .toArray();
 
     return documents.map((document) => ({
       id: String(document._id),
+      contactName:
+        typeof document.contactName === 'string' && document.contactName.trim().length > 0
+          ? document.contactName.trim()
+          : null,
+      filePattern:
+        typeof document.filePattern === 'string' && document.filePattern.trim().length > 0
+          ? document.filePattern.trim()
+          : null,
       msg: typeof document.lastMessageText === 'string' ? document.lastMessageText : null,
       firstMessageDate:
         typeof document.firstMessageDate === 'string' ? document.firstMessageDate : null,

@@ -1,5 +1,16 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import {
+  Component,
+  ElementRef,
+  Input,
+  OnChanges,
+  OnInit,
+  SimpleChanges,
+  ViewChild,
+  computed,
+  inject,
+  signal
+} from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 
 import {
@@ -7,14 +18,17 @@ import {
   type BackendConversationSummary,
   type PhonePrefixLookupResponse
 } from '../../../core/api/services/conversations-api.service';
-import {
-  ContactsApiService,
-  type BackendContact
-} from '../../../core/api/services/contacts-api.service';
+import { type BackendContact } from '../../../core/api/services/contacts-api.service';
 import { I18nService } from '../../../core/i18n/services/i18n.service';
 import { I18nStateService } from '../../../core/i18n/services/i18n-state.service';
 import { PhoneCountryI18nService } from '../../../core/i18n/services/phone-country-i18n.service';
 import { I18N_KEYS } from '../../../core/i18n/translations/i18n-keys.const';
+import { ContactsDirectoryStore } from '../../../core/state/contacts-directory.store';
+import {
+  canonicalizePhoneNumber,
+  normalizeConversationSourceId,
+  phonesMatchDigits
+} from '../../../core/phone/phone-normalization.utils';
 
 @Component({
   selector: 'app-contacts-panel',
@@ -22,10 +36,13 @@ import { I18N_KEYS } from '../../../core/i18n/translations/i18n-keys.const';
   templateUrl: './contacts-panel.component.html',
   styleUrl: './contacts-panel.component.sass'
 })
-export class ContactsPanelComponent implements OnInit {
-  private static readonly SPAIN_LOCAL_PHONE_PATTERN = /^\d{3}\s\d{2}\s\d{2}\s\d{2}$/;
+export class ContactsPanelComponent implements OnInit, OnChanges {
+  @Input() public selectedPhoneSlug: string | null = null;
 
-  private readonly contactsApiService = inject(ContactsApiService);
+  @ViewChild('spreadsheetTableScroll')
+  private spreadsheetTableScrollRef?: ElementRef<HTMLDivElement>;
+
+  private readonly contactsDirectoryStore = inject(ContactsDirectoryStore);
   private readonly conversationsApiService = inject(ConversationsApiService);
   private readonly i18nService = inject(I18nService);
   private readonly i18nStateService = inject(I18nStateService);
@@ -41,6 +58,7 @@ export class ContactsPanelComponent implements OnInit {
     direction: null
   });
   private readonly selectedRowIdState = signal<string | null>(null);
+  private readonly selectedPhoneSlugState = signal<string | null>(null);
 
   protected readonly selectedLanguage = this.i18nStateService.selectedLanguage;
   protected readonly activeWorkbookTab = this.activeWorkbookTabState.asReadonly();
@@ -74,6 +92,15 @@ export class ContactsPanelComponent implements OnInit {
 
   ngOnInit(): void {
     void this.loadWorkbookData();
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (!('selectedPhoneSlug' in changes)) {
+      return;
+    }
+
+    this.selectedPhoneSlugState.set(this.normalizePhoneSlug(this.selectedPhoneSlug));
+    this.selectContactByPhoneSlug();
   }
 
   protected contactsPanelAriaLabel(): string {
@@ -280,11 +307,16 @@ export class ContactsPanelComponent implements OnInit {
     this.countryCodeByPhoneState.set({});
 
     try {
-      const [contactsResponse, conversationSummaries] = await Promise.all([
-        firstValueFrom(this.contactsApiService.getContacts(1000)),
+      const [, conversationSummaries] = await Promise.all([
+        this.contactsDirectoryStore.ensureLoaded(),
         firstValueFrom(this.conversationsApiService.getConversationIds())
       ]);
-      const contacts = Array.isArray(contactsResponse.contacts) ? contactsResponse.contacts : [];
+      const contacts = this.contactsDirectoryStore.contacts();
+
+      if (this.contactsDirectoryStore.hasError()) {
+        throw new Error('Unable to load contacts from ContactsDirectoryStore');
+      }
+
       const mappedContacts = this.mapContactRows(contacts);
       const conversationIds = this.extractConversationIds(conversationSummaries);
       const groups = this.buildWorkbookGroups(mappedContacts, conversationIds);
@@ -296,6 +328,7 @@ export class ContactsPanelComponent implements OnInit {
 
       this.groupedRowsState.set(groups);
       this.syncSelectionWithVisibleRows();
+      this.selectContactByPhoneSlug();
       this.loadingState.set(false);
       void this.resolveCountryCodesForRows(allRows);
     } catch (error: unknown) {
@@ -319,6 +352,109 @@ export class ContactsPanelComponent implements OnInit {
     if (!hasCurrentSelection) {
       this.selectedRowIdState.set(rows[0]?.id ?? null);
     }
+  }
+
+  private selectContactByPhoneSlug(): void {
+    const phoneSlug = this.selectedPhoneSlugState();
+    if (!phoneSlug) {
+      return;
+    }
+
+    const normalizedPhone = this.phoneFromSlug(phoneSlug);
+    if (!normalizedPhone) {
+      return;
+    }
+
+    const targetDigits = normalizedPhone.replace(/\D+/g, '');
+    if (targetDigits.length === 0) {
+      return;
+    }
+
+    const groups = this.groupedRowsState();
+    const orderedTabs: ContactsWorkbookTab[] = [
+      'contactsWithConversations',
+      'contactsWithoutConversations',
+      'conversationsWithoutContacts'
+    ];
+
+    for (const tab of orderedTabs) {
+      const rows = groups[tab];
+      const matchedRow = rows.find((row) =>
+        row.phoneNumbers.some((phone) => phonesMatchDigits(phone.replace(/\D+/g, ''), targetDigits))
+      );
+
+      if (!matchedRow) {
+        continue;
+      }
+
+      this.activeWorkbookTabState.set(tab);
+      this.selectedRowIdState.set(matchedRow.id);
+      this.scrollSelectedRowToCenter();
+      return;
+    }
+  }
+
+  private scrollSelectedRowToCenter(): void {
+    queueMicrotask(() => {
+      requestAnimationFrame(() => {
+        const container = this.spreadsheetTableScrollRef?.nativeElement;
+        const selectedRowId = this.selectedRowIdState();
+
+        if (!container || !selectedRowId) {
+          return;
+        }
+
+        const rows = Array.from(container.querySelectorAll<HTMLTableRowElement>('tr.contact-row'));
+        const targetRow =
+          rows.find((row) => row.dataset['rowId'] === selectedRowId) ?? null;
+
+        if (!targetRow) {
+          return;
+        }
+
+        const containerRect = container.getBoundingClientRect();
+        const rowRect = targetRow.getBoundingClientRect();
+        const targetScrollTop =
+          container.scrollTop +
+          (rowRect.top - containerRect.top) -
+          (container.clientHeight / 2 - rowRect.height / 2);
+
+        container.scrollTo({
+          top: Math.max(0, targetScrollTop),
+          behavior: 'smooth'
+        });
+      });
+    });
+  }
+
+  private normalizePhoneSlug(phoneSlug: string | null | undefined): string | null {
+    if (!phoneSlug) {
+      return null;
+    }
+
+    const normalized = phoneSlug.trim().toLowerCase();
+
+    if (/^plus-\d+$/.test(normalized)) {
+      return normalized;
+    }
+
+    if (/^\d+$/.test(normalized)) {
+      return normalized;
+    }
+
+    return null;
+  }
+
+  private phoneFromSlug(phoneSlug: string): string | null {
+    if (/^plus-\d+$/.test(phoneSlug)) {
+      return `+${phoneSlug.slice('plus-'.length)}`;
+    }
+
+    if (/^\d+$/.test(phoneSlug)) {
+      return phoneSlug;
+    }
+
+    return null;
   }
 
   private extractConversationIds(summaries: BackendConversationSummary[]): string[] {
@@ -377,13 +513,13 @@ export class ContactsPanelComponent implements OnInit {
   }
 
   private toConversationEntry(conversationId: string): ConversationComparisonEntry {
-    const normalizedConversationId = this.normalizeConversationId(conversationId);
-    const canonicalPhone = this.toCanonicalPhoneNumber(normalizedConversationId);
+    const normalizedConversationId = normalizeConversationSourceId(conversationId);
+    const canonicalPhone = canonicalizePhoneNumber(normalizedConversationId);
 
     if (canonicalPhone) {
       return {
         id: conversationId,
-        displayName: normalizedConversationId || conversationId,
+        displayName: canonicalPhone.normalizedValue,
         normalizedPhone: canonicalPhone.normalizedValue,
         phoneDigits: canonicalPhone.digitsOnly
       };
@@ -407,14 +543,6 @@ export class ContactsPanelComponent implements OnInit {
       normalizedPhone: null,
       phoneDigits: null
     };
-  }
-
-  private normalizeConversationId(conversationId: string): string {
-    return conversationId
-      .trim()
-      .replace(/^whatsapp\s*-\s*/i, '')
-      .replace(/\.csv$/i, '')
-      .trim();
   }
 
   private toConversationOnlyRow(
@@ -473,7 +601,7 @@ export class ContactsPanelComponent implements OnInit {
 
   private normalizePhoneNumbers(phoneNumbers: string[]): string[] {
     const canonicalNumbers = phoneNumbers
-      .map((phone) => this.toCanonicalPhoneNumber(phone))
+      .map((phone) => canonicalizePhoneNumber(phone))
       .filter((phone): phone is CanonicalPhoneNumber => phone !== null);
     const redundantNumbers = new Set<string>();
     const normalized: string[] = [];
@@ -505,43 +633,6 @@ export class ContactsPanelComponent implements OnInit {
     }
 
     return normalized;
-  }
-
-  private toCanonicalPhoneNumber(rawPhone: string): CanonicalPhoneNumber | null {
-    if (typeof rawPhone !== 'string') {
-      return null;
-    }
-
-    const trimmed = rawPhone.trim();
-    if (!trimmed) {
-      return null;
-    }
-
-    const withNormalizedSeparators = trimmed
-      .replace(/[\u00A0\u2007\u202F]/g, ' ')
-      .replace(/[-‐‑‒–—―]+/g, ' ')
-      .replace(/[()]/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-    const plainDigits = withNormalizedSeparators.replace(/\D+/g, '');
-    if (!plainDigits) {
-      return null;
-    }
-
-    const firstDigitIndex = withNormalizedSeparators.search(/\d/);
-    const firstPlusIndex = withNormalizedSeparators.indexOf('+');
-    const hasExplicitCountryCode = firstPlusIndex >= 0 && firstPlusIndex < firstDigitIndex;
-    const hasSpainLocalFormat =
-      !hasExplicitCountryCode &&
-      ContactsPanelComponent.SPAIN_LOCAL_PHONE_PATTERN.test(withNormalizedSeparators);
-    const hasCountryCode = hasExplicitCountryCode || hasSpainLocalFormat;
-    const digitsOnly = hasSpainLocalFormat ? `34${plainDigits}` : plainDigits;
-
-    return {
-      normalizedValue: hasCountryCode ? `+${digitsOnly}` : digitsOnly,
-      digitsOnly,
-      hasCountryCode
-    };
   }
 
   private isCountryPrefixVariant(shorterDigits: string, longerDigits: string): boolean {
@@ -798,22 +889,6 @@ function createEmptyWorkbookGroups(): ContactsWorkbookGroups {
     conversationsWithoutContacts: [],
     contactsWithoutConversations: []
   };
-}
-
-function phonesMatchDigits(left: string, right: string): boolean {
-  if (!left || !right) {
-    return false;
-  }
-
-  if (left === right) {
-    return true;
-  }
-
-  if (left.length < 7 || right.length < 7) {
-    return false;
-  }
-
-  return left.endsWith(right) || right.endsWith(left);
 }
 
 function buildFlagEmoji(countryCode: string): string {

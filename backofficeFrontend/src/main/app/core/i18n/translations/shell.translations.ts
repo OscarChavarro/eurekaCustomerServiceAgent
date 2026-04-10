@@ -165,6 +165,10 @@ export const SHELL_TRANSLATIONS = {
     en: 'Delete conversation',
     es: 'Eliminar conversacion'
   },
+  OPEN_CONVERSATION_CONTACT_ARIA: {
+    en: 'Open contact in contacts view',
+    es: 'Abrir contacto en la vista de contactos'
+  },
   ATTACH_FILE_ARIA: {
     en: 'Attach file',
     es: 'Adjuntar archivo'

@@ -1,5 +1,6 @@
 export interface ConversationCsvRawRecord {
   readonly sourceFile: string;
+  readonly filePattern?: string | null;
   readonly rowNumber: number;
   readonly conversationId?: string;
   readonly contactName?: string | null;

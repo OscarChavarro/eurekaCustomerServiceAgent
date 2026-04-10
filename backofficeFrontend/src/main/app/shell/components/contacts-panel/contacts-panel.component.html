@@ -1,6 +1,7 @@
 <section class="contacts-panel" [attr.aria-label]="contactsPanelAriaLabel()">
   <div class="spreadsheet-table-wrapper">
     <div
+      #spreadsheetTableScroll
       class="spreadsheet-table-scroll"
       tabindex="0"
       (click)="onTableContainerClick($event)"
@@ -75,6 +76,7 @@
             ) {
               <tr
                 class="contact-row"
+                [attr.data-row-id]="contact.id"
                 [class.is-selected]="isRowSelected(contact)"
                 (click)="selectRow(contact)"
               >

@@ -128,7 +128,7 @@
         }
       </div>
     } @else if (isContactsMode()) {
-      <app-contacts-panel></app-contacts-panel>
+      <app-contacts-panel [selectedPhoneSlug]="selectedContactPhoneSlug()"></app-contacts-panel>
     } @else {
       <div class="chat-panels">
         <ng-container [ngTemplateOutlet]="chatPanelsTemplate"></ng-container>
@@ -215,28 +215,17 @@
           <span class="conversation-main">
             <span class="conversation-top-row">
               <span class="contact-name">
-                @for (segment of getTextSegments(conversation.contactName); track trackByTextSegment($index)) {
-                  @if (segment.type === 'link') {
-                    <a
-                      class="message-link"
-                      [href]="segment.href"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      {{ segment.value }}
-                    </a>
-                  } @else if (segment.type === 'phone') {
-                    <span
-                      class="phone-token"
-                      (mouseenter)="onPhoneMouseEnter($event, segment.value)"
-                      (mousemove)="onPhoneMouseMove($event, segment.value)"
-                      (mouseleave)="onPhoneMouseLeave(segment.value)"
-                    >
-                      {{ segment.value }}
-                    </span>
-                  } @else {
-                    <span>{{ segment.value }}</span>
-                  }
+                @if (conversation.linkedContactName) {
+                  <span class="phone-token">{{ conversation.linkedContactName }}</span>
+                } @else {
+                  <span
+                    class="phone-token"
+                    (mouseenter)="onPhoneMouseEnter($event, conversation.phoneNumber)"
+                    (mousemove)="onPhoneMouseMove($event, conversation.phoneNumber)"
+                    (mouseleave)="onPhoneMouseLeave(conversation.phoneNumber)"
+                  >
+                    {{ conversation.phoneNumber }}
+                  </span>
                 }
               </span>
               <span class="conversation-top-actions">
@@ -305,8 +294,20 @@
         <div class="profile-pill">
           <span class="avatar">{{ currentConversation.contactAvatar }}</span>
           <div>
-            <strong>{{ currentConversation.contactName }}</strong>
-            <p>{{ onlineStatusLabel() }}</p>
+            @if (canOpenConversationContact(currentConversation)) {
+              <strong>
+                <button
+                  type="button"
+                  class="contact-title-link"
+                  [attr.aria-label]="openConversationContactAriaLabel()"
+                  (click)="openConversationContact($event, currentConversation)"
+                >
+                  {{ currentConversation.contactName }}
+                </button>
+              </strong>
+            } @else {
+              <strong>{{ currentConversation.contactName }}</strong>
+            }
           </div>
         </div>
         <div class="header-actions stage-actions">

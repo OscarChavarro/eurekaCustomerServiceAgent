@@ -103,8 +103,7 @@ export class TimePanelComponent implements AfterViewInit, OnChanges, OnDestroy {
       const summariesById = this.chatConversationService.conversationSummaries();
       const summaries = Object.values(summariesById);
       this.applySummariesToTimeline(summaries);
-    },
-    { allowSignalWrites: true }
+    }
   );
 
   ngAfterViewInit(): void {

@@ -450,6 +450,7 @@ export class KwoledgeIngestionUseCase {
   private buildConversationMetadata(rawMessages: RawConversationMessage[]): {
     createdAt: Date;
     source: string;
+    filePattern: string | null;
     contactName: string | null;
     firstMessageDate: string | null;
     lastMessageDate: string | null;
@@ -484,6 +485,7 @@ export class KwoledgeIngestionUseCase {
     return {
       createdAt: new Date(),
       source: rawMessages[0]?.sourceFile ?? 'unknown',
+      filePattern: this.resolveConversationFilePattern(rawMessages),
       contactName: this.resolveConversationContactName(rawMessages),
       firstMessageDate,
       lastMessageDate,
@@ -498,6 +500,16 @@ export class KwoledgeIngestionUseCase {
     for (const rawMessage of rawMessages) {
       if (rawMessage.contactName) {
         return rawMessage.contactName;
+      }
+    }
+
+    return null;
+  }
+
+  private resolveConversationFilePattern(rawMessages: RawConversationMessage[]): string | null {
+    for (const rawMessage of rawMessages) {
+      if (rawMessage.filePattern) {
+        return rawMessage.filePattern;
       }
     }
 

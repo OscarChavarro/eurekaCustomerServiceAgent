@@ -65,6 +65,7 @@ export class ConversationCsvRecordTranslatorService {
       conversationIdFromFile ?? normalizedFields.chatSession ?? fallbackConversationId;
     const text = normalizedFields.text ?? '';
     const contactName = this.toNullableString(record.contactName ?? '');
+    const filePattern = this.toNullableString(record.filePattern ?? '');
 
     return new RawConversationMessage(
       conversationId,
@@ -74,6 +75,7 @@ export class ConversationCsvRecordTranslatorService {
       normalizedFields.senderName ?? normalizedFields.senderId,
       text,
       record.sourceFile,
+      filePattern,
       record.rowNumber,
       this.normalizeDirection(normalizedFields.messageType),
       normalizedFields

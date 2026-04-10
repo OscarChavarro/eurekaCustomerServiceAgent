@@ -12,19 +12,22 @@ export class RawConversationStageRenderer implements ConversationStageRenderer {
   private readonly messageBubbleFactory = inject(MessageBubbleFactory);
   private readonly frontendSecretsService = inject(FrontendSecretsService);
   private readonly imageExtensions = new Set(['jpg', 'jpeg', 'gif', 'webp', 'png']);
+  private static readonly WHATSAPP_PREFIX = /^whatsapp\s*-\s*/i;
 
   render(document: BackendConversationDocument): ChatMessage[] {
-    const assetConversationLabel = this.resolveAssetConversationLabel(document);
+    const filePattern = this.toNonEmptyString(document.filePattern);
 
     return (document.rawMessages ?? []).map((rawMessage) =>
       this.messageBubbleFactory.createFromRaw(rawMessage, {
         text: rawMessage.text,
-        imageUrl: this.buildImageUrl(
-          assetConversationLabel,
-          rawMessage.normalizedFields?.messageDate,
-          rawMessage.sentAt,
-          rawMessage.normalizedFields?.attachment
-        ),
+        imageUrl: filePattern
+          ? this.buildImageUrl(
+            filePattern,
+            rawMessage.normalizedFields?.messageDate,
+            rawMessage.sentAt,
+            rawMessage.normalizedFields?.attachment
+          )
+          : undefined,
         stageLabel: 'raw',
         reviewStage: 'raw',
         reviewStageId: rawMessage.externalId
@@ -33,7 +36,7 @@ export class RawConversationStageRenderer implements ConversationStageRenderer {
   }
 
   private buildImageUrl(
-    assetConversationLabel: string,
+    filePattern: string,
     messageDate: string | null | undefined,
     sentAt: string | null,
     attachment: string | null | undefined
@@ -49,33 +52,50 @@ export class RawConversationStageRenderer implements ConversationStageRenderer {
       return undefined;
     }
 
-    const relativePath = `WhatsApp - ${assetConversationLabel}/${formattedDate} - ${assetConversationLabel} - ${trimmedAttachment}`;
+    const assetConversation = this.resolveAssetConversationFromPattern(filePattern);
+    if (!assetConversation) {
+      return undefined;
+    }
+
+    const relativePath = `${assetConversation.folderName}/${formattedDate} - ${assetConversation.label} - ${trimmedAttachment}`;
     return this.toNormalizedHttpUrl(
       this.frontendSecretsService.staticAssetsBaseUrl,
       relativePath
     );
   }
 
-  private resolveAssetConversationLabel(document: BackendConversationDocument): string {
-    const contactName = this.toNonEmptyString(document.contactName);
-    if (contactName) {
-      return contactName;
+  private resolveAssetConversationFromPattern(filePattern: string): {
+    folderName: string;
+    label: string;
+  } | null {
+    const label = this.extractConversationLabelFromPattern(filePattern);
+    const folderName = filePattern.startsWith('WhatsApp - ')
+      ? filePattern
+      : `WhatsApp - ${label}`;
+    return { folderName, label };
+  }
+
+  private normalizeConversationPattern(value: string | null): string | null {
+    if (!value) {
+      return null;
     }
 
-    const sourceFile = this.toNonEmptyString(document.sourceFile);
-    if (sourceFile) {
-      const fileName = sourceFile.split(/[\\/]/).pop() ?? sourceFile;
-      const extractedLabel = fileName
-        .replace(/\.csv$/i, '')
-        .replace(/^whatsapp\s*-\s*/i, '')
-        .trim();
-
-      if (extractedLabel.length > 0) {
-        return extractedLabel;
-      }
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
     }
 
-    return document._id;
+    if (RawConversationStageRenderer.WHATSAPP_PREFIX.test(trimmed)) {
+      const label = trimmed.replace(RawConversationStageRenderer.WHATSAPP_PREFIX, '').trim();
+      return label ? `WhatsApp - ${label}` : null;
+    }
+
+    return trimmed;
+  }
+
+  private extractConversationLabelFromPattern(pattern: string): string {
+    const label = pattern.replace(RawConversationStageRenderer.WHATSAPP_PREFIX, '').trim();
+    return label.length > 0 ? label : pattern.trim();
   }
 
   private toNonEmptyString(value: unknown): string | null {

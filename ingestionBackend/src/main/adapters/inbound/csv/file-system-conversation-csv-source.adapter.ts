@@ -6,7 +6,10 @@ import type {
   ConversationCsvSourcePort,
   ConversationCsvRawRecord
 } from '../../../application/ports/inbound/conversation-csv-source.port';
-import type { ContactsDirectoryPort } from '../../../application/ports/outbound/contacts-directory.port';
+import type {
+  ContactDirectoryContact,
+  ContactsDirectoryPort
+} from '../../../application/ports/outbound/contacts-directory.port';
 import { TOKENS } from '../../../application/ports/tokens';
 import { ContactsDirectoryIndexService } from './contacts-directory-index.service';
 import { ImazingCsvFileNameService } from './imazing-csv-file-name.service';
@@ -15,6 +18,7 @@ type ProcessableCsvFile = {
   kind: 'processable';
   csvPath: string;
   sourceFile: string;
+  filePattern: string;
   conversationId: string;
   contactName: string | null;
   foundInContactsHashmap: boolean;
@@ -41,6 +45,7 @@ export class FileSystemConversationCsvSourceAdapter implements ConversationCsvSo
   private readonly logger = new Logger(FileSystemConversationCsvSourceAdapter.name);
   private contactsByNameIndex = new Map<string, string[]>();
   private contactsByImazingUnicodeReplacementNameIndex = new Map<string, string[]>();
+  private contactNameByNormalizedPhoneIndex = new Map<string, string>();
 
   constructor(
     @Inject(TOKENS.ContactsDirectoryPort)
@@ -79,6 +84,7 @@ export class FileSystemConversationCsvSourceAdapter implements ConversationCsvSo
       const csvRecords = await this.readCsvFile(
         resolution.csvPath,
         resolution.sourceFile,
+        resolution.filePattern,
         resolution.conversationId,
         resolution.contactName
       );
@@ -118,6 +124,7 @@ export class FileSystemConversationCsvSourceAdapter implements ConversationCsvSo
       const csvRecords = await this.readCsvFile(
         resolution.csvPath,
         resolution.sourceFile,
+        resolution.filePattern,
         resolution.conversationId,
         resolution.contactName
       );
@@ -135,6 +142,7 @@ export class FileSystemConversationCsvSourceAdapter implements ConversationCsvSo
     this.contactsByNameIndex = this.contactsDirectoryIndexService.buildNameToPhonesIndex(contacts);
     this.contactsByImazingUnicodeReplacementNameIndex =
       this.contactsDirectoryIndexService.buildImazingUnicodeReplacementNameToPhonesIndex(contacts);
+    this.contactNameByNormalizedPhoneIndex = this.buildPhoneToNameIndex(contacts);
 
     return {
       contactsCount: contacts.length,
@@ -144,6 +152,8 @@ export class FileSystemConversationCsvSourceAdapter implements ConversationCsvSo
 
   private async resolveCsvFile(csvPath: string): Promise<CsvFileResolution> {
     const sourceFile = basename(csvPath);
+    // Keep the original iMazing filename pattern before any CSV rename to phone.
+    const originalFilePatternBeforeRename = basename(csvPath, extname(csvPath)).trim();
     const sourceLabel = this.imazingCsvFileNameService.extractConversationLabel(sourceFile);
     const mappedPhone = this.contactsDirectoryIndexService.resolvePreferredPhoneNumber(
       sourceLabel,
@@ -161,6 +171,7 @@ export class FileSystemConversationCsvSourceAdapter implements ConversationCsvSo
           kind: 'processable',
           csvPath: renamedPath,
           sourceFile: renamedSourceFile,
+          filePattern: originalFilePatternBeforeRename,
           conversationId: normalizedMappedPhone,
           contactName: sourceLabel,
           foundInContactsHashmap: true,
@@ -190,6 +201,7 @@ export class FileSystemConversationCsvSourceAdapter implements ConversationCsvSo
           kind: 'processable',
           csvPath: renamedPath,
           sourceFile: renamedSourceFile,
+          filePattern: originalFilePatternBeforeRename,
           conversationId: normalizedMappedPhoneByUnicodeReplacementRetry,
           contactName: sourceLabel,
           foundInContactsHashmap: true,
@@ -203,11 +215,15 @@ export class FileSystemConversationCsvSourceAdapter implements ConversationCsvSo
     if (normalizedPhoneLabel) {
       const renamedPath = await this.renameCsvToPhone(csvPath, normalizedPhoneLabel);
       const renamedSourceFile = basename(renamedPath);
+      const inferredOriginalPattern =
+        this.resolveOriginalFilePatternByPhone(normalizedPhoneLabel) ??
+        originalFilePatternBeforeRename;
 
       return {
         kind: 'processable',
         csvPath: renamedPath,
         sourceFile: renamedSourceFile,
+        filePattern: inferredOriginalPattern,
         conversationId: normalizedPhoneLabel,
         contactName: null,
         foundInContactsHashmap: false,
@@ -228,6 +244,51 @@ export class FileSystemConversationCsvSourceAdapter implements ConversationCsvSo
 
   private toYesNo(value: boolean): 'yes' | 'no' {
     return value ? 'yes' : 'no';
+  }
+
+  private buildPhoneToNameIndex(contacts: ContactDirectoryContact[]): Map<string, string> {
+    const index = new Map<string, string>();
+
+    for (const contact of contacts) {
+      const preferredName = this.pickPreferredContactName(contact.names);
+      if (!preferredName) {
+        continue;
+      }
+
+      for (const phone of contact.phoneNumbers) {
+        const normalizedPhone = this.imazingCsvFileNameService.normalizePhoneLabel(phone);
+        if (!normalizedPhone) {
+          continue;
+        }
+
+        const existing = index.get(normalizedPhone);
+        if (!existing || preferredName.localeCompare(existing) < 0) {
+          index.set(normalizedPhone, preferredName);
+        }
+      }
+    }
+
+    return index;
+  }
+
+  private pickPreferredContactName(names: string[]): string | null {
+    for (const name of names) {
+      const trimmed = name.trim();
+      if (trimmed.length > 0) {
+        return trimmed;
+      }
+    }
+
+    return null;
+  }
+
+  private resolveOriginalFilePatternByPhone(normalizedPhone: string): string | null {
+    const contactName = this.contactNameByNormalizedPhoneIndex.get(normalizedPhone);
+    if (!contactName) {
+      return null;
+    }
+
+    return `WhatsApp - ${contactName}`;
   }
 
   private async renameCsvToPhone(csvPath: string, phoneNumber: string): Promise<string> {
@@ -296,6 +357,7 @@ export class FileSystemConversationCsvSourceAdapter implements ConversationCsvSo
   private async readCsvFile(
     csvPath: string,
     sourceFile: string,
+    filePattern: string,
     conversationId: string,
     contactName: string | null
   ): Promise<ConversationCsvRawRecord[]> {
@@ -310,6 +372,7 @@ export class FileSystemConversationCsvSourceAdapter implements ConversationCsvSo
 
     return rows.map((row, rowIndex) => ({
       sourceFile,
+      filePattern,
       rowNumber: rowIndex + 1,
       conversationId,
       contactName,
