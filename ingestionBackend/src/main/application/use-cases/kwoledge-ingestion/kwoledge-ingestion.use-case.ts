@@ -507,13 +507,32 @@ export class KwoledgeIngestionUseCase {
   }
 
   private resolveConversationFilePattern(rawMessages: RawConversationMessage[]): string | null {
+    const uniqueFilePatterns: string[] = [];
+
     for (const rawMessage of rawMessages) {
-      if (rawMessage.filePattern) {
-        return rawMessage.filePattern;
+      const filePattern = rawMessage.filePattern?.trim();
+
+      if (!filePattern || uniqueFilePatterns.includes(filePattern)) {
+        continue;
       }
+
+      uniqueFilePatterns.push(filePattern);
     }
 
-    return null;
+    if (uniqueFilePatterns.length === 0) {
+      return null;
+    }
+
+    const preferredFilePattern = uniqueFilePatterns.find(
+      (filePattern) => !this.isRenamedPhoneFilePattern(filePattern)
+    );
+
+    return preferredFilePattern ?? uniqueFilePatterns[0] ?? null;
+  }
+
+  private isRenamedPhoneFilePattern(filePattern: string): boolean {
+    const withoutPrefix = filePattern.replace(/^whatsapp\s*-\s*/i, '').trim();
+    return /^\+\d+$/.test(withoutPrefix);
   }
 
   private toRawStageMessage(rawMessage: RawConversationMessage): RawStageMessage {

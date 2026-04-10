@@ -8,6 +8,10 @@ export const routes: Routes = [
     redirectTo: 'chat'
   },
   {
+    path: 'chat/:phoneNumber',
+    component: AppShellChatComponent
+  },
+  {
     path: 'chat',
     component: AppShellChatComponent
   },

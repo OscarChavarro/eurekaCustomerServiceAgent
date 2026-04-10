@@ -472,9 +472,9 @@ export class ChatConversationService {
 
     const phoneNumber = this.normalizeConversationPhoneNumber(conversationId);
     const originalPhoneNumber = this.extractOriginalConversationPhoneNumber(conversationId);
-    const linkedContactName = this.resolveLinkedContactName(
-      summary.contactName,
-      this.findContactNameByPhoneNumber(phoneNumber)
+    const linkedContactName = this.resolvePreferredLinkedContactName(
+      phoneNumber,
+      summary.contactName
     );
     const displayName = this.resolveConversationDisplayName(linkedContactName, phoneNumber);
     const avatar = this.buildAvatarFromLabel(displayName);
@@ -603,10 +603,10 @@ export class ChatConversationService {
 
         const phoneNumber = this.normalizeConversationPhoneNumber(conversationId);
         const originalPhoneNumber = this.extractOriginalConversationPhoneNumber(conversationId);
-        const linkedContactName = this.resolveLinkedContactName(
+        const linkedContactName = this.resolvePreferredLinkedContactName(
+          phoneNumber,
           effectiveDocument.contactName,
           summary?.contactName,
-          this.findContactNameByPhoneNumber(phoneNumber),
           conversation.linkedContactName
         );
         const filePattern = this.resolveFilePattern(
@@ -665,10 +665,10 @@ export class ChatConversationService {
         const summary = this.conversationSummariesState()[conversation.id];
         const phoneNumber = this.normalizeConversationPhoneNumber(conversation.id);
         const originalPhoneNumber = this.extractOriginalConversationPhoneNumber(conversation.id);
-        const linkedContactName = this.resolveLinkedContactName(
+        const linkedContactName = this.resolvePreferredLinkedContactName(
+          phoneNumber,
           effectiveDocument.contactName,
           summary?.contactName,
-          this.findContactNameByPhoneNumber(phoneNumber),
           conversation.linkedContactName
         );
         const filePattern = this.resolveFilePattern(
@@ -708,9 +708,9 @@ export class ChatConversationService {
         const lastLocalRawMessage = localRawMessages[localRawMessages.length - 1];
         const phoneNumber = this.normalizeConversationPhoneNumber(conversation.id);
         const originalPhoneNumber = this.extractOriginalConversationPhoneNumber(conversation.id);
-        const linkedContactName = this.resolveLinkedContactName(
+        const linkedContactName = this.resolvePreferredLinkedContactName(
+          phoneNumber,
           summary.contactName,
-          this.findContactNameByPhoneNumber(phoneNumber),
           conversation.linkedContactName
         );
         const filePattern = this.resolveFilePattern(summary.filePattern, conversation.filePattern);
@@ -844,6 +844,15 @@ export class ChatConversationService {
     }
 
     return null;
+  }
+
+  private resolvePreferredLinkedContactName(
+    phoneNumber: string,
+    ...candidates: unknown[]
+  ): string | null {
+    const contactDirectoryName = this.findContactNameByPhoneNumber(phoneNumber);
+
+    return this.resolveLinkedContactName(contactDirectoryName, ...candidates);
   }
 
   private resolveLinkedContactName(...candidates: unknown[]): string | null {

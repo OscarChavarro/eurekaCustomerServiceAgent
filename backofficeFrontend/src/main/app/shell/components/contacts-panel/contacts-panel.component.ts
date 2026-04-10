@@ -29,10 +29,11 @@ import {
   normalizeConversationSourceId,
   phonesMatchDigits
 } from '../../../core/phone/phone-normalization.utils';
+import { RouterLink } from '@angular/router';
 
 @Component({
   selector: 'app-contacts-panel',
-  imports: [CommonModule],
+  imports: [CommonModule, RouterLink],
   templateUrl: './contacts-panel.component.html',
   styleUrl: './contacts-panel.component.sass'
 })
@@ -100,7 +101,10 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
     }
 
     this.selectedPhoneSlugState.set(this.normalizePhoneSlug(this.selectedPhoneSlug));
-    this.selectContactByPhoneSlug();
+    const selectedBySlug = this.selectContactByPhoneSlug({ smoothScroll: false });
+    if (!selectedBySlug) {
+      this.syncSelectionWithVisibleRows();
+    }
   }
 
   protected contactsPanelAriaLabel(): string {
@@ -220,6 +224,29 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
     return contact.contactName ?? this.t(I18N_KEYS.shell.CONTACTS_TABLE_UNKNOWN_NAME);
   }
 
+  protected canOpenConversationInChat(contact: ContactRow): boolean {
+    if (this.activeWorkbookTabState() === 'contactsWithoutConversations') {
+      return false;
+    }
+
+    return this.resolveChatPhoneNumber(contact) !== null;
+  }
+
+  protected chatConversationRoute(contact: ContactRow): string[] {
+    const chatPhoneNumber = this.resolveChatPhoneNumber(contact);
+
+    if (!chatPhoneNumber) {
+      return ['/chat'];
+    }
+
+    return ['/chat', chatPhoneNumber];
+  }
+
+  protected onContactNameLinkClick(event: MouseEvent, contact: ContactRow): void {
+    event.stopPropagation();
+    this.selectRow(contact);
+  }
+
   protected selectRow(contact: ContactRow): void {
     this.selectedRowIdState.set(contact.id);
   }
@@ -327,8 +354,10 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
       ];
 
       this.groupedRowsState.set(groups);
-      this.syncSelectionWithVisibleRows();
-      this.selectContactByPhoneSlug();
+      const selectedBySlug = this.selectContactByPhoneSlug({ smoothScroll: false });
+      if (!selectedBySlug) {
+        this.syncSelectionWithVisibleRows();
+      }
       this.loadingState.set(false);
       void this.resolveCountryCodesForRows(allRows);
     } catch (error: unknown) {
@@ -354,20 +383,20 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
     }
   }
 
-  private selectContactByPhoneSlug(): void {
+  private selectContactByPhoneSlug(options?: { smoothScroll?: boolean }): boolean {
     const phoneSlug = this.selectedPhoneSlugState();
     if (!phoneSlug) {
-      return;
+      return false;
     }
 
     const normalizedPhone = this.phoneFromSlug(phoneSlug);
     if (!normalizedPhone) {
-      return;
+      return false;
     }
 
     const targetDigits = normalizedPhone.replace(/\D+/g, '');
     if (targetDigits.length === 0) {
-      return;
+      return false;
     }
 
     const groups = this.groupedRowsState();
@@ -389,12 +418,14 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
 
       this.activeWorkbookTabState.set(tab);
       this.selectedRowIdState.set(matchedRow.id);
-      this.scrollSelectedRowToCenter();
-      return;
+      this.scrollSelectedRowToCenter(options?.smoothScroll ?? true);
+      return true;
     }
+
+    return false;
   }
 
-  private scrollSelectedRowToCenter(): void {
+  private scrollSelectedRowToCenter(smoothScroll = true): void {
     queueMicrotask(() => {
       requestAnimationFrame(() => {
         const container = this.spreadsheetTableScrollRef?.nativeElement;
@@ -421,7 +452,7 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
 
         container.scrollTo({
           top: Math.max(0, targetScrollTop),
-          behavior: 'smooth'
+          behavior: smoothScroll ? 'smooth' : 'auto'
         });
       });
     });
@@ -478,6 +509,7 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
 
     for (const contact of contacts) {
       const contactPhoneDigits = this.contactPhoneDigits(contact);
+      let firstMatchedConversationId: string | null = null;
       const hasConversation = conversations.some((conversation) => {
         if (!conversation.phoneDigits) {
           return false;
@@ -489,13 +521,19 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
 
         if (matched) {
           matchedConversationIds.add(conversation.id);
+          if (!firstMatchedConversationId) {
+            firstMatchedConversationId = conversation.id;
+          }
         }
 
         return matched;
       });
 
       if (hasConversation) {
-        contactsWithConversations.push(contact);
+        contactsWithConversations.push({
+          ...contact,
+          chatConversationId: firstMatchedConversationId
+        });
       } else {
         contactsWithoutConversations.push(contact);
       }
@@ -552,7 +590,8 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
     return {
       id: `conversation-only|${conversation.id}|${index}`,
       contactName: conversation.displayName || conversation.id,
-      phoneNumbers: conversation.normalizedPhone ? [conversation.normalizedPhone] : []
+      phoneNumbers: conversation.normalizedPhone ? [conversation.normalizedPhone] : [],
+      chatConversationId: conversation.id
     };
   }
 
@@ -579,9 +618,21 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
       return {
         id: `${contactName ?? 'unknown'}|${phoneNumbers.join('|')}|${index}`,
         contactName,
-        phoneNumbers
+        phoneNumbers,
+        chatConversationId: null
       };
     });
+  }
+
+  private resolveChatPhoneNumber(contact: ContactRow): string | null {
+    const conversationId = contact.chatConversationId;
+
+    if (typeof conversationId !== 'string') {
+      return null;
+    }
+
+    const trimmed = conversationId.trim();
+    return trimmed.length > 0 ? trimmed : null;
   }
 
   private pickFirstName(names: string[]): string | null {
@@ -848,6 +899,7 @@ type ContactRow = {
   id: string;
   contactName: string | null;
   phoneNumbers: string[];
+  chatConversationId: string | null;
 };
 
 type CanonicalPhoneNumber = {

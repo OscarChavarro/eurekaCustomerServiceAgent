@@ -81,7 +81,19 @@
                 (click)="selectRow(contact)"
               >
                 <td class="row-index-cell">{{ rowIndex + 1 }}</td>
-                <td>{{ contactNameValue(contact) }}</td>
+                <td>
+                  @if (canOpenConversationInChat(contact)) {
+                    <a
+                      class="contact-name-link"
+                      [routerLink]="chatConversationRoute(contact)"
+                      (click)="onContactNameLinkClick($event, contact)"
+                    >
+                      {{ contactNameValue(contact) }}
+                    </a>
+                  } @else {
+                    {{ contactNameValue(contact) }}
+                  }
+                </td>
                 <td>{{ phoneNumbersValue(contact) }}</td>
                 <td class="country-cell" [attr.aria-label]="countryCellValue(contact)">
                   @if (countryFlags(contact).length === 0) {

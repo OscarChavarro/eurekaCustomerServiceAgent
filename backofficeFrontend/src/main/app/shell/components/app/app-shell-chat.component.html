@@ -230,26 +230,6 @@
               </span>
               <span class="conversation-top-actions">
                 <span class="message-time">{{ conversation.lastMessageAt }}</span>
-                @if (shouldShowConversationActions(conversation.id)) {
-                  <span class="conversation-hover-tools">
-                    <span
-                      class="conversation-hover-icon"
-                      [attr.aria-label]="conversationActionsAriaLabel()"
-                      (click)="toggleConversationDeleteMenu($event, conversation.id)"
-                    >
-                      V
-                    </span>
-                    @if (openConversationDeleteMenuId() === conversation.id) {
-                      <span
-                        class="conversation-hover-icon is-delete"
-                        [attr.aria-label]="deleteConversationAriaLabel()"
-                        (click)="deleteConversation($event, conversation.id)"
-                      >
-                        🗑️
-                      </span>
-                    }
-                  </span>
-                }
               </span>
             </span>
             <span class="conversation-bottom-row">
@@ -283,6 +263,28 @@
               }
             </span>
           </span>
+          @if (shouldShowConversationActions(conversation.id)) {
+            <span class="conversation-hover-overlay">
+              <span class="conversation-hover-tools">
+                <span
+                  class="conversation-hover-icon"
+                  [attr.aria-label]="conversationActionsAriaLabel()"
+                  (click)="toggleConversationDeleteMenu($event, conversation.id)"
+                >
+                  V
+                </span>
+                @if (openConversationDeleteMenuId() === conversation.id) {
+                  <span
+                    class="conversation-hover-icon is-delete"
+                    [attr.aria-label]="deleteConversationAriaLabel()"
+                    (click)="deleteConversation($event, conversation.id)"
+                  >
+                    🗑️
+                  </span>
+                }
+              </span>
+            </span>
+          }
         </button>
       }
     </div>

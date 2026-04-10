@@ -38,6 +38,11 @@ import {
   ConversationViewMode,
 } from '../../services/chat-conversation.service';
 import { ContactsPanelComponent } from '../contacts-panel/contacts-panel.component';
+import {
+  canonicalizePhoneNumber,
+  normalizeConversationSourceId,
+  phonesMatchDigits
+} from '../../../core/phone/phone-normalization.utils';
 
 @Component({
   selector: 'app-shell-chat',
@@ -76,6 +81,7 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
   private readonly embedNearestLoadingState = signal<boolean>(false);
   private readonly operationModeState = signal<OperationMode>('chat');
   private readonly selectedContactPhoneSlugState = signal<string | null>(null);
+  private readonly pendingChatPhoneNumberFromRouteState = signal<string | null>(null);
   private readonly chatHiddenInTimeModeState = signal<boolean>(false);
   private readonly timeRangeSelectorOpenState = signal<boolean>(false);
   private readonly selectedTimeRangeState = signal<TimeRangeSelection | null>(null);
@@ -214,6 +220,31 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
       this.embedSelectedBlockState.set(null);
       this.embedNearestBlocksState.set([]);
       this.embedNearestLoadingState.set(false);
+    }
+  );
+
+  private readonly applyPendingChatSelectionFromRouteEffectRef = effect(
+    () => {
+      if (this.operationModeState() !== 'chat') {
+        return;
+      }
+
+      const phoneNumber = this.pendingChatPhoneNumberFromRouteState();
+      if (!phoneNumber) {
+        return;
+      }
+
+      const targetConversationId = this.resolveConversationIdFromRoutePhoneNumber(phoneNumber);
+      if (!targetConversationId) {
+        return;
+      }
+
+      if (this.activeConversationId() !== targetConversationId) {
+        this.chatConversationService.setActiveConversation(targetConversationId);
+      }
+
+      this.chatConversationService.setViewMode('raw');
+      this.pendingChatPhoneNumberFromRouteState.set(null);
     }
   );
 
@@ -979,6 +1010,9 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
     this.selectedContactPhoneSlugState.set(
       this.normalizePhoneSlug(this.activatedRoute.snapshot.paramMap.get('phoneSlug'))
     );
+    this.pendingChatPhoneNumberFromRouteState.set(
+      this.normalizeChatPhoneNumber(this.activatedRoute.snapshot.paramMap.get('phoneNumber'))
+    );
   }
 
   private resolveOperationModeFromRoutePath(path: string): OperationMode {
@@ -1006,6 +1040,51 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
 
     if (/^\d+$/.test(normalized)) {
       return normalized;
+    }
+
+    return null;
+  }
+
+  private normalizeChatPhoneNumber(phoneNumber: string | null): string | null {
+    if (!phoneNumber) {
+      return null;
+    }
+
+    const trimmed = phoneNumber.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+
+  private resolveConversationIdFromRoutePhoneNumber(phoneNumber: string): string | null {
+    const normalizedRouteValue = normalizeConversationSourceId(phoneNumber);
+    const canonicalRoutePhone = canonicalizePhoneNumber(normalizedRouteValue);
+    const routeDigits =
+      canonicalRoutePhone?.digitsOnly ?? normalizedRouteValue.replace(/\D+/g, '');
+
+    for (const conversation of this.conversations()) {
+      if (conversation.id === phoneNumber || conversation.id === normalizedRouteValue) {
+        return conversation.id;
+      }
+
+      const normalizedConversationId = normalizeConversationSourceId(conversation.id);
+      if (normalizedConversationId === normalizedRouteValue) {
+        return conversation.id;
+      }
+
+      if (routeDigits.length === 0) {
+        continue;
+      }
+
+      const canonicalConversationPhone = canonicalizePhoneNumber(normalizedConversationId);
+      const conversationDigits =
+        canonicalConversationPhone?.digitsOnly ?? normalizedConversationId.replace(/\D+/g, '');
+
+      if (conversationDigits.length === 0) {
+        continue;
+      }
+
+      if (phonesMatchDigits(conversationDigits, routeDigits)) {
+        return conversation.id;
+      }
     }
 
     return null;
