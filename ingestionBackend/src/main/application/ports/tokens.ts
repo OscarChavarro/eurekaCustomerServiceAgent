@@ -6,5 +6,6 @@ export const TOKENS = {
   ProcessedConversationStageStorePort: Symbol('ProcessedConversationStageStorePort'),
   ConversationsRepositoryPort: Symbol('ConversationsRepositoryPort'),
   EmbeddingsRepositoryPort: Symbol('EmbeddingsRepositoryPort'),
-  AudioTranscribeWorkerPoolPort: Symbol('AudioTranscribeWorkerPoolPort')
+  AudioTranscribeWorkerPoolPort: Symbol('AudioTranscribeWorkerPoolPort'),
+  AudioWaveformBarsPort: Symbol('AudioWaveformBarsPort')
 } as const;

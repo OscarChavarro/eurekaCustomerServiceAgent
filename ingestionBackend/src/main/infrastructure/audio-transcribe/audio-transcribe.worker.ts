@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { parentPort, workerData } from 'node:worker_threads';
 import type { AudioTranscribeResult } from '../../application/use-cases/audio-transcribe/audio-transcribe.result';
+import { WavefileAudioWaveformBarsAdapter } from './wavefile-audio-waveform-bars.adapter';
 
 type WorkerRequestMessage = {
   type: 'transcribe';
@@ -37,10 +38,12 @@ type WhisperJsonPayload = {
 type WorkerStaticContext = {
   workerIndex: number;
   tempAudioFilePath: string;
+  tempWavFilePath: string;
   tempJsonFilePath: string;
 };
 
 const context = createWorkerContext();
+const waveformBarsAdapter = new WavefileAudioWaveformBarsAdapter();
 
 if (!parentPort) {
   process.exit(1);
@@ -86,6 +89,8 @@ async function transcribeUrlToPayload(
 
   try {
     await downloadOpusFile(url, staticContext.tempAudioFilePath);
+    convertOpusToWav(staticContext.tempAudioFilePath, staticContext.tempWavFilePath);
+    bars = waveformBarsAdapter.buildFromWavFile(staticContext.tempWavFilePath, 100);
     const whisperRun = runWhisper(staticContext.tempAudioFilePath);
 
     if (!whisperRun.success) {
@@ -101,13 +106,13 @@ async function transcribeUrlToPayload(
       }
 
       totalTimeInSeconds = resolveDurationFromSegments(whisperPayload.segments);
-      bars = buildBarsFromSegments(whisperPayload.segments, totalTimeInSeconds);
     }
   } catch (error) {
     hasError = true;
     transcriptionText = error instanceof Error ? error.message : String(error);
   } finally {
     await cleanupTempFile(staticContext.tempAudioFilePath);
+    await cleanupTempFile(staticContext.tempWavFilePath);
     await cleanupTempFile(staticContext.tempJsonFilePath);
   }
 
@@ -188,6 +193,33 @@ function runWhisper(audioFilePath: string): { success: true } | { success: false
   return { success: true };
 }
 
+function convertOpusToWav(opusFilePath: string, wavFilePath: string): void {
+  const args = [
+    '-y',
+    '-i',
+    opusFilePath,
+    '-ac',
+    '1',
+    '-ar',
+    '16000',
+    wavFilePath
+  ];
+
+  const execution = spawnSync('ffmpeg', args, {
+    encoding: 'utf-8',
+    timeout: 120_000
+  });
+
+  if (execution.error) {
+    throw new Error(`Unable to execute ffmpeg: ${execution.error.message}`);
+  }
+
+  if (execution.status !== 0) {
+    const details = execution.stderr?.trim() || execution.stdout?.trim() || 'unknown ffmpeg error';
+    throw new Error(`ffmpeg failed converting opus to wav. ${details}`);
+  }
+}
+
 async function readWhisperJson(jsonPath: string): Promise<WhisperJsonPayload> {
   const raw = await fs.readFile(jsonPath, 'utf-8');
   const parsed = JSON.parse(raw) as unknown;
@@ -217,49 +249,6 @@ function resolveDurationFromSegments(segments: WhisperSegment[] | undefined): nu
   return Number(maxEnd.toFixed(3));
 }
 
-function buildBarsFromSegments(
-  segments: WhisperSegment[] | undefined,
-  totalTimeInSeconds: number
-): number[] {
-  if (!Array.isArray(segments) || segments.length === 0 || totalTimeInSeconds <= 0) {
-    return [];
-  }
-
-  const barsCount = 48;
-  const interval = totalTimeInSeconds / barsCount;
-  const bars: number[] = [];
-
-  for (let barIndex = 0; barIndex < barsCount; barIndex += 1) {
-    const barStart = interval * barIndex;
-    const barEnd = barStart + interval;
-    let occupancy = 0;
-
-    for (const segment of segments) {
-      if (
-        !segment ||
-        typeof segment.start !== 'number' ||
-        typeof segment.end !== 'number' ||
-        !Number.isFinite(segment.start) ||
-        !Number.isFinite(segment.end)
-      ) {
-        continue;
-      }
-
-      const overlapStart = Math.max(barStart, segment.start);
-      const overlapEnd = Math.min(barEnd, segment.end);
-
-      if (overlapEnd > overlapStart) {
-        occupancy += overlapEnd - overlapStart;
-      }
-    }
-
-    const normalized = Math.max(0, Math.min(1, occupancy / interval));
-    bars.push(Number(normalized.toFixed(3)));
-  }
-
-  return bars;
-}
-
 function normalizeText(text: string | undefined): string {
   if (typeof text !== 'string') {
     return '';
@@ -285,11 +274,13 @@ function createWorkerContext(): WorkerStaticContext {
 
   const tmpDir = process.env.TMPDIR?.trim() || '/tmp';
   const tempAudioFilePath = join(tmpDir, `audio-transcribe-worker-${workerIndex}.opus`);
+  const tempWavFilePath = join(tmpDir, `audio-transcribe-worker-${workerIndex}.wav`);
   const tempJsonFilePath = join(tmpDir, `audio-transcribe-worker-${workerIndex}.json`);
 
   return {
     workerIndex,
     tempAudioFilePath,
+    tempWavFilePath,
     tempJsonFilePath
   };
 }

@@ -20,6 +20,7 @@ import { KwoledgeIngestionUseCase } from './application/use-cases/kwoledge-inges
 import { AudioTranscribeUseCase } from './application/use-cases/audio-transcribe/audio-transcribe.use-case';
 import { StartupValidationOrchestrator } from './infrastructure/bootstrap/startup-validation.orchestrator';
 import { AudioTranscribeWorkerPoolService } from './infrastructure/audio-transcribe/audio-transcribe-worker-pool.service';
+import { WavefileAudioWaveformBarsAdapter } from './infrastructure/audio-transcribe/wavefile-audio-waveform-bars.adapter';
 import { BgeConnectivityStartupValidator } from './infrastructure/bootstrap/validators/bge-connectivity-startup.validator';
 import { ContactsBackendConnectivityStartupValidator } from './infrastructure/bootstrap/validators/contacts-backend-connectivity-startup.validator';
 import { MongoConnectivityStartupValidator } from './infrastructure/bootstrap/validators/mongo-connectivity-startup.validator';
@@ -45,6 +46,7 @@ import { SettingsConfig } from './infrastructure/config/settings/settings.config
     BgeConnectivityStartupValidator,
     StartupValidationOrchestrator,
     AudioTranscribeWorkerPoolService,
+    WavefileAudioWaveformBarsAdapter,
     ContactsDirectoryIndexService,
     ImazingCsvFileNameService,
     ConversationCsvRecordTranslatorService,
@@ -56,6 +58,10 @@ import { SettingsConfig } from './infrastructure/config/settings/settings.config
     {
       provide: TOKENS.AudioTranscribeWorkerPoolPort,
       useExisting: AudioTranscribeWorkerPoolService
+    },
+    {
+      provide: TOKENS.AudioWaveformBarsPort,
+      useExisting: WavefileAudioWaveformBarsAdapter
     },
     {
       provide: TOKENS.ConversationCsvSourcePort,
