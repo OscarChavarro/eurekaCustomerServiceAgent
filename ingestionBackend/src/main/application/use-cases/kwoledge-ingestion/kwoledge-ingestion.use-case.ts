@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import type { ConversationCsvSourcePort } from '../../ports/inbound/conversation-csv-source.port';
 import type {
   ConversationsRepositoryPort,
+  RawConversationAudioDetails,
   RawConversationStageMessage
 } from '../../ports/outbound/conversations-repository.port';
 import type { EmbeddingPort } from '../../ports/outbound/embedding.port';
@@ -11,8 +12,12 @@ import type {
   EmbeddingsRepositoryPort
 } from '../../ports/outbound/embeddings-repository.port';
 import type { ProcessedConversationStageStorePort } from '../../ports/outbound/processed-conversation-stage-store.port';
+import type { StaticAssetsBaseUrlPort } from '../../ports/outbound/static-assets-base-url.port';
 import type { VectorPoint, VectorStorePort } from '../../ports/outbound/vector-store.port';
 import { TOKENS } from '../../ports/tokens';
+import { AudioTranscribeCommand } from '../audio-transcribe/audio-transcribe.command';
+import type { AudioTranscribeResult } from '../audio-transcribe/audio-transcribe.result';
+import { AudioTranscribeUseCase } from '../audio-transcribe/audio-transcribe.use-case';
 import { ConversationChunkingService } from './conversation-chunking.service';
 import { ConversationCsvRecordTranslatorService } from './conversation-csv-record-translator.service';
 import { ConversationMessageCleaningService } from './conversation-message-cleaning.service';
@@ -123,10 +128,13 @@ export class KwoledgeIngestionUseCase {
     private readonly embeddingsRepositoryPort: EmbeddingsRepositoryPort,
     @Inject(TOKENS.ProcessedConversationStageStorePort)
     private readonly processedConversationStageStorePort: ProcessedConversationStageStorePort,
+    @Inject(TOKENS.StaticAssetsBaseUrlPort)
+    private readonly staticAssetsBaseUrlPort: StaticAssetsBaseUrlPort,
     private readonly conversationCsvRecordTranslatorService: ConversationCsvRecordTranslatorService,
     private readonly conversationMessageCleaningService: ConversationMessageCleaningService,
     private readonly conversationStructuringService: ConversationStructuringService,
-    private readonly conversationChunkingService: ConversationChunkingService
+    private readonly conversationChunkingService: ConversationChunkingService,
+    private readonly audioTranscribeUseCase: AudioTranscribeUseCase
   ) {}
 
   public async execute(command: KwoledgeIngestionCommand): Promise<KwoledgeIngestionResult> {
@@ -208,6 +216,8 @@ export class KwoledgeIngestionUseCase {
         conversationSemanticChunks,
         conversationEmbeddedChunks
       );
+
+      this.enqueueRawAudioTranscriptions(conversationId, conversationRawMessages);
     }
 
     if (allSemanticChunks.length === 0) {
@@ -510,7 +520,7 @@ export class KwoledgeIngestionUseCase {
     const uniqueFilePatterns: string[] = [];
 
     for (const rawMessage of rawMessages) {
-      const filePattern = rawMessage.filePattern?.trim();
+      const filePattern = this.resolveRawMessageFilePattern(rawMessage);
 
       if (!filePattern || uniqueFilePatterns.includes(filePattern)) {
         continue;
@@ -560,6 +570,203 @@ export class KwoledgeIngestionUseCase {
       direction: this.toStageDirection(rawMessage.direction),
       normalizedFields: this.omitTextFromNormalizedFields(rawMessage.normalizedFields)
     };
+  }
+
+  private enqueueRawAudioTranscriptions(
+    conversationId: string,
+    rawMessages: RawConversationMessage[]
+  ): void {
+    for (const rawMessage of rawMessages) {
+      const audioResourceUrl = this.resolveAudioResourceUrl(rawMessage);
+      if (!audioResourceUrl) {
+        continue;
+      }
+
+      this.audioTranscribeUseCase.executeAsync(
+        new AudioTranscribeCommand(audioResourceUrl),
+        (payload, params) => {
+          void this.onAudioTranscriptionCompleted(payload, params);
+        },
+        {
+          conversationId,
+          rawMessageExternalId: rawMessage.externalId
+        }
+      );
+    }
+  }
+
+  private async onAudioTranscriptionCompleted(
+    payload: AudioTranscribeResult,
+    params: Record<string, unknown>
+  ): Promise<void> {
+    const conversationId = typeof params.conversationId === 'string' ? params.conversationId : null;
+    const rawMessageExternalId =
+      typeof params.rawMessageExternalId === 'string' ? params.rawMessageExternalId : null;
+
+    if (!conversationId || !rawMessageExternalId) {
+      this.logger.warn(
+        `Ignoring audio transcription callback because params are invalid: ${JSON.stringify(params)}`
+      );
+      return;
+    }
+
+    const audioDetails: RawConversationAudioDetails = {
+      type: payload.type,
+      transcription: payload.transcription,
+      totalTimeInSeconds: payload.totalTimeInSeconds,
+      language: payload.language,
+      bars: payload.bars
+    };
+
+    try {
+      await this.conversationsRepositoryPort.upsertRawMessageAudioDetails(
+        conversationId,
+        rawMessageExternalId,
+        audioDetails
+      );
+    } catch (error) {
+      this.logger.error(
+        `Unable to persist audioDetails for conversationId=${conversationId}, rawMessageExternalId=${rawMessageExternalId}. ${String(error)}`
+      );
+    }
+  }
+
+  private resolveAudioResourceUrl(rawMessage: RawConversationMessage): string | null {
+    const attachment = rawMessage.normalizedFields.attachment?.trim();
+    if (!attachment || !this.isSupportedAudioAttachment(attachment)) {
+      return null;
+    }
+
+    const filePattern = this.resolveRawMessageFilePattern(rawMessage);
+    if (!filePattern) {
+      return null;
+    }
+
+    const formattedDate = this.formatAssetDate(rawMessage.normalizedFields.messageDate, rawMessage.sentAt);
+    if (!formattedDate) {
+      return null;
+    }
+
+    const assetConversation = this.resolveAssetConversationFromPattern(filePattern);
+    const relativePath = `${assetConversation.folderName}/${formattedDate} - ${assetConversation.label} - ${attachment}`;
+    const normalizedPath = relativePath
+      .normalize('NFC')
+      .split('/')
+      .map((segment) => encodeURIComponent(segment))
+      .join('/');
+
+    const baseUrl = this.staticAssetsBaseUrlPort.getBaseUrl().replace(/\/+$/, '');
+    return `${baseUrl}/${normalizedPath}`;
+  }
+
+  private resolveRawMessageFilePattern(rawMessage: RawConversationMessage): string | null {
+    const filePatternFromChatSession = this.normalizeFilePatternCandidate(
+      rawMessage.normalizedFields.chatSession
+    );
+    if (filePatternFromChatSession) {
+      return filePatternFromChatSession;
+    }
+
+    return this.normalizeFilePatternCandidate(rawMessage.filePattern);
+  }
+
+  private normalizeFilePatternCandidate(pattern: string | null): string | null {
+    if (!pattern) {
+      return null;
+    }
+
+    const cleaned = pattern
+      .trim()
+      .replace(/[\u200E\u200F\u202A-\u202E\u2066-\u2069]/g, '')
+      .replace(/[\u00A0\u2007\u202F]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!cleaned) {
+      return null;
+    }
+
+    const label = this.extractConversationLabelFromPattern(cleaned);
+    if (!label) {
+      return null;
+    }
+
+    const formattedLabel = this.formatAssetPhoneLabel(label);
+    return `WhatsApp - ${formattedLabel}`;
+  }
+
+  private formatAssetPhoneLabel(label: string): string {
+    const trimmedLabel = label.trim();
+    const digitsOnly = trimmedLabel.replace(/\D/g, '');
+    const isDigitsOnlyInternationalPhone = /^\+\d+$/.test(trimmedLabel);
+
+    if (!isDigitsOnlyInternationalPhone) {
+      return trimmedLabel;
+    }
+
+    if (trimmedLabel.startsWith('+34') && digitsOnly.length === 11) {
+      const nationalNumber = digitsOnly.slice(2);
+      return `+34 ${nationalNumber.slice(0, 3)} ${nationalNumber.slice(3, 5)} ${nationalNumber.slice(5, 7)} ${nationalNumber.slice(7, 9)}`;
+    }
+
+    return trimmedLabel;
+  }
+
+  private resolveAssetConversationFromPattern(filePattern: string): {
+    folderName: string;
+    label: string;
+  } {
+    const label = this.extractConversationLabelFromPattern(filePattern);
+    const folderName = filePattern.startsWith('WhatsApp - ')
+      ? filePattern
+      : `WhatsApp - ${label}`;
+    return { folderName, label };
+  }
+
+  private extractConversationLabelFromPattern(pattern: string): string {
+    const label = pattern.replace(/^whatsapp\s*-\s*/i, '').trim();
+    return label.length > 0 ? label : pattern.trim();
+  }
+
+  private isSupportedAudioAttachment(attachment: string): boolean {
+    const extension = attachment.split('.').pop()?.toLowerCase();
+    return extension === 'opus' || extension === 'm4a' || extension === 'mp3';
+  }
+
+  private formatAssetDate(messageDate: string | null, sentAt: Date | null): string | null {
+    const normalizedMessageDate = this.normalizeMessageDate(messageDate);
+    if (normalizedMessageDate) {
+      return normalizedMessageDate;
+    }
+
+    if (!sentAt) {
+      return null;
+    }
+
+    const year = sentAt.getFullYear();
+    const month = String(sentAt.getMonth() + 1).padStart(2, '0');
+    const day = String(sentAt.getDate()).padStart(2, '0');
+    const hours = String(sentAt.getHours()).padStart(2, '0');
+    const minutes = String(sentAt.getMinutes()).padStart(2, '0');
+    const seconds = String(sentAt.getSeconds()).padStart(2, '0');
+
+    return `${year}-${month}-${day} ${hours} ${minutes} ${seconds}`;
+  }
+
+  private normalizeMessageDate(messageDate: string | null): string | null {
+    const trimmed = messageDate?.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const match = trimmed.match(
+      /^(\d{4}-\d{2}-\d{2})[ T](\d{2})[: ](\d{2})[: ](\d{2})$/
+    );
+
+    if (!match) {
+      return null;
+    }
+
+    return `${match[1]} ${match[2]} ${match[3]} ${match[4]}`;
   }
 
   private omitTextFromNormalizedFields(

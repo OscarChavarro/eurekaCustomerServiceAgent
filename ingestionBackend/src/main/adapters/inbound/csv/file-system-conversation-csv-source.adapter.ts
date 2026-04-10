@@ -237,10 +237,6 @@ export class FileSystemConversationCsvSourceAdapter implements ConversationCsvSo
         continue;
       }
 
-      if (this.imazingCsvFileNameService.isPhoneLike(sourceLabel)) {
-        continue;
-      }
-
       renameBySourcePath.set(csvPath, {
         conversationId: conversationResolution.conversationId,
         originalFilePattern

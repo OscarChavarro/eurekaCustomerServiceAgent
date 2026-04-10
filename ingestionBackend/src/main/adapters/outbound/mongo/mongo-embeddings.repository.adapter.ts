@@ -46,4 +46,11 @@ export class MongoEmbeddingsRepositoryAdapter implements EmbeddingsRepositoryPor
       { ordered: true }
     );
   }
+
+  public async deleteAllEmbeddings(): Promise<number> {
+    const collection =
+      await this.mongoClientProvider.getEmbeddingsCollection<MongoEmbeddingDocument>();
+    const result = await collection.deleteMany({});
+    return result.deletedCount ?? 0;
+  }
 }

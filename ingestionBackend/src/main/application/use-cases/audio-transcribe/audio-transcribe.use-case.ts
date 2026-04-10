@@ -17,8 +17,11 @@ export class AudioTranscribeUseCase {
 
   public executeAsync(
     command: AudioTranscribeCommand,
-    onCompleted: (payload: AudioTranscribeResult) => void
+    onCompleted: (payload: AudioTranscribeResult, params: Record<string, unknown>) => void,
+    params: Record<string, unknown>
   ): void {
-    this.audioTranscribeWorkerPoolPort.enqueueNonBlocking(command.url, onCompleted);
+    this.audioTranscribeWorkerPoolPort.enqueueNonBlocking(command.url, (payload) => {
+      onCompleted(payload, params);
+    });
   }
 }

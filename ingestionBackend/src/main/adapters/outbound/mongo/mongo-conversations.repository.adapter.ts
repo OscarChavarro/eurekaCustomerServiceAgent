@@ -4,6 +4,7 @@ import type {
   CleanedConversationStageMessage,
   ConversationMetadata,
   ConversationsRepositoryPort,
+  RawConversationAudioDetails,
   RawConversationStageMessage,
   StructuredConversationStageMessage
 } from '../../../application/ports/outbound/conversations-repository.port';
@@ -160,5 +161,33 @@ export class MongoConversationsRepositoryAdapter implements ConversationsReposit
       },
       { upsert: true }
     );
+  }
+
+  public async upsertRawMessageAudioDetails(
+    conversationId: string,
+    rawMessageExternalId: string,
+    audioDetails: RawConversationAudioDetails
+  ): Promise<void> {
+    const collection =
+      await this.mongoClientProvider.getConversationsCollection<MongoConversationDocument>();
+
+    await collection.updateOne(
+      {
+        _id: conversationId,
+        'rawMessages.externalId': rawMessageExternalId
+      },
+      {
+        $set: {
+          'rawMessages.$.audioDetails': audioDetails
+        }
+      }
+    );
+  }
+
+  public async deleteAllConversations(): Promise<number> {
+    const collection =
+      await this.mongoClientProvider.getConversationsCollection<MongoConversationDocument>();
+    const result = await collection.deleteMany({});
+    return result.deletedCount ?? 0;
   }
 }

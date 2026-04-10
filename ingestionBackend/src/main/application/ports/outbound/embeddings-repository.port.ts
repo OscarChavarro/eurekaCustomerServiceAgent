@@ -10,4 +10,5 @@ export type EmbeddingRepositoryRecord = {
 
 export interface EmbeddingsRepositoryPort {
   upsertEmbeddings(records: EmbeddingRepositoryRecord[]): Promise<void>;
+  deleteAllEmbeddings(): Promise<number>;
 }

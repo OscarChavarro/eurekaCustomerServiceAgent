@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ContactsDirectoryIndexService } from './adapters/inbound/csv/contacts-directory-index.service';
 import { FileSystemConversationCsvSourceAdapter } from './adapters/inbound/csv/file-system-conversation-csv-source.adapter';
 import { ImazingCsvFileNameService } from './adapters/inbound/csv/imazing-csv-file-name.service';
+import { ConversationsController } from './adapters/inbound/http/conversations.controller';
 import { IngestionController } from './adapters/inbound/http/ingestion.controller';
 import { TranscribeController } from './adapters/inbound/http/transcribe.controller';
 import { HttpContactsDirectoryAdapter } from './adapters/outbound/contacts/http-contacts-directory.adapter';
@@ -18,6 +19,7 @@ import { ConversationMessageCleaningService } from './application/use-cases/kwol
 import { ConversationStructuringService } from './application/use-cases/kwoledge-ingestion/conversation-structuring.service';
 import { KwoledgeIngestionUseCase } from './application/use-cases/kwoledge-ingestion/kwoledge-ingestion.use-case';
 import { AudioTranscribeUseCase } from './application/use-cases/audio-transcribe/audio-transcribe.use-case';
+import { ConversationsDeleteAllUseCase } from './application/use-cases/conversations-delete-all/conversations-delete-all.use-case';
 import { StartupValidationOrchestrator } from './infrastructure/bootstrap/startup-validation.orchestrator';
 import { AudioTranscribeWorkerPoolService } from './infrastructure/audio-transcribe/audio-transcribe-worker-pool.service';
 import { WavefileAudioWaveformBarsAdapter } from './infrastructure/audio-transcribe/wavefile-audio-waveform-bars.adapter';
@@ -27,12 +29,13 @@ import { MongoConnectivityStartupValidator } from './infrastructure/bootstrap/va
 import { ProcessedConversationsFolderStartupValidator } from './infrastructure/bootstrap/validators/processed-conversations-folder-startup.validator';
 import { QdrantConnectivityStartupValidator } from './infrastructure/bootstrap/validators/qdrant-connectivity-startup.validator';
 import { WhisperFfmpegStartupValidator } from './infrastructure/bootstrap/validators/whisper-ffmpeg-startup.validator';
+import { StaticAssetsBaseUrlAdapter } from './infrastructure/config/adapters/static-assets-base-url.adapter';
 import { ServiceConfig } from './infrastructure/config/service.config';
 import { SecretsConfig } from './infrastructure/config/settings/secrets.config';
 import { SettingsConfig } from './infrastructure/config/settings/settings.config';
 
 @Module({
-  controllers: [IngestionController, TranscribeController],
+  controllers: [IngestionController, TranscribeController, ConversationsController],
   providers: [
     SettingsConfig,
     SecretsConfig,
@@ -47,6 +50,7 @@ import { SettingsConfig } from './infrastructure/config/settings/settings.config
     StartupValidationOrchestrator,
     AudioTranscribeWorkerPoolService,
     WavefileAudioWaveformBarsAdapter,
+    StaticAssetsBaseUrlAdapter,
     ContactsDirectoryIndexService,
     ImazingCsvFileNameService,
     ConversationCsvRecordTranslatorService,
@@ -55,6 +59,7 @@ import { SettingsConfig } from './infrastructure/config/settings/settings.config
     ConversationChunkingService,
     KwoledgeIngestionUseCase,
     AudioTranscribeUseCase,
+    ConversationsDeleteAllUseCase,
     {
       provide: TOKENS.AudioTranscribeWorkerPoolPort,
       useExisting: AudioTranscribeWorkerPoolService
@@ -62,6 +67,10 @@ import { SettingsConfig } from './infrastructure/config/settings/settings.config
     {
       provide: TOKENS.AudioWaveformBarsPort,
       useExisting: WavefileAudioWaveformBarsAdapter
+    },
+    {
+      provide: TOKENS.StaticAssetsBaseUrlPort,
+      useExisting: StaticAssetsBaseUrlAdapter
     },
     {
       provide: TOKENS.ConversationCsvSourcePort,

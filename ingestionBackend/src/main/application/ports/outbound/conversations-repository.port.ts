@@ -8,6 +8,15 @@ export type RawConversationStageMessage = {
   rowNumber: number;
   direction: RawConversationDirection;
   normalizedFields: Record<string, unknown>;
+  audioDetails?: RawConversationAudioDetails;
+};
+
+export type RawConversationAudioDetails = {
+  type: 'empty' | 'voice' | 'noise' | 'music';
+  transcription: string;
+  totalTimeInSeconds: number;
+  language: string;
+  bars: number[];
 };
 
 export type CleanedConversationStageMessage = {
@@ -57,4 +66,10 @@ export interface ConversationsRepositoryPort {
     conversationId: string,
     chunkedMessages: ChunkedConversationStageMessage[]
   ): Promise<void>;
+  upsertRawMessageAudioDetails(
+    conversationId: string,
+    rawMessageExternalId: string,
+    audioDetails: RawConversationAudioDetails
+  ): Promise<void>;
+  deleteAllConversations(): Promise<number>;
 }

@@ -1,6 +1,6 @@
 {
   "service": {
     "port": 3666,
-    "transcriptionWorkersCapacity": 100
+    "transcriptionWorkersCapacity": 10
   }
 }
