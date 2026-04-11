@@ -1,6 +1,34 @@
-<img
-  class="message-image"
-  [src]="mediaUrl()"
-  [alt]="alt()"
-  loading="lazy"
-/>
+<button
+  type="button"
+  class="message-image-trigger"
+  [attr.aria-label]="'Open image zoom'"
+  (click)="openZoom()"
+>
+  <img
+    class="message-image"
+    [src]="mediaUrl()"
+    [alt]="alt()"
+    loading="lazy"
+  />
+</button>
+
+@if (isZoomOpen()) {
+  <div class="image-zoom-backdrop" role="dialog" aria-modal="true">
+    <button
+      type="button"
+      class="image-zoom-close"
+      aria-label="Close image zoom"
+      (click)="closeZoom()"
+    >
+      <span class="material-icons" aria-hidden="true">close</span>
+    </button>
+
+    <div class="image-zoom-content">
+      <img
+        class="image-zoom-preview"
+        [src]="mediaUrl()"
+        [alt]="alt()"
+      />
+    </div>
+  </div>
+}

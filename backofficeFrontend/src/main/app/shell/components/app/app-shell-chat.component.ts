@@ -222,7 +222,7 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
 
       const firstVisibleConversation = conversations[0];
       if (firstVisibleConversation) {
-        this.chatConversationService.setActiveConversation(firstVisibleConversation.id);
+        this.selectConversation(firstVisibleConversation.id);
       }
     }
   );
@@ -496,6 +496,7 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
 
   protected selectConversation(conversationId: string): void {
     this.chatConversationService.setActiveConversation(conversationId);
+    this.updateChatRouteForConversation(conversationId);
   }
 
   protected onConversationMouseEnter(conversationId: string): void {
@@ -562,7 +563,7 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
 
   protected selectConversationFromTimePanel(conversationId: string): void {
     this.chatConversationService.ensureConversationDetailsLoaded(conversationId);
-    this.chatConversationService.setActiveConversation(conversationId);
+    this.selectConversation(conversationId);
   }
 
   protected activateSimulationConversation(): void {
@@ -1112,8 +1113,17 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
       return null;
     }
 
-    const trimmed = phoneNumber.trim();
-    return trimmed.length > 0 ? trimmed : null;
+    const normalizedRouteValue = normalizeConversationSourceId(phoneNumber).trim();
+    if (!normalizedRouteValue) {
+      return null;
+    }
+
+    const canonicalRoutePhone = canonicalizePhoneNumber(normalizedRouteValue);
+    if (canonicalRoutePhone?.digitsOnly) {
+      return `+${canonicalRoutePhone.digitsOnly}`;
+    }
+
+    return normalizedRouteValue.startsWith('+') ? normalizedRouteValue : `+${normalizedRouteValue}`;
   }
 
   private resolveConversationIdFromRoutePhoneNumber(phoneNumber: string): string | null {
@@ -1150,6 +1160,72 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
     }
 
     return null;
+  }
+
+  private updateChatRouteForConversation(conversationId: string): void {
+    if (this.operationModeState() !== 'chat') {
+      return;
+    }
+
+    if (conversationId === 'local-simulation') {
+      void this.router.navigate(['/chat'], { replaceUrl: true });
+      return;
+    }
+
+    const routePhoneNumber = this.resolveRoutePhoneNumberForConversation(conversationId);
+    if (!routePhoneNumber) {
+      return;
+    }
+
+    const currentRoutePath = this.activatedRoute.snapshot.routeConfig?.path ?? '';
+    const currentRoutePhoneSlug = this.normalizeChatRouteSlug(
+      this.activatedRoute.snapshot.paramMap.get('phoneNumber')
+    );
+    const isAlreadyOnSameChatRoute = currentRoutePath.startsWith('chat')
+      && currentRoutePhoneSlug === routePhoneNumber;
+
+    if (isAlreadyOnSameChatRoute) {
+      return;
+    }
+
+    void this.router.navigate(['/chat', routePhoneNumber], { replaceUrl: true });
+  }
+
+  private resolveRoutePhoneNumberForConversation(conversationId: string): string | null {
+    const conversation = this.conversations().find((item) => item.id === conversationId);
+    if (!conversation) {
+      return null;
+    }
+
+    const normalized = normalizeConversationSourceId(conversation.id).trim();
+    if (!normalized) {
+      return null;
+    }
+
+    const canonicalConversationPhone = canonicalizePhoneNumber(normalized);
+    if (canonicalConversationPhone?.digitsOnly) {
+      return canonicalConversationPhone.digitsOnly;
+    }
+
+    return normalized.replace(/^\+/, '');
+  }
+
+  private normalizeChatRouteSlug(phoneNumber: string | null): string | null {
+    if (!phoneNumber) {
+      return null;
+    }
+
+    const normalizedRouteValue = normalizeConversationSourceId(phoneNumber).trim();
+    if (!normalizedRouteValue) {
+      return null;
+    }
+
+    const canonicalRoutePhone = canonicalizePhoneNumber(normalizedRouteValue);
+    if (canonicalRoutePhone?.digitsOnly) {
+      return canonicalRoutePhone.digitsOnly;
+    }
+
+    return normalizedRouteValue.replace(/^\+/, '');
   }
 
   private toPhoneSlug(phone: string): string | null {
