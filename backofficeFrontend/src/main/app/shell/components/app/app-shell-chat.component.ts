@@ -111,6 +111,7 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
   protected readonly conversationRatings = this.chatConversationService.conversationRatings;
   protected readonly viewMode = this.chatConversationService.viewMode;
   protected readonly selectedLanguage = this.i18nStateService.selectedLanguage;
+  protected readonly I18N_KEYS = I18N_KEYS;
   protected readonly availableLanguages: SupportedLanguage[] = ['es', 'en'];
   protected readonly selectedLanguageCountryCode = computed(() =>
     this.languageToCountryCode(this.selectedLanguage())
@@ -1163,7 +1164,7 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
     return hasCountryCode ? `plus-${digits}` : digits;
   }
 
-  private t(key: (typeof I18N_KEYS)['shell'][keyof (typeof I18N_KEYS)['shell']]): string {
+  protected t(key: (typeof I18N_KEYS)['shell'][keyof (typeof I18N_KEYS)['shell']]): string {
     return this.i18nService.get(key, this.selectedLanguage());
   }
 

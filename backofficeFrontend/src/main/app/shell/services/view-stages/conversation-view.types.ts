@@ -16,6 +16,8 @@ export type ChatMessage = {
   mediaUrl?: string;
   audioFileName?: string;
   audioResourceUrl?: string;
+  audioTranscription?: string;
+  audioWaveBars?: number[];
   reviewStage?: MessageReviewStage;
   reviewStageId?: string;
 };

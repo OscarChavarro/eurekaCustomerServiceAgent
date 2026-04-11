@@ -217,6 +217,10 @@ export const SHELL_TRANSLATIONS = {
     en: 'AI',
     es: 'IA'
   },
+  AUDIO_AI_TRANSCRIPTION: {
+    en: 'AI transcription:',
+    es: 'Transcripción IA:'
+  },
   TYPING_LABEL: {
     en: 'writting',
     es: 'escribiendo'

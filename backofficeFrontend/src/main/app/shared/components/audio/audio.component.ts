@@ -24,11 +24,14 @@ import type { ChatMessageDirection } from '../../../shell/services/view-stages/c
 export class AudioComponent implements OnDestroy {
   private static readonly RESOURCE_HEAD_TIMEOUT_MS = 4_500;
   private static readonly SUPPORTED_AUDIO_EXTENSIONS = ['opus', 'mp3', 'm4a'] as const;
+  private static readonly DISPLAY_WAVE_BARS_COUNT = 64;
   public readonly messageId = input<string>('');
   public readonly direction = input<ChatMessageDirection>('incoming');
   public readonly resourceUrl = input<string | undefined>(undefined);
+  public readonly waveBars = input<number[] | undefined>(undefined);
+  public readonly transcription = input<string | undefined>(undefined);
+  public readonly transcriptionLabel = input<string>('AI transcription:');
   public readonly playbackEnded = output<void>();
-  protected readonly waveformBars = Array.from({ length: 64 }, (_, index) => index);
   protected readonly speedOptions = ['0.5x', '1x', '1.5x', '2x'] as const;
   protected readonly speedIndex = signal<number>(1);
   protected readonly isPlaying = signal<boolean>(false);
@@ -50,6 +53,13 @@ export class AudioComponent implements OnDestroy {
   protected readonly totalTimeLabel = computed(() =>
     this.formatTimeLabel(this.totalTimeSeconds())
   );
+  protected readonly normalizedWaveBars = computed(() =>
+    this.buildWaveBarsForDisplay(this.waveBars(), AudioComponent.DISPLAY_WAVE_BARS_COUNT)
+  );
+  protected readonly displayTranscription = computed(() => {
+    const value = this.transcription()?.trim();
+    return value && value.length > 0 ? value : null;
+  });
   protected readonly progressPercent = computed(() => {
     const total = this.totalTimeSeconds();
     if (total <= 0) {
@@ -705,5 +715,52 @@ export class AudioComponent implements OnDestroy {
 
     window.clearTimeout(this.copyFeedbackTimeoutId);
     this.copyFeedbackTimeoutId = null;
+  }
+
+  private buildWaveBarsForDisplay(sourceBars: number[] | undefined, targetCount: number): number[] {
+    const fallbackBar = 56;
+    const fallbackBars = Array.from({ length: targetCount }, () => fallbackBar);
+
+    if (!Array.isArray(sourceBars)) {
+      return fallbackBars;
+    }
+
+    const normalized = sourceBars
+      .filter((bar): bar is number => Number.isFinite(bar))
+      .map((bar) => Math.max(0, Math.min(100, bar)));
+
+    if (normalized.length === 0) {
+      return fallbackBars;
+    }
+
+    if (normalized.length === targetCount) {
+      return normalized.map((bar) => this.toWaveHeightPercent(bar));
+    }
+
+    const result: number[] = [];
+    const lastSourceIndex = normalized.length - 1;
+    const lastTargetIndex = targetCount - 1;
+
+    for (let index = 0; index < targetCount; index += 1) {
+      const sourcePosition = lastTargetIndex > 0
+        ? (index / lastTargetIndex) * lastSourceIndex
+        : 0;
+      const leftIndex = Math.floor(sourcePosition);
+      const rightIndex = Math.min(lastSourceIndex, Math.ceil(sourcePosition));
+      const interpolationFactor = sourcePosition - leftIndex;
+      const leftValue = normalized[leftIndex] ?? 0;
+      const rightValue = normalized[rightIndex] ?? leftValue;
+      const interpolated = leftValue + (rightValue - leftValue) * interpolationFactor;
+      result.push(this.toWaveHeightPercent(interpolated));
+    }
+
+    return result;
+  }
+
+  private toWaveHeightPercent(value: number): number {
+    // Keep bars always visible while preserving relative waveform shape.
+    const minHeightPercent = 18;
+    const maxHeightPercent = 100;
+    return Math.round(minHeightPercent + ((maxHeightPercent - minHeightPercent) * value) / 100);
   }
 }

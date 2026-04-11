@@ -50,7 +50,7 @@
   display: flex
   justify-content: space-between
   gap: 0
-  align-items: center
+  align-items: flex-end
   min-height: 1.65rem
   width: 100%
   cursor: pointer
@@ -61,7 +61,7 @@
   width: 0.12rem
   min-width: 0.12rem
   max-width: 0.12rem
-  height: 0.92rem
+  min-height: 0.22rem
   border-radius: 2px
   background: rgb(111 120 129 / 42%)
 
@@ -95,6 +95,23 @@
   font-size: 0.66rem
   color: rgb(76 88 97 / 72%)
   padding: 0 0.08rem
+
+.audio-transcription
+  display: grid
+  gap: 0.14rem
+  padding: 0.05rem 0.1rem 0
+  line-height: 1.28
+
+.audio-transcription-label
+  font-size: 0.62rem
+  font-weight: 700
+  color: rgb(84 94 103 / 78%)
+
+.audio-transcription-text
+  font-size: 0.7rem
+  color: rgb(63 74 83 / 86%)
+  white-space: pre-wrap
+  word-break: break-word
 
 .audio-error-tooltip
   margin: 0.05rem 0.35rem 0.15rem
@@ -157,3 +174,9 @@
 
 .audio-attachment.is-outgoing .audio-times
   color: rgb(81 100 81 / 72%)
+
+.audio-attachment.is-outgoing .audio-transcription-label
+  color: rgb(81 100 81 / 76%)
+
+.audio-attachment.is-outgoing .audio-transcription-text
+  color: rgb(74 94 74 / 86%)

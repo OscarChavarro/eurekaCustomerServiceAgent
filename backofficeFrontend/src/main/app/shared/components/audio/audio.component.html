@@ -34,8 +34,8 @@
         aria-hidden="true"
         (pointerdown)="onWaveformPointerDown($event)"
       >
-        @for (bar of waveformBars; track bar) {
-          <span class="wave-bar"></span>
+        @for (barHeight of normalizedWaveBars(); track $index) {
+          <span class="wave-bar" [style.height.%]="barHeight"></span>
         }
         <span
           class="audio-progress-dot"
@@ -76,5 +76,11 @@
       <span>{{ currentTimeLabel() }}</span>
       <span>{{ totalTimeLabel() }}</span>
     </div>
+    @if (displayTranscription(); as transcription) {
+      <div class="audio-transcription">
+        <span class="audio-transcription-label">{{ transcriptionLabel() }}</span>
+        <span class="audio-transcription-text">{{ transcription }}</span>
+      </div>
+    }
   </div>
 </div>

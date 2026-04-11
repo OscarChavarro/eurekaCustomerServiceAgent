@@ -9,6 +9,13 @@ export type BackendConversationRawMessage = {
   direction: string;
   text: string;
   sentAt: string | null;
+  audioDetails?: {
+    type?: 'empty' | 'voice' | 'noise' | 'music' | null;
+    transcription?: string | null;
+    totalTimeInSeconds?: number | null;
+    language?: string | null;
+    bars?: number[] | null;
+  } | null;
   normalizedFields?: {
     attachment?: string | null;
     messageDate?: string | null;

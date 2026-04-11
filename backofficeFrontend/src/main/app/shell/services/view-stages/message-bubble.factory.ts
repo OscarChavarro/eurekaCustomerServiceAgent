@@ -15,6 +15,8 @@ type CreateFromRawOverrides = {
   mediaUrl?: string;
   audioFileName?: string;
   audioResourceUrl?: string;
+  audioTranscription?: string;
+  audioWaveBars?: number[];
   stageLabel?: string;
   backgroundColor?: string;
   rawText?: string;
@@ -55,6 +57,8 @@ export class MessageBubbleFactory {
       mediaUrl: overrides.mediaUrl,
       audioFileName: overrides.audioFileName,
       audioResourceUrl: overrides.audioResourceUrl,
+      audioTranscription: overrides.audioTranscription,
+      audioWaveBars: overrides.audioWaveBars,
       reviewStage: overrides.reviewStage,
       reviewStageId: overrides.reviewStageId
     };

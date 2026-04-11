@@ -12,7 +12,7 @@ export class RawConversationStageRenderer implements ConversationStageRenderer {
   private readonly messageBubbleFactory = inject(MessageBubbleFactory);
   private readonly frontendSecretsService = inject(FrontendSecretsService);
   private readonly imageExtensions = new Set(['jpg', 'jpeg', 'gif', 'webp', 'png']);
-  private readonly audioExtensions = new Set(['opus']);
+  private readonly audioExtensions = new Set(['opus', 'mp3', 'm4a']);
   private static readonly WHATSAPP_PREFIX = /^whatsapp\s*-\s*/i;
 
   render(document: BackendConversationDocument): ChatMessage[] {
@@ -38,6 +38,8 @@ export class RawConversationStageRenderer implements ConversationStageRenderer {
             rawMessage.normalizedFields?.attachment
           )
           : undefined,
+        audioTranscription: this.resolveAudioTranscription(rawMessage.audioDetails),
+        audioWaveBars: this.resolveAudioWaveBars(rawMessage.audioDetails),
         stageLabel: 'raw',
         reviewStage: 'raw',
         reviewStageId: rawMessage.externalId
@@ -168,6 +170,42 @@ export class RawConversationStageRenderer implements ConversationStageRenderer {
     }
 
     return trimmedAttachment;
+  }
+
+  private resolveAudioTranscription(
+    audioDetails:
+      | {
+        type?: string | null;
+        transcription?: string | null;
+      }
+      | null
+      | undefined
+  ): string | undefined {
+    if (!audioDetails || audioDetails.type !== 'voice') {
+      return undefined;
+    }
+
+    const transcription = audioDetails.transcription?.trim();
+    return transcription && transcription.length > 0 ? transcription : undefined;
+  }
+
+  private resolveAudioWaveBars(
+    audioDetails:
+      | {
+        bars?: number[] | null;
+      }
+      | null
+      | undefined
+  ): number[] | undefined {
+    if (!audioDetails || !Array.isArray(audioDetails.bars)) {
+      return undefined;
+    }
+
+    const normalizedBars = audioDetails.bars
+      .filter((bar): bar is number => Number.isFinite(bar))
+      .map((bar) => Math.max(0, Math.min(100, Math.round(bar))));
+
+    return normalizedBars.length > 0 ? normalizedBars : undefined;
   }
 
   private formatAssetDate(
