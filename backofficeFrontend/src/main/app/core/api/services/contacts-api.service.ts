@@ -13,6 +13,36 @@ export type BackendContactsResponse = {
   contacts: BackendContact[];
 };
 
+export type UpsertContactRequest = {
+  currentName?: string;
+  currentPhoneNumber?: string;
+  newName: string;
+  newPhoneNumber: string;
+};
+
+export type UpsertContactResponse = {
+  action: 'created' | 'updated';
+  contact: {
+    name: string;
+    phoneNumbers: string[];
+  };
+};
+
+export type DeleteContactRequestItem = {
+  nameToDelete?: string;
+  phoneToDelete?: string;
+};
+
+export type DeleteContactsResponse = {
+  action: 'deleted';
+  mode: 'simulated';
+  requestedCount: number;
+  contacts: Array<{
+    nameToDelete: string;
+    phoneToDelete: string;
+  }>;
+};
+
 @Injectable({ providedIn: 'root' })
 export class ContactsApiService {
   private readonly httpClient = inject(HttpClient);
@@ -25,6 +55,22 @@ export class ContactsApiService {
     return this.httpClient.get<BackendContactsResponse>(
       `${this.frontendSecretsService.contactsBackendBaseUrl}/contacts`,
       { params }
+    );
+  }
+
+  public upsertContact(request: UpsertContactRequest): Observable<UpsertContactResponse> {
+    return this.httpClient.put<UpsertContactResponse>(
+      `${this.frontendSecretsService.contactsBackendBaseUrl}/contacts/upsert`,
+      request
+    );
+  }
+
+  public deleteContacts(request: DeleteContactRequestItem[]): Observable<DeleteContactsResponse> {
+    return this.httpClient.delete<DeleteContactsResponse>(
+      `${this.frontendSecretsService.contactsBackendBaseUrl}/contacts`,
+      {
+        body: request
+      }
     );
   }
 

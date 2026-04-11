@@ -1,0 +1,37 @@
+<div class="delete-modal-backdrop" (click)="onBackdropClick()">
+  <div
+    #dialogRoot
+    class="delete-modal"
+    role="dialog"
+    aria-modal="true"
+    tabindex="-1"
+    [attr.aria-label]="title()"
+    (click)="onDialogClick($event)"
+    (keydown)="onDialogKeydown($event)"
+  >
+    <h2 class="delete-modal-title">{{ title() }}</h2>
+    <p class="delete-modal-message">{{ message() }}</p>
+
+    <div class="delete-modal-actions">
+      <button
+        type="button"
+        class="delete-modal-button is-cancel"
+        [attr.aria-label]="cancelAriaLabel() || cancelLabel()"
+        (click)="onCancelClick()"
+      >
+        <span class="material-symbols-outlined">close</span>
+        <span>{{ cancelLabel() }}</span>
+      </button>
+
+      <button
+        type="button"
+        class="delete-modal-button is-confirm"
+        [attr.aria-label]="confirmAriaLabel() || confirmLabel()"
+        (click)="onConfirmClick()"
+      >
+        <span class="material-symbols-outlined">delete</span>
+        <span>{{ confirmLabel() }}</span>
+      </button>
+    </div>
+  </div>
+</div>

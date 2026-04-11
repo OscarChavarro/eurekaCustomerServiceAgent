@@ -1,11 +1,17 @@
-import { IsString, MinLength } from 'class-validator';
+import { IsOptional, IsString } from 'class-validator';
 
 export class UpsertContactRequest {
+  @IsOptional()
   @IsString()
-  @MinLength(1)
-  public readonly name!: string;
+  public readonly currentName?: string;
+
+  @IsOptional()
+  @IsString()
+  public readonly currentPhoneNumber?: string;
 
   @IsString()
-  @MinLength(3)
-  public readonly phoneNumber!: string;
+  public readonly newName!: string;
+
+  @IsString()
+  public readonly newPhoneNumber!: string;
 }

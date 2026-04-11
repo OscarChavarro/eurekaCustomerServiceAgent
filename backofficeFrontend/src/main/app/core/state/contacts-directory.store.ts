@@ -55,4 +55,23 @@ export class ContactsDirectoryStore {
     this.inFlightLoadPromise = request;
     await request;
   }
+
+  public removeFirstMatching(predicate: (contact: BackendContact) => boolean): void {
+    const current = this.contactsState();
+    const targetIndex = current.findIndex((contact) => predicate(contact));
+
+    if (targetIndex < 0) {
+      return;
+    }
+
+    const next = [...current];
+    next.splice(targetIndex, 1);
+    this.contactsState.set(next);
+  }
+
+  public replaceContacts(contacts: BackendContact[]): void {
+    this.contactsState.set([...contacts]);
+    this.loadedState.set(true);
+    this.errorState.set(false);
+  }
 }

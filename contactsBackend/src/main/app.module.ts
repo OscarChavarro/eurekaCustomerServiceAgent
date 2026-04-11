@@ -8,6 +8,7 @@ import { TOKENS } from './application/ports/tokens';
 import { ResolveGoogleAccessTokenService } from './application/services/resolve-google-access-token.service';
 import { CompleteGoogleAuthCallbackUseCase } from './application/use-cases/01-auth/complete-google-auth-callback.use-case';
 import { StartGoogleAuthUseCase } from './application/use-cases/01-auth/start-google-auth.use-case';
+import { DeleteGoogleContactsUseCase } from './application/use-cases/02-contacts/delete-google-contacts.use-case';
 import { ListGoogleContactsUseCase } from './application/use-cases/02-contacts/list-google-contacts.use-case';
 import { UpsertGoogleContactUseCase } from './application/use-cases/02-contacts/upsert-google-contact.use-case';
 import { StartupValidationOrchestrator } from './infrastructure/bootstrap/startup-validation.orchestrator';
@@ -29,6 +30,7 @@ import { SettingsConfig } from './infrastructure/config/settings/settings.config
     CompleteGoogleAuthCallbackUseCase,
     ListGoogleContactsUseCase,
     UpsertGoogleContactUseCase,
+    DeleteGoogleContactsUseCase,
     GooglePeopleApiAdapter,
     {
       provide: TOKENS.GoogleAuthPort,

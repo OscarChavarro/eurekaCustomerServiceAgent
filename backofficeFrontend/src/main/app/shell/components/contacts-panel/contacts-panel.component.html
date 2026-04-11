@@ -81,22 +81,56 @@
                 (click)="selectRow(contact)"
               >
                 <td class="row-index-cell">{{ rowIndex + 1 }}</td>
-                <td>
-                  @if (canOpenConversationInChat(contact)) {
-                    <a
-                      class="contact-name-link"
-                      [routerLink]="chatConversationRoute(contact)"
-                      (click)="onContactNameLinkClick($event, contact)"
-                    >
-                      {{ contactNameValue(contact) }}
-                    </a>
+                <td class="editable-cell" (dblclick)="onCellDoubleClick(contact, 'contactName')">
+                  @if (isEditingCell(contact, 'contactName')) {
+                    <input
+                      type="text"
+                      class="cell-editor-input"
+                      [value]="editingDraftValue()"
+                      data-edit-field="contactName"
+                      [attr.data-edit-contact-id]="contact.id"
+                      (click)="$event.stopPropagation()"
+                      (dblclick)="$event.stopPropagation()"
+                      (input)="onEditInput($event, 'contactName')"
+                      (keydown)="onEditKeydown($event, contact, 'contactName')"
+                    />
                   } @else {
-                    {{ contactNameValue(contact) }}
+                    <span class="cell-display-value">{{ contactNameValue(contact) }}</span>
                   }
                 </td>
-                <td>{{ phoneNumbersValue(contact) }}</td>
-                <td class="country-cell" [attr.aria-label]="countryCellValue(contact)">
-                  @if (countryFlags(contact).length === 0) {
+                <td class="editable-cell" (dblclick)="onCellDoubleClick(contact, 'phoneNumber')">
+                  @if (isEditingCell(contact, 'phoneNumber')) {
+                    <input
+                      type="text"
+                      class="cell-editor-input"
+                      [value]="editingDraftValue()"
+                      data-edit-field="phoneNumber"
+                      [attr.data-edit-contact-id]="contact.id"
+                      (click)="$event.stopPropagation()"
+                      (dblclick)="$event.stopPropagation()"
+                      (input)="onEditInput($event, 'phoneNumber')"
+                      (keydown)="onEditKeydown($event, contact, 'phoneNumber')"
+                    />
+                  } @else {
+                    <span class="cell-display-value">{{ phoneNumbersValue(contact) }}</span>
+                  }
+                </td>
+                <td
+                  class="country-cell"
+                  [class.is-delete-mode]="isRowEditing(contact)"
+                  [attr.aria-label]="countryCellValue(contact)"
+                >
+                  @if (isRowEditing(contact)) {
+                    <button
+                      type="button"
+                      class="delete-contact-cell-button"
+                      [attr.aria-label]="deleteEntryAriaLabel()"
+                      [disabled]="!canDeleteContactEntry(contact)"
+                      (click)="onDeleteEntryClick($event, contact)"
+                    >
+                      <span class="material-symbols-outlined">delete</span>
+                    </button>
+                  } @else if (countryFlags(contact).length === 0) {
                     <span class="country-empty">-</span>
                   } @else {
                     <span class="country-flags">
@@ -152,4 +186,17 @@
       {{ contactsWithoutConversationsTabLabel() }}
     </button>
   </footer>
+
+  @if (isDeleteModalOpen()) {
+    <app-contact-delete-confirm-modal
+      [title]="deleteModalTitle()"
+      [message]="deleteModalMessage()"
+      [confirmLabel]="deleteModalConfirmLabel()"
+      [cancelLabel]="deleteModalCancelLabel()"
+      [confirmAriaLabel]="deleteModalConfirmLabel()"
+      [cancelAriaLabel]="deleteModalCancelLabel()"
+      (confirm)="confirmDeleteFromModal()"
+      (cancel)="cancelDeleteModal()"
+    />
+  }
 </section>

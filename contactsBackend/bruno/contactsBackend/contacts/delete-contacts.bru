@@ -1,0 +1,29 @@
+meta {
+  name: Delete Contacts
+  type: http
+  seq: 3
+}
+
+delete {
+  url: {{baseUrl}}/contacts
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  [
+    {
+      "nameToDelete": "Desayuno",
+      "phoneToDelete": ""
+    }
+  ]
+  
+}
+
+vars:pre-request {
+  baseUrl: http://localhost:3669
+}

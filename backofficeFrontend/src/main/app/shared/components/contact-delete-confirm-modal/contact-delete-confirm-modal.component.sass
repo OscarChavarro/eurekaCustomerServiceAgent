@@ -1,0 +1,71 @@
+:host
+  position: fixed
+  inset: 0
+  z-index: 80
+
+.delete-modal-backdrop
+  position: fixed
+  inset: 0
+  background: rgba(16, 24, 40, 0.56)
+  display: flex
+  align-items: center
+  justify-content: center
+  padding: 1rem
+
+.delete-modal
+  width: min(460px, 100%)
+  background: #ffffff
+  border: 1px solid #d0d5dd
+  border-radius: 0.75rem
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.25)
+  padding: 1rem 1rem 0.95rem
+  color: #111827
+  outline: 0
+
+.delete-modal-title
+  margin: 0
+  font-size: 1.05rem
+  line-height: 1.25
+  font-weight: 700
+
+.delete-modal-message
+  margin: 0.6rem 0 0
+  color: #374151
+  font-size: 0.95rem
+  line-height: 1.35
+
+.delete-modal-actions
+  margin-top: 1rem
+  display: flex
+  justify-content: flex-end
+  gap: 0.55rem
+
+.delete-modal-button
+  border: 0
+  border-radius: 0.5rem
+  min-height: 2.2rem
+  padding: 0 0.8rem
+  display: inline-flex
+  align-items: center
+  gap: 0.33rem
+  font: inherit
+  font-size: 0.9rem
+  cursor: pointer
+
+.delete-modal-button .material-symbols-outlined
+  font-size: 1.1rem
+  line-height: 1
+
+.delete-modal-button.is-cancel
+  background: #e5e7eb
+  color: #1f2937
+
+.delete-modal-button.is-cancel:hover
+  background: #d1d5db
+
+.delete-modal-button.is-confirm
+  background: #dc2626
+  color: #ffffff
+
+.delete-modal-button.is-confirm:hover
+  background: #b91c1c

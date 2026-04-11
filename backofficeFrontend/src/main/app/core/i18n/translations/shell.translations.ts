@@ -117,6 +117,26 @@ export const SHELL_TRANSLATIONS = {
     en: 'Disable sorting',
     es: 'Desactivar orden'
   },
+  CONTACTS_DELETE_ENTRY_ARIA: {
+    en: 'Delete contact entry',
+    es: 'Eliminar entrada de contacto'
+  },
+  CONTACTS_DELETE_MODAL_TITLE: {
+    en: 'Delete contact entry',
+    es: 'Eliminar entrada de contacto'
+  },
+  CONTACTS_DELETE_MODAL_MESSAGE: {
+    en: 'Are you sure you want to delete this entry?',
+    es: 'Estas seguro de querer eliminar esta entrada?'
+  },
+  CONTACTS_DELETE_MODAL_CONFIRM: {
+    en: 'Delete',
+    es: 'Borrar'
+  },
+  CONTACTS_DELETE_MODAL_CANCEL: {
+    en: 'Cancel',
+    es: 'Cancelar'
+  },
   TIME_PANEL_ARIA: {
     en: 'Time panel',
     es: 'Panel de tiempo'
