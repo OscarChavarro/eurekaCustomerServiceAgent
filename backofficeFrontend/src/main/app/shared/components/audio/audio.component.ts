@@ -32,6 +32,7 @@ type TriedResourceLink = {
   styleUrl: './audio.component.sass'
 })
 export class AudioComponent implements AfterViewInit, OnDestroy {
+  private static readonly RESOURCE_HEAD_TIMEOUT_MS = 4_500;
   private static readonly DEFAULT_DISPLAY_WAVE_BARS_COUNT = 64;
   private static readonly MIN_DISPLAY_WAVE_BARS_COUNT = 36;
   private static readonly MAX_DISPLAY_WAVE_BARS_COUNT = 320;
@@ -53,7 +54,7 @@ export class AudioComponent implements AfterViewInit, OnDestroy {
   protected readonly isPlaying = signal<boolean>(false);
   protected readonly currentTimeSeconds = signal<number>(0);
   protected readonly totalTimeSeconds = signal<number>(0);
-  protected readonly resourceCheckStatus = signal<'idle' | 'available' | 'missing'>('idle');
+  protected readonly resourceCheckStatus = signal<'idle' | 'checking' | 'available' | 'missing'>('idle');
   protected readonly errorTooltipOpen = signal<boolean>(false);
   protected readonly copyFeedbackVisible = signal<boolean>(false);
   protected readonly failedResourceUrlEncoded = signal<string | null>(null);
@@ -109,6 +110,7 @@ export class AudioComponent implements AfterViewInit, OnDestroy {
 
   private audioElement: HTMLAudioElement | null = null;
   private progressAnimationFrameId: number | null = null;
+  private resourceCheckRequestId = 0;
   private copyFeedbackTimeoutId: number | null = null;
   private pendingSeekPercent: number | null = null;
   private resizeObserver: ResizeObserver | null = null;
@@ -160,6 +162,15 @@ export class AudioComponent implements AfterViewInit, OnDestroy {
   private readonly onError = (): void => {
     this.isPlaying.set(false);
     this.stopProgressAnimation();
+
+    const failedUrl = this.resolveCandidateUrl();
+    if (!failedUrl) {
+      return;
+    }
+
+    this.resourceCheckStatus.set('missing');
+    this.failedResourceUrlEncoded.set(failedUrl);
+    this.attemptedResourceUrlsEncoded.set([failedUrl]);
   };
 
   constructor() {
@@ -178,9 +189,10 @@ export class AudioComponent implements AfterViewInit, OnDestroy {
         return;
       }
 
-      this.resourceCheckStatus.set('available');
+      this.resourceCheckStatus.set('checking');
       this.failedResourceUrlEncoded.set(null);
       this.attemptedResourceUrlsEncoded.set([candidateUrl]);
+      void this.checkResourceAvailability(candidateUrl);
     });
 
     effect(() => {
@@ -221,6 +233,8 @@ export class AudioComponent implements AfterViewInit, OnDestroy {
   }
 
   protected async togglePlayback(): Promise<void> {
+    this.triggerHeadAttempt();
+
     if (this.hasMissingResource()) {
       this.toggleErrorTooltip();
       return;
@@ -240,6 +254,8 @@ export class AudioComponent implements AfterViewInit, OnDestroy {
   }
 
   public playFromAutoAdvance(): void {
+    this.triggerHeadAttempt();
+
     if (this.hasMissingResource()) {
       return;
     }
@@ -515,6 +531,53 @@ export class AudioComponent implements AfterViewInit, OnDestroy {
 
     cancelAnimationFrame(this.progressAnimationFrameId);
     this.progressAnimationFrameId = null;
+  }
+
+  private async checkResourceAvailability(url: string): Promise<void> {
+    const requestId = ++this.resourceCheckRequestId;
+
+    try {
+      const response = await fetch(url, {
+        method: 'HEAD',
+        signal: AbortSignal.timeout(AudioComponent.RESOURCE_HEAD_TIMEOUT_MS)
+      });
+
+      if (requestId !== this.resourceCheckRequestId) {
+        return;
+      }
+
+      if (response.status === 200) {
+        this.resourceCheckStatus.set('available');
+        this.failedResourceUrlEncoded.set(null);
+        return;
+      }
+
+      if (response.status === 404) {
+        this.resourceCheckStatus.set('missing');
+        this.failedResourceUrlEncoded.set(url);
+        return;
+      }
+
+      this.resourceCheckStatus.set('available');
+      this.failedResourceUrlEncoded.set(null);
+    } catch {
+      if (requestId !== this.resourceCheckRequestId) {
+        return;
+      }
+
+      // Keep playback enabled when HEAD cannot be completed (for example transient/CORS issues).
+      this.resourceCheckStatus.set('available');
+      this.failedResourceUrlEncoded.set(null);
+    }
+  }
+
+  private triggerHeadAttempt(): void {
+    const candidateUrl = this.resolveCandidateUrl();
+    if (!candidateUrl) {
+      return;
+    }
+
+    void this.checkResourceAvailability(candidateUrl);
   }
 
   private decodeHttpUrl(url: string | null): string {
