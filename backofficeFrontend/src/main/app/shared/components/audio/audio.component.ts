@@ -8,12 +8,22 @@ import {
   ViewChild,
   computed,
   effect,
+  inject,
   input,
   output,
   signal
 } from '@angular/core';
 
+import { I18nService } from '../../../core/i18n/services/i18n.service';
+import { I18nStateService } from '../../../core/i18n/services/i18n-state.service';
+import { I18N_KEYS } from '../../../core/i18n/translations/i18n-keys.const';
+import { NameFixesForIMazingMediaDump } from '../../services/name-fixes-for-imazing-media-dump.service';
 import type { ChatMessageDirection } from '../../../shell/services/view-stages/conversation-view.types';
+
+type TriedResourceLink = {
+  encoded: string;
+  decoded: string;
+};
 
 @Component({
   selector: 'app-audio',
@@ -24,7 +34,6 @@ import type { ChatMessageDirection } from '../../../shell/services/view-stages/c
 })
 export class AudioComponent implements AfterViewInit, OnDestroy {
   private static readonly RESOURCE_HEAD_TIMEOUT_MS = 4_500;
-  private static readonly SUPPORTED_AUDIO_EXTENSIONS = ['opus', 'mp3', 'm4a'] as const;
   private static readonly DEFAULT_DISPLAY_WAVE_BARS_COUNT = 64;
   private static readonly MIN_DISPLAY_WAVE_BARS_COUNT = 36;
   private static readonly MAX_DISPLAY_WAVE_BARS_COUNT = 320;
@@ -40,6 +49,7 @@ export class AudioComponent implements AfterViewInit, OnDestroy {
   public readonly transcription = input<string | undefined>(undefined);
   public readonly transcriptionLabel = input<string>('AI transcription:');
   public readonly playbackEnded = output<void>();
+  protected readonly I18N_KEYS = I18N_KEYS;
   protected readonly speedOptions = ['0.5x', '1x', '1.5x', '2x'] as const;
   protected readonly speedIndex = signal<number>(1);
   protected readonly isPlaying = signal<boolean>(false);
@@ -49,12 +59,19 @@ export class AudioComponent implements AfterViewInit, OnDestroy {
   protected readonly errorTooltipOpen = signal<boolean>(false);
   protected readonly copyFeedbackVisible = signal<boolean>(false);
   protected readonly failedResourceUrlEncoded = signal<string | null>(null);
+  protected readonly attemptedResourceUrlsEncoded = signal<string[]>([]);
   private readonly correctedResourceUrlEncoded = signal<string | null>(null);
   protected readonly failedResourceUrlDecoded = computed(() =>
     this.decodeHttpUrl(this.failedResourceUrlEncoded())
   );
   protected readonly hasPlayableResource = computed(() => this.resolvePlayableUrl() !== null);
   protected readonly hasMissingResource = computed(() => this.resourceCheckStatus() === 'missing');
+  protected readonly attemptedResourceLinks = computed<TriedResourceLink[]>(() =>
+    this.attemptedResourceUrlsEncoded().map((encoded) => ({
+      encoded,
+      decoded: this.decodeHttpUrl(encoded)
+    }))
+  );
   protected readonly currentTimeLabel = computed(() =>
     this.formatTimeLabel(this.currentTimeSeconds())
   );
@@ -93,6 +110,9 @@ export class AudioComponent implements AfterViewInit, OnDestroy {
   private copyFeedbackTimeoutId: number | null = null;
   private pendingSeekPercent: number | null = null;
   private resizeObserver: ResizeObserver | null = null;
+  private readonly i18nService = inject(I18nService);
+  private readonly i18nStateService = inject(I18nStateService);
+  private readonly nameFixesForIMazingMediaDump = inject(NameFixesForIMazingMediaDump);
   private readonly onLoadedMetadata = (): void => {
     const audio = this.audioElement;
     if (!audio || !Number.isFinite(audio.duration)) {
@@ -151,6 +171,7 @@ export class AudioComponent implements AfterViewInit, OnDestroy {
       if (!candidateUrl) {
         this.resourceCheckStatus.set('idle');
         this.failedResourceUrlEncoded.set(null);
+        this.attemptedResourceUrlsEncoded.set([]);
         this.correctedResourceUrlEncoded.set(null);
         this.resetPlaybackState();
         this.destroyAudioElement();
@@ -159,6 +180,7 @@ export class AudioComponent implements AfterViewInit, OnDestroy {
 
       this.resourceCheckStatus.set('checking');
       this.failedResourceUrlEncoded.set(null);
+      this.attemptedResourceUrlsEncoded.set(this.buildAttemptedResourceUrls(candidateUrl));
       this.correctedResourceUrlEncoded.set(null);
       void this.checkResourceAvailability(candidateUrl);
     });
@@ -380,7 +402,7 @@ export class AudioComponent implements AfterViewInit, OnDestroy {
 
   private resolveCandidateUrl(): string | null {
     const resourceUrl = this.resourceUrl()?.trim();
-    if (!resourceUrl || !/\.(opus|m4a|mp3)(?:$|[?#])/i.test(resourceUrl)) {
+    if (!resourceUrl || !this.nameFixesForIMazingMediaDump.isSupportedAudioResourceUrl(resourceUrl)) {
       return null;
     }
 
@@ -542,6 +564,18 @@ export class AudioComponent implements AfterViewInit, OnDestroy {
       }
 
       if (this.isTimeoutError(error)) {
+        const correctedUrl = await this.findAvailableAlternativeUrl(url);
+        if (requestId !== this.resourceCheckRequestId) {
+          return;
+        }
+
+        if (correctedUrl) {
+          this.correctedResourceUrlEncoded.set(correctedUrl);
+          this.resourceCheckStatus.set('available');
+          this.failedResourceUrlEncoded.set(null);
+          return;
+        }
+
         this.resourceCheckStatus.set('missing');
         this.failedResourceUrlEncoded.set(url);
         return;
@@ -581,21 +615,9 @@ export class AudioComponent implements AfterViewInit, OnDestroy {
   }
 
   private async findAvailableAlternativeUrl(url: string): Promise<string | null> {
-    const currentExtension = this.extractAudioExtension(url);
-    if (!currentExtension) {
-      return null;
-    }
+    const alternatives = this.nameFixesForIMazingMediaDump.getAlternativeAudioUrls(url);
 
-    const alternatives = AudioComponent.SUPPORTED_AUDIO_EXTENSIONS.filter(
-      (extension) => extension !== currentExtension
-    );
-
-    for (const extension of alternatives) {
-      const candidateUrl = this.replaceAudioExtension(url, extension);
-      if (!candidateUrl) {
-        continue;
-      }
-
+    for (const candidateUrl of alternatives) {
       try {
         const response = await fetch(candidateUrl, {
           method: 'HEAD',
@@ -621,51 +643,11 @@ export class AudioComponent implements AfterViewInit, OnDestroy {
     return null;
   }
 
-  private extractAudioExtension(url: string): (typeof AudioComponent.SUPPORTED_AUDIO_EXTENSIONS)[number] | null {
-    const path = this.extractPathFromUrl(url).toLowerCase();
-    const match = path.match(/\.([a-z0-9]+)$/i);
-    const extension = match?.[1] ?? '';
-
-    if (
-      AudioComponent.SUPPORTED_AUDIO_EXTENSIONS.includes(
-        extension as (typeof AudioComponent.SUPPORTED_AUDIO_EXTENSIONS)[number]
-      )
-    ) {
-      return extension as (typeof AudioComponent.SUPPORTED_AUDIO_EXTENSIONS)[number];
-    }
-
-    return null;
-  }
-
-  private replaceAudioExtension(
-    url: string,
-    extension: (typeof AudioComponent.SUPPORTED_AUDIO_EXTENSIONS)[number]
-  ): string | null {
-    const [base, suffix] = this.splitUrlBeforeQueryOrHash(url);
-    const replacedBase = base.replace(/\.[a-z0-9]+$/i, `.${extension}`);
-
-    if (replacedBase === base) {
-      return null;
-    }
-
-    return `${replacedBase}${suffix}`;
-  }
-
-  private extractPathFromUrl(url: string): string {
-    try {
-      return new URL(url).pathname;
-    } catch {
-      return this.splitUrlBeforeQueryOrHash(url)[0];
-    }
-  }
-
-  private splitUrlBeforeQueryOrHash(url: string): [string, string] {
-    const match = url.match(/^([^?#]+)([?#].*)?$/);
-    if (!match) {
-      return [url, ''];
-    }
-
-    return [match[1] ?? url, match[2] ?? ''];
+  private buildAttemptedResourceUrls(url: string): string[] {
+    const alternatives = this.nameFixesForIMazingMediaDump.getAlternativeAudioUrls(url);
+    return [url, ...alternatives].filter(
+      (candidate, index, array) => array.indexOf(candidate) === index
+    );
   }
 
   private probeAudioReachability(
@@ -735,6 +717,10 @@ export class AudioComponent implements AfterViewInit, OnDestroy {
 
     window.clearTimeout(this.copyFeedbackTimeoutId);
     this.copyFeedbackTimeoutId = null;
+  }
+
+  protected t(key: (typeof I18N_KEYS)['shell'][keyof (typeof I18N_KEYS)['shell']]): string {
+    return this.i18nService.get(key, this.i18nStateService.selectedLanguage());
   }
 
   private setupWaveformResizeObserver(): void {

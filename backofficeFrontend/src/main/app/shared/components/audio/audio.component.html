@@ -55,19 +55,32 @@
     @if (hasMissingResource() && errorTooltipOpen()) {
       <div class="audio-error-tooltip" role="note" aria-live="polite">
         <div class="audio-error-tooltip-header">
-          <span class="audio-error-tooltip-title">Resource URL failed</span>
+          <span class="audio-error-tooltip-title">{{ t(I18N_KEYS.shell.AUDIO_RESOURCE_URL_FAILED) }}</span>
           <button
             type="button"
             class="audio-error-copy"
-            aria-label="Copy encoded URL"
+            [attr.aria-label]="t(I18N_KEYS.shell.AUDIO_COPY_ENCODED_URL_ARIA)"
             (click)="copyFailedUrlToClipboard()"
           >
             <span class="material-icons" aria-hidden="true">content_copy</span>
           </button>
         </div>
-        <p class="audio-error-url">{{ failedResourceUrlDecoded() }}</p>
+        @if (attemptedResourceLinks().length > 0) {
+          <div class="audio-error-tried">
+            @for (resourceLink of attemptedResourceLinks(); track resourceLink.encoded) {
+              <a
+                class="audio-error-tried-link"
+                [href]="resourceLink.encoded"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {{ resourceLink.decoded }}
+              </a>
+            }
+          </div>
+        }
         @if (copyFeedbackVisible()) {
-          <p class="audio-error-copy-feedback">Copied</p>
+          <p class="audio-error-copy-feedback">{{ t(I18N_KEYS.shell.AUDIO_TOOLTIP_COPIED) }}</p>
         }
       </div>
     }

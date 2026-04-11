@@ -221,6 +221,18 @@ export const SHELL_TRANSLATIONS = {
     en: 'AI transcription:',
     es: 'Transcripción IA:'
   },
+  AUDIO_RESOURCE_URL_FAILED: {
+    en: 'Resource URL failed',
+    es: 'URL de recurso fallida'
+  },
+  AUDIO_TOOLTIP_COPIED: {
+    en: 'Copied',
+    es: 'Copiado'
+  },
+  AUDIO_COPY_ENCODED_URL_ARIA: {
+    en: 'Copy encoded URL',
+    es: 'Copiar URL codificada'
+  },
   TYPING_LABEL: {
     en: 'writting',
     es: 'escribiendo'
