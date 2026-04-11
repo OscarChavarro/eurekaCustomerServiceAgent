@@ -28,7 +28,12 @@
         </button>
       }
 
-      <div class="audio-waveform" aria-hidden="true">
+      <div
+        #waveformTrack
+        class="audio-waveform"
+        aria-hidden="true"
+        (pointerdown)="onWaveformPointerDown($event)"
+      >
         @for (bar of waveformBars; track bar) {
           <span class="wave-bar"></span>
         }

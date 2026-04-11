@@ -3,6 +3,8 @@ import {
   Component,
   HostListener,
   OnDestroy,
+  ElementRef,
+  ViewChild,
   computed,
   effect,
   input,
@@ -57,11 +59,15 @@ export class AudioComponent implements OnDestroy {
     const progress = (this.currentTimeSeconds() / total) * 100;
     return Math.max(0, Math.min(100, progress));
   });
+  protected readonly isSeeking = signal<boolean>(false);
+  @ViewChild('waveformTrack')
+  private waveformTrackElement: ElementRef<HTMLDivElement> | null = null;
 
   private audioElement: HTMLAudioElement | null = null;
   private progressAnimationFrameId: number | null = null;
   private resourceCheckRequestId = 0;
   private copyFeedbackTimeoutId: number | null = null;
+  private pendingSeekPercent: number | null = null;
   private readonly onLoadedMetadata = (): void => {
     const audio = this.audioElement;
     if (!audio || !Number.isFinite(audio.duration)) {
@@ -69,6 +75,10 @@ export class AudioComponent implements OnDestroy {
     }
 
     this.totalTimeSeconds.set(audio.duration);
+    if (this.pendingSeekPercent !== null) {
+      this.seekToPercent(this.pendingSeekPercent);
+      this.pendingSeekPercent = null;
+    }
   };
   private readonly onDurationChange = (): void => {
     const audio = this.audioElement;
@@ -201,6 +211,21 @@ export class AudioComponent implements OnDestroy {
     return this.progressPercent();
   }
 
+  protected onWaveformPointerDown(event: PointerEvent): void {
+    if (!this.hasPlayableResource()) {
+      return;
+    }
+
+    const waveformElement = this.waveformTrackElement?.nativeElement;
+    if (!waveformElement) {
+      return;
+    }
+
+    event.preventDefault();
+    this.isSeeking.set(true);
+    this.seekFromPointer(event.clientX, waveformElement);
+  }
+
   protected toggleErrorTooltip(): void {
     if (!this.hasMissingResource()) {
       return;
@@ -237,8 +262,33 @@ export class AudioComponent implements OnDestroy {
     this.errorTooltipOpen.set(false);
   }
 
+  @HostListener('document:pointermove', ['$event'])
+  protected onDocumentPointerMove(event: PointerEvent): void {
+    if (!this.isSeeking()) {
+      return;
+    }
+
+    const waveformElement = this.waveformTrackElement?.nativeElement;
+    if (!waveformElement) {
+      return;
+    }
+
+    event.preventDefault();
+    this.seekFromPointer(event.clientX, waveformElement);
+  }
+
+  @HostListener('document:pointerup')
+  protected onDocumentPointerUp(): void {
+    if (!this.isSeeking()) {
+      return;
+    }
+
+    this.isSeeking.set(false);
+  }
+
   ngOnDestroy(): void {
     this.clearCopyFeedbackTimeout();
+    this.isSeeking.set(false);
     this.destroyAudioElement();
   }
 
@@ -343,6 +393,36 @@ export class AudioComponent implements OnDestroy {
     }
 
     return `${minutes}:${String(seconds).padStart(2, '0')}`;
+  }
+
+  private seekFromPointer(clientX: number, waveformElement: HTMLDivElement): void {
+    const rect = waveformElement.getBoundingClientRect();
+    if (rect.width <= 0) {
+      return;
+    }
+
+    const relativeX = Math.max(0, Math.min(rect.width, clientX - rect.left));
+    const percent = (relativeX / rect.width) * 100;
+    this.seekToPercent(percent);
+  }
+
+  private seekToPercent(percent: number): void {
+    const safePercent = Math.max(0, Math.min(100, percent));
+    const audio = this.getOrCreateAudioElement();
+    if (!audio) {
+      return;
+    }
+
+    const duration = Number.isFinite(audio.duration) ? audio.duration : this.totalTimeSeconds();
+    if (!Number.isFinite(duration) || duration <= 0) {
+      this.pendingSeekPercent = safePercent;
+      return;
+    }
+
+    const targetTime = (safePercent / 100) * duration;
+    audio.currentTime = targetTime;
+    this.currentTimeSeconds.set(targetTime);
+    this.totalTimeSeconds.set(duration);
   }
 
   private resetPlaybackState(): void {
