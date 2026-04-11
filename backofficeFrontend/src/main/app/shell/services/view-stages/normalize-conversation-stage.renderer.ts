@@ -14,6 +14,7 @@ export class NormalizeConversationStageRenderer implements ConversationStageRend
   readonly mode = 'normalize' as const;
   private readonly messageBubbleFactory = inject(MessageBubbleFactory);
   private readonly frontendSecretsService = inject(FrontendSecretsService);
+  private readonly imageExtensions = new Set(['jpg', 'jpeg', 'gif', 'webp', 'png']);
   private readonly audioExtensions = new Set(['opus', 'mp3', 'm2a', 'm4a']);
   private static readonly WHATSAPP_PREFIX = /^whatsapp\s*-\s*/i;
 
@@ -30,7 +31,7 @@ export class NormalizeConversationStageRenderer implements ConversationStageRend
 
       return this.messageBubbleFactory.createFromRaw(normalizedMessage, {
         text: normalizedMessage.text,
-        mediaUrl: this.toOptionalString(normalizedMessage.normalizedFields?.['assetUrl']),
+        mediaUrl: this.resolveMediaUrl(normalizedMessage, conversationFilePattern),
         audioFileName: this.resolveAudioAttachmentName(normalizedMessage.normalizedFields?.attachment),
         audioResourceUrl: this.resolveAudioResourceUrl(normalizedMessage, conversationFilePattern),
         audioTranscription: this.resolveAudioTranscription(normalizedMessage.audioDetails),
@@ -40,6 +41,44 @@ export class NormalizeConversationStageRenderer implements ConversationStageRend
         reviewStageId: normalizedMessage.externalId
       });
     });
+  }
+
+  private resolveMediaUrl(
+    rawMessage: BackendConversationRawMessage,
+    conversationFilePattern: string | null
+  ): string | undefined {
+    const directCandidate = this.toOptionalString(rawMessage.normalizedFields?.['assetUrl']);
+    if (this.isLikelyResourceUrl(directCandidate)) {
+      return directCandidate;
+    }
+
+    const attachmentCandidate = this.toOptionalString(rawMessage.normalizedFields?.attachment);
+    if (!attachmentCandidate) {
+      return undefined;
+    }
+
+    if (this.isLikelyResourceUrl(attachmentCandidate)) {
+      return attachmentCandidate;
+    }
+
+    const attachmentFileName = this.resolveAttachmentFileName(attachmentCandidate);
+    if (!this.isImageAttachment(attachmentFileName)) {
+      return undefined;
+    }
+
+    const effectivePattern = conversationFilePattern ?? this.resolveConversationFilePattern(rawMessage.filePattern);
+    if (!effectivePattern) {
+      return undefined;
+    }
+
+    const formattedDate = this.formatAssetDate(rawMessage.normalizedFields?.messageDate, rawMessage.sentAt);
+    if (!formattedDate) {
+      return undefined;
+    }
+
+    const assetConversation = this.resolveAssetConversationFromPattern(effectivePattern);
+    const relativePath = `${assetConversation.folderName}/${formattedDate} - ${assetConversation.label} - ${attachmentFileName}`;
+    return this.toNormalizedHttpUrl(this.frontendSecretsService.staticAssetsBaseUrl, relativePath);
   }
 
   private toOptionalString(value: unknown): string | undefined {
@@ -153,6 +192,11 @@ export class NormalizeConversationStageRenderer implements ConversationStageRend
   private isAudioAttachment(attachment: string): boolean {
     const extension = this.resolveAttachmentFileName(attachment).split('.').pop()?.toLowerCase();
     return !!extension && this.audioExtensions.has(extension);
+  }
+
+  private isImageAttachment(attachment: string): boolean {
+    const extension = this.resolveAttachmentFileName(attachment).split('.').pop()?.toLowerCase();
+    return !!extension && this.imageExtensions.has(extension);
   }
 
   private resolveConversationFilePattern(value: unknown): string | null {

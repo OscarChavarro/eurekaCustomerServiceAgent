@@ -290,7 +290,7 @@ export class ChatConversationService {
       }
     );
 
-    this.loadConversationIds();
+    void this.loadConversationIds();
   }
 
   setActiveConversation(conversationId: string): void {
@@ -429,39 +429,39 @@ export class ChatConversationService {
     return this.resolveConversationDisplayName(linkedContactName, phoneNumber);
   }
 
-  private loadConversationIds(): void {
-    this.conversationsApiService.getConversationIds().subscribe({
-      next: (summaries) => {
-        const normalizedSummaries = summaries.map((summary) => this.normalizeConversationSummary(summary));
-        this.conversationSummariesState.set(
-          Object.fromEntries(normalizedSummaries.map((summary) => [summary.id, summary]))
-        );
-        const normalizedConversations = this.sortConversationsByRecency(
-          normalizedSummaries.map((summary) => this.buildConversation(summary))
-        );
+  private async loadConversationIds(): Promise<void> {
+    try {
+      await this.contactsDirectoryStore.ensureLoaded();
 
-        this.conversationState.set(normalizedConversations);
-        this.recomputeFilteredConversationIds();
+      const summaries = await firstValueFrom(this.conversationsApiService.getConversationIds());
+      const normalizedSummaries = summaries.map((summary) => this.normalizeConversationSummary(summary));
+      this.conversationSummariesState.set(
+        Object.fromEntries(normalizedSummaries.map((summary) => [summary.id, summary]))
+      );
+      const normalizedConversations = this.sortConversationsByRecency(
+        normalizedSummaries.map((summary) => this.buildConversation(summary))
+      );
 
-        const currentActiveId = this.activeConversationIdState();
-        const hasCurrentActiveConversation =
-          !!currentActiveId && normalizedConversations.some((conversation) => conversation.id === currentActiveId);
+      this.conversationState.set(normalizedConversations);
+      this.recomputeFilteredConversationIds();
 
-        if (!hasCurrentActiveConversation) {
-          const firstConversationId = normalizedConversations[0]?.id ?? null;
-          this.activeConversationIdState.set(firstConversationId);
+      const currentActiveId = this.activeConversationIdState();
+      const hasCurrentActiveConversation =
+        !!currentActiveId && normalizedConversations.some((conversation) => conversation.id === currentActiveId);
 
-          if (firstConversationId) {
-            this.loadConversationMessages(firstConversationId);
-          }
+      if (!hasCurrentActiveConversation) {
+        const firstConversationId = normalizedConversations[0]?.id ?? null;
+        this.activeConversationIdState.set(firstConversationId);
+
+        if (firstConversationId) {
+          this.loadConversationMessages(firstConversationId);
         }
-      },
-      error: (error: unknown) => {
-        console.error('Unable to load conversations from backend /conversations', error);
-        this.conversationState.set([]);
-        this.activeConversationIdState.set(null);
       }
-    });
+    } catch (error: unknown) {
+      console.error('Unable to load conversations from backend /conversations', error);
+      this.conversationState.set([]);
+      this.activeConversationIdState.set(null);
+    }
   }
 
   private normalizeConversationSummary(summary: BackendConversationSummary): BackendConversationSummary {

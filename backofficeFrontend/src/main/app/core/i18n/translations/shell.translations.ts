@@ -210,8 +210,8 @@ export const SHELL_TRANSLATIONS = {
     es: 'Escribe un mensaje'
   },
   CONVERSATION_SYNCED_PLACEHOLDER: {
-    en: 'Conversation synced from backend.',
-    es: 'Conversacion sincronizada desde backend.'
+    en: 'Loading conversation messages...',
+    es: 'Cargando mensajes de la conversación...'
   },
   AI_LABEL: {
     en: 'AI',
