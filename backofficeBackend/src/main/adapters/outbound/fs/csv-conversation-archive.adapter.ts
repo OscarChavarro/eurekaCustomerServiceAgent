@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { access, mkdir, rename } from 'node:fs/promises';
+import { access, mkdir, rename, unlink } from 'node:fs/promises';
 import { constants as fsConstants } from 'node:fs';
-import { basename, dirname, extname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import type {
   ConversationCsvArchivePort,
   ConversationCsvArchiveResult
@@ -43,14 +43,8 @@ export class CsvConversationArchiveAdapter implements ConversationCsvArchivePort
     await mkdir(disabledFolderPath, { recursive: true });
 
     const sourceFileName = basename(sourceFilePath);
-    let targetFilePath = join(disabledFolderPath, sourceFileName);
-
-    try {
-      await access(targetFilePath, fsConstants.F_OK);
-      targetFilePath = this.buildAlternativeTargetPath(disabledFolderPath, sourceFileName);
-    } catch {
-      // Target does not exist and can be used as-is.
-    }
+    const targetFilePath = join(disabledFolderPath, sourceFileName);
+    await this.deleteFileIfExists(targetFilePath);
 
     await rename(sourceFilePath, targetFilePath);
 
@@ -61,12 +55,13 @@ export class CsvConversationArchiveAdapter implements ConversationCsvArchivePort
     };
   }
 
-  private buildAlternativeTargetPath(disabledFolderPath: string, sourceFileName: string): string {
-    const extension = extname(sourceFileName);
-    const fileNameWithoutExtension =
-      extension.length > 0 ? sourceFileName.slice(0, -extension.length) : sourceFileName;
-    const suffix = Date.now();
+  private async deleteFileIfExists(filePath: string): Promise<void> {
+    try {
+      await access(filePath, fsConstants.F_OK);
+    } catch {
+      return;
+    }
 
-    return join(disabledFolderPath, `${fileNameWithoutExtension}__${suffix}${extension}`);
+    await unlink(filePath);
   }
 }

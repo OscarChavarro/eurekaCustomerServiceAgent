@@ -339,35 +339,29 @@ export class FileSystemConversationCsvSourceAdapter implements ConversationCsvSo
     await fs.mkdir(unsupportedFolderPath, { recursive: true });
 
     const sourceFile = basename(csvPath);
-    let targetPath = join(unsupportedFolderPath, sourceFile);
+    const targetPath = join(unsupportedFolderPath, sourceFile);
 
     if (targetPath === csvPath) {
       return targetPath;
     }
 
-    targetPath = await this.ensureAvailableTargetPath(targetPath);
+    await this.deleteFileIfExists(targetPath);
     await fs.rename(csvPath, targetPath);
 
     return targetPath;
   }
 
-  private async ensureAvailableTargetPath(targetPath: string): Promise<string> {
+  private async deleteFileIfExists(filePath: string): Promise<void> {
     try {
-      await fs.access(targetPath);
+      await fs.unlink(filePath);
     } catch (error) {
       const nodeError = error as NodeJS.ErrnoException;
       if (nodeError.code === 'ENOENT') {
-        return targetPath;
+        return;
       }
 
       throw error;
     }
-
-    const extension = extname(targetPath);
-    const nameWithoutExtension =
-      extension.length > 0 ? targetPath.slice(0, -extension.length) : targetPath;
-
-    return `${nameWithoutExtension}__${Date.now()}${extension}`;
   }
 
   private async readCsvFile(

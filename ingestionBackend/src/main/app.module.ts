@@ -6,6 +6,7 @@ import { ConversationsController } from './adapters/inbound/http/conversations.c
 import { IngestionController } from './adapters/inbound/http/ingestion.controller';
 import { TranscribeController } from './adapters/inbound/http/transcribe.controller';
 import { HttpContactsDirectoryAdapter } from './adapters/outbound/contacts/http-contacts-directory.adapter';
+import { FileSystemFailedAudioResourceLogAdapter } from './adapters/outbound/debug/file-system-failed-audio-resource-log.adapter';
 import { FileSystemProcessedConversationStageStoreAdapter } from './adapters/outbound/debug/file-system-processed-conversation-stage-store.adapter';
 import { BgeEmbeddingAdapter } from './adapters/outbound/embeddings/bge-embedding.adapter';
 import { MongoClientProvider } from './adapters/outbound/mongo/mongo-client.provider';
@@ -91,6 +92,10 @@ import { SettingsConfig } from './infrastructure/config/settings/settings.config
     {
       provide: TOKENS.ProcessedConversationStageStorePort,
       useClass: FileSystemProcessedConversationStageStoreAdapter
+    },
+    {
+      provide: TOKENS.FailedAudioResourceLogPort,
+      useClass: FileSystemFailedAudioResourceLogAdapter
     },
     {
       provide: TOKENS.ConversationsRepositoryPort,

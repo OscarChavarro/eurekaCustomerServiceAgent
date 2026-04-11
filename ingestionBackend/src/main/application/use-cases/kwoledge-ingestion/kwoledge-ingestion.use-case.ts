@@ -11,6 +11,7 @@ import type {
   EmbeddingRepositoryRecord,
   EmbeddingsRepositoryPort
 } from '../../ports/outbound/embeddings-repository.port';
+import type { FailedAudioResourceLogPort } from '../../ports/outbound/failed-audio-resource-log.port';
 import type { ProcessedConversationStageStorePort } from '../../ports/outbound/processed-conversation-stage-store.port';
 import type { StaticAssetsBaseUrlPort } from '../../ports/outbound/static-assets-base-url.port';
 import type { VectorPoint, VectorStorePort } from '../../ports/outbound/vector-store.port';
@@ -126,6 +127,8 @@ export class KwoledgeIngestionUseCase {
     private readonly conversationsRepositoryPort: ConversationsRepositoryPort,
     @Inject(TOKENS.EmbeddingsRepositoryPort)
     private readonly embeddingsRepositoryPort: EmbeddingsRepositoryPort,
+    @Inject(TOKENS.FailedAudioResourceLogPort)
+    private readonly failedAudioResourceLogPort: FailedAudioResourceLogPort,
     @Inject(TOKENS.ProcessedConversationStageStorePort)
     private readonly processedConversationStageStorePort: ProcessedConversationStageStorePort,
     @Inject(TOKENS.StaticAssetsBaseUrlPort)
@@ -138,6 +141,7 @@ export class KwoledgeIngestionUseCase {
   ) {}
 
   public async execute(command: KwoledgeIngestionCommand): Promise<KwoledgeIngestionResult> {
+    await this.failedAudioResourceLogPort.resetLog();
     await this.vectorStorePort.clearCollection();
     const rawMessages = await this.loadRawMessages(command.folderPath);
     const rawByConversation = this.groupByConversationId(rawMessages, (message) => message.conversationId);
@@ -589,7 +593,8 @@ export class KwoledgeIngestionUseCase {
         },
         {
           conversationId,
-          rawMessageExternalId: rawMessage.externalId
+          rawMessageExternalId: rawMessage.externalId,
+          originalAudioResourceUrl: audioResourceUrl
         }
       );
     }
@@ -602,6 +607,8 @@ export class KwoledgeIngestionUseCase {
     const conversationId = typeof params.conversationId === 'string' ? params.conversationId : null;
     const rawMessageExternalId =
       typeof params.rawMessageExternalId === 'string' ? params.rawMessageExternalId : null;
+    const originalAudioResourceUrl =
+      typeof params.originalAudioResourceUrl === 'string' ? params.originalAudioResourceUrl : null;
 
     if (!conversationId || !rawMessageExternalId) {
       this.logger.warn(
@@ -624,11 +631,26 @@ export class KwoledgeIngestionUseCase {
         rawMessageExternalId,
         audioDetails
       );
+      if (
+        originalAudioResourceUrl &&
+        this.isAudioResourceReadFailure(payload)
+      ) {
+        await this.failedAudioResourceLogPort.appendOriginalUrl(originalAudioResourceUrl);
+      }
     } catch (error) {
       this.logger.error(
         `Unable to persist audioDetails for conversationId=${conversationId}, rawMessageExternalId=${rawMessageExternalId}. ${String(error)}`
       );
     }
+  }
+
+  private isAudioResourceReadFailure(payload: AudioTranscribeResult): boolean {
+    if (payload.type !== 'noise') {
+      return false;
+    }
+
+    const transcription = payload.transcription?.toLowerCase() ?? '';
+    return transcription.includes('audio resource does not exist');
   }
 
   private resolveAudioResourceUrl(rawMessage: RawConversationMessage): string | null {

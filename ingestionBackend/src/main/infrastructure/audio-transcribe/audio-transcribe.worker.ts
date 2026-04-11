@@ -3,6 +3,7 @@ import { dirname, extname, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { parentPort, workerData } from 'node:worker_threads';
 import type { AudioTranscribeResult } from '../../application/use-cases/audio-transcribe/audio-transcribe.result';
+import { NameFixesForIMazingMediaDump } from './name-fixes-for-imazing-media-dump';
 import { WavefileAudioWaveformBarsAdapter } from './wavefile-audio-waveform-bars.adapter';
 
 type WorkerRequestMessage = {
@@ -41,11 +42,20 @@ type WorkerStaticContext = {
   tempWavFilePath: string;
 };
 
+type CandidateAttemptResult = {
+  candidateUrl: string;
+  headOk: boolean;
+  headStatus?: number;
+  headStatusText?: string;
+  error?: string;
+};
+
 const SUPPORTED_AUDIO_EXTENSIONS = ['opus', 'mp3', 'm4a'] as const;
 type SupportedAudioExtension = (typeof SUPPORTED_AUDIO_EXTENSIONS)[number];
 
 const context = createWorkerContext();
 const waveformBarsAdapter = new WavefileAudioWaveformBarsAdapter();
+const nameFixesForIMazingMediaDump = new NameFixesForIMazingMediaDump();
 
 if (!parentPort) {
   process.exit(1);
@@ -91,11 +101,16 @@ async function transcribeUrlToPayload(
   let totalTimeInSeconds = 0;
   let bars: number[] = [];
   let hasError = false;
+  const decodedUrl = decodeUrlSafely(url);
+  console.log(
+    `[AudioTranscribeWorker ${staticContext.workerIndex}] Starting job for URL: ${decodedUrl}`
+  );
 
   try {
     const downloadedAudio = await downloadAudioFileWithExtensionRetry(
       url,
-      staticContext.tempBaseFilePath
+      staticContext.tempBaseFilePath,
+      staticContext.workerIndex
     );
     tempAudioFilePath = downloadedAudio.tempAudioFilePath;
     downloadedAudio.attemptedTempAudioFilePaths.forEach((path) =>
@@ -169,16 +184,25 @@ async function downloadAudioFile(url: string, targetPath: string): Promise<void>
 
 async function downloadAudioFileWithExtensionRetry(
   originalUrl: string,
-  tempBaseFilePath: string
+  tempBaseFilePath: string,
+  workerIndex: number
 ): Promise<{ tempAudioFilePath: string; attemptedTempAudioFilePaths: Set<string> }> {
   const candidateUrls = buildRetryCandidateUrls(originalUrl);
   const attemptedTempAudioFilePaths = new Set<string>();
-  let lastError: unknown = null;
+  const attempts: CandidateAttemptResult[] = [];
 
   for (const candidateUrl of candidateUrls) {
     const extension = resolveAudioExtensionFromUrl(candidateUrl);
     const tempAudioFilePath = `${tempBaseFilePath}.${extension}`;
     attemptedTempAudioFilePaths.add(tempAudioFilePath);
+
+    const headResult = await probeAudioResourceWithHead(candidateUrl);
+    attempts.push(headResult);
+
+    if (!headResult.headOk) {
+      await cleanupTempFile(tempAudioFilePath);
+      continue;
+    }
 
     try {
       await downloadAudioFile(candidateUrl, tempAudioFilePath);
@@ -187,43 +211,65 @@ async function downloadAudioFileWithExtensionRetry(
         attemptedTempAudioFilePaths
       };
     } catch (error) {
-      lastError = error;
+      attempts.push({
+        candidateUrl,
+        headOk: true,
+        error: error instanceof Error ? error.message : String(error)
+      });
       await cleanupTempFile(tempAudioFilePath);
     }
   }
 
-  const lastErrorMessage = lastError instanceof Error ? ` Last error: ${lastError.message}` : '';
+  const attemptsSummary = attempts
+    .map((attempt) => {
+      if (attempt.error) {
+        return `${attempt.candidateUrl} -> error: ${attempt.error}`;
+      }
+      if (typeof attempt.headStatus === 'number') {
+        return `${attempt.candidateUrl} -> HEAD ${attempt.headStatus} ${attempt.headStatusText ?? ''}`.trim();
+      }
+      return `${attempt.candidateUrl} -> HEAD failed`;
+    })
+    .join('\n');
+
+  console.error(
+    `[AudioTranscribeWorker ${workerIndex}] Audio URL resolution failed after trying ${
+      candidateUrls.length
+    } variants.\n${attemptsSummary}`
+  );
+
   throw new Error(
-    `Audio resource does not exist in extensions [.opus/.mp3/.m4a].${lastErrorMessage}`
+    'Audio resource does not exist in extensions [.opus/.mp3/.m4a] and all generated URL variants failed.'
   );
 }
 
 function buildRetryCandidateUrls(url: string): string[] {
-  const originalExtension = resolveAudioExtensionFromUrl(url);
-  if (!isSupportedAudioExtension(originalExtension)) {
+  if (!nameFixesForIMazingMediaDump.isSupportedAudioResourceUrl(url)) {
     return [url];
   }
 
-  const alternatives = SUPPORTED_AUDIO_EXTENSIONS.filter(
-    (extension) => extension !== originalExtension
-  );
-
-  return [url, ...alternatives.map((extension) => replaceUrlAudioExtension(url, extension))];
+  return nameFixesForIMazingMediaDump.getCandidateAudioUrls(url);
 }
 
-function replaceUrlAudioExtension(url: string, targetExtension: SupportedAudioExtension): string {
+async function probeAudioResourceWithHead(url: string): Promise<CandidateAttemptResult> {
   try {
-    const parsed = new URL(url);
-    const currentExtension = extname(parsed.pathname);
+    const response = await fetch(url, {
+      method: 'HEAD',
+      signal: AbortSignal.timeout(15_000)
+    });
 
-    if (currentExtension.length === 0) {
-      return url;
-    }
-
-    parsed.pathname = `${parsed.pathname.slice(0, -currentExtension.length)}.${targetExtension}`;
-    return parsed.toString();
-  } catch {
-    return url.replace(/\.[^./?#]+(?=([?#]|$))/, `.${targetExtension}`);
+    return {
+      candidateUrl: url,
+      headOk: response.ok,
+      headStatus: response.status,
+      headStatusText: response.statusText
+    };
+  } catch (error) {
+    return {
+      candidateUrl: url,
+      headOk: false,
+      error: error instanceof Error ? error.message : String(error)
+    };
   }
 }
 
@@ -312,6 +358,14 @@ function isSupportedAudioExtension(value: string): value is SupportedAudioExtens
 function safeParsePathname(url: string): string {
   try {
     return new URL(url).pathname;
+  } catch {
+    return url;
+  }
+}
+
+function decodeUrlSafely(url: string): string {
+  try {
+    return decodeURIComponent(url);
   } catch {
     return url;
   }
