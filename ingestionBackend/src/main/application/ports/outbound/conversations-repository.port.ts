@@ -22,6 +22,7 @@ export type RawConversationAudioDetails = {
 export type RawConversationAudioMessage = {
   conversationId: string;
   conversationFilePattern: string | null;
+  conversationContactName: string | null;
   rawMessageExternalId: string;
   rawMessageSentAt: string | null;
   normalizedFields: Record<string, unknown>;
@@ -80,6 +81,7 @@ export interface ConversationsRepositoryPort {
     rawMessageExternalId: string,
     audioDetails: RawConversationAudioDetails
   ): Promise<void>;
+  updateConversationFilePattern(conversationId: string, filePattern: string): Promise<void>;
   findRawMessagesWithAudioAttachment(): Promise<RawConversationAudioMessage[]>;
   deleteAllConversations(): Promise<number>;
 }

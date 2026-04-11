@@ -32,6 +32,7 @@ type MongoConversationDocument = {
 type RawAudioMessageProjection = {
   conversationId: string;
   conversationFilePattern: string | null;
+  conversationContactName: string | null;
   rawMessageExternalId: string;
   rawMessageSentAt: string | null;
   normalizedFields: Record<string, unknown>;
@@ -194,6 +195,23 @@ export class MongoConversationsRepositoryAdapter implements ConversationsReposit
     );
   }
 
+  public async updateConversationFilePattern(
+    conversationId: string,
+    filePattern: string
+  ): Promise<void> {
+    const collection =
+      await this.mongoClientProvider.getConversationsCollection<MongoConversationDocument>();
+
+    await collection.updateOne(
+      { _id: conversationId },
+      {
+        $set: {
+          filePattern
+        }
+      }
+    );
+  }
+
   public async findRawMessagesWithAudioAttachment(): Promise<RawConversationAudioMessage[]> {
     const collection =
       await this.mongoClientProvider.getConversationsCollection<MongoConversationDocument>();
@@ -230,6 +248,7 @@ export class MongoConversationsRepositoryAdapter implements ConversationsReposit
             _id: 0,
             conversationId: '$_id',
             conversationFilePattern: '$filePattern',
+            conversationContactName: '$contactName',
             rawMessageExternalId: '$rawMessages.externalId',
             rawMessageSentAt: '$rawMessages.sentAt',
             normalizedFields: '$rawMessages.normalizedFields',
@@ -244,6 +263,10 @@ export class MongoConversationsRepositoryAdapter implements ConversationsReposit
       conversationFilePattern:
         typeof message.conversationFilePattern === 'string'
           ? message.conversationFilePattern
+          : null,
+      conversationContactName:
+        typeof message.conversationContactName === 'string'
+          ? message.conversationContactName
           : null,
       rawMessageExternalId: message.rawMessageExternalId,
       rawMessageSentAt: message.rawMessageSentAt,

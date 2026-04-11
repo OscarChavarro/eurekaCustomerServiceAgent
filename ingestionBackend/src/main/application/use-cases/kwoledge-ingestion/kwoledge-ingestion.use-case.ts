@@ -156,6 +156,7 @@ export class KwoledgeIngestionUseCase {
     for (const [index, conversationId] of orderedConversationIds.entries()) {
       const currentPosition = index + 1;
       const conversationRawMessages = rawByConversation.get(conversationId) ?? [];
+      const conversationMetadata = this.buildConversationMetadata(conversationRawMessages);
 
       const rawStageMessages = conversationRawMessages.map((message) =>
         this.toRepositoryRawStageMessage(message)
@@ -163,7 +164,7 @@ export class KwoledgeIngestionUseCase {
       await this.conversationsRepositoryPort.upsertRawMessages(
         conversationId,
         rawStageMessages,
-        this.buildConversationMetadata(conversationRawMessages)
+        conversationMetadata
       );
       this.logConversationPhase(currentPosition, totalConversations, conversationId, 'raw');
 
@@ -219,7 +220,11 @@ export class KwoledgeIngestionUseCase {
       );
 
       this.rawAudioTranscriptionOrchestratorService.enqueueMany(
-        this.toRawAudioTranscriptionCandidates(conversationId, conversationRawMessages)
+        this.toRawAudioTranscriptionCandidates(
+          conversationId,
+          conversationRawMessages,
+          conversationMetadata.filePattern
+        )
       );
     }
 
@@ -469,6 +474,8 @@ export class KwoledgeIngestionUseCase {
     lastMessageDate: string | null;
     lastMessageText: string | null;
   } {
+    const contactName = this.resolveConversationContactName(rawMessages);
+
     const conversationalMessages = rawMessages.filter(
       (rawMessage) =>
         rawMessage.direction === MessageDirection.Incoming ||
@@ -498,8 +505,8 @@ export class KwoledgeIngestionUseCase {
     return {
       createdAt: new Date(),
       source: rawMessages[0]?.sourceFile ?? 'unknown',
-      filePattern: this.resolveConversationFilePattern(rawMessages),
-      contactName: this.resolveConversationContactName(rawMessages),
+      filePattern: this.resolvePreferredConversationFilePattern(contactName, rawMessages),
+      contactName,
       firstMessageDate,
       lastMessageDate,
       lastMessageText:
@@ -517,6 +524,42 @@ export class KwoledgeIngestionUseCase {
     }
 
     return null;
+  }
+
+  private resolvePreferredConversationFilePattern(
+    contactName: string | null,
+    rawMessages: RawConversationMessage[]
+  ): string | null {
+    const filePatternFromContactName = this.resolveConversationFilePatternFromContactName(
+      contactName
+    );
+    if (filePatternFromContactName) {
+      return filePatternFromContactName;
+    }
+
+    return this.resolveConversationFilePattern(rawMessages);
+  }
+
+  private resolveConversationFilePatternFromContactName(contactName: string | null): string | null {
+    if (!contactName) {
+      return null;
+    }
+
+    const normalizedContactLabel = contactName
+      .replace(/^whatsapp\s*-\s*/i, '')
+      .trim();
+    if (!normalizedContactLabel) {
+      return null;
+    }
+
+    const emojiNormalizedLabel = this.replaceEmojiLikeCharsWithUnderscore(normalizedContactLabel)
+      .replace(/[\u00A0\u2007\u202F]/g, ' ')
+      .trim();
+    if (!emojiNormalizedLabel) {
+      return null;
+    }
+
+    return `WhatsApp - ${emojiNormalizedLabel}`;
   }
 
   private resolveConversationFilePattern(rawMessages: RawConversationMessage[]): string | null {
@@ -577,12 +620,13 @@ export class KwoledgeIngestionUseCase {
 
   private toRawAudioTranscriptionCandidates(
     conversationId: string,
-    rawMessages: RawConversationMessage[]
+    rawMessages: RawConversationMessage[],
+    conversationFilePattern: string | null
   ): RawAudioTranscriptionCandidate[] {
     return rawMessages.map((rawMessage) => ({
       conversationId,
       rawMessageExternalId: rawMessage.externalId,
-      conversationFilePattern: rawMessage.filePattern,
+      conversationFilePattern: conversationFilePattern ?? rawMessage.filePattern,
       rawMessageSentAt: rawMessage.sentAt,
       normalizedFields: {
         chatSession: rawMessage.normalizedFields.chatSession,
@@ -620,7 +664,6 @@ export class KwoledgeIngestionUseCase {
     const cleaned = this.stripDirectionalUnicodeMarkers(pattern)
       .trim()
       .replace(/[\u00A0\u2007\u202F]/g, ' ')
-      .replace(/\s+/g, ' ')
       .trim();
     if (!cleaned) {
       return null;
@@ -657,10 +700,26 @@ export class KwoledgeIngestionUseCase {
   }
 
   private replaceEmojiLikeCharsWithUnderscore(value: string): string {
-    const emojiLikeCharsPattern =
-      /[\p{Extended_Pictographic}\p{Regional_Indicator}\u{FE0F}\u{200D}]/gu;
+    const graphemes = this.segmentIntoGraphemes(value);
+    return graphemes
+      .map((grapheme) => (this.isEmojiLikeGrapheme(grapheme) ? '_' : grapheme))
+      .join('');
+  }
 
-    return value.replace(emojiLikeCharsPattern, '_').replace(/\s+/g, ' ').trim();
+  private segmentIntoGraphemes(value: string): string[] {
+    if (typeof Intl !== 'undefined' && typeof Intl.Segmenter !== 'undefined') {
+      const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+      return Array.from(segmenter.segment(value), (segment) => segment.segment);
+    }
+
+    return Array.from(value);
+  }
+
+  private isEmojiLikeGrapheme(value: string): boolean {
+    const emojiLikeCharsPattern =
+      /[\p{Extended_Pictographic}\p{Regional_Indicator}\u{FE0F}\u{200D}]/u;
+
+    return emojiLikeCharsPattern.test(value);
   }
 
   private extractConversationLabelFromPattern(pattern: string): string {

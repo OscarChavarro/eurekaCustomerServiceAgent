@@ -20,6 +20,7 @@ import { ConversationChunkingService } from './application/use-cases/kwoledge-in
 import { ConversationCsvRecordTranslatorService } from './application/use-cases/kwoledge-ingestion/conversation-csv-record-translator.service';
 import { ConversationMessageCleaningService } from './application/use-cases/kwoledge-ingestion/conversation-message-cleaning.service';
 import { ConversationStructuringService } from './application/use-cases/kwoledge-ingestion/conversation-structuring.service';
+import { FixFilePatternUseCase } from './application/use-cases/fix-file-pattern/fix-file-pattern.use-case';
 import { KwoledgeIngestionUseCase } from './application/use-cases/kwoledge-ingestion/kwoledge-ingestion.use-case';
 import { UpdateAudioModelsUseCase } from './application/use-cases/update-audio-models/update-audio-models.use-case';
 import { AudioTranscribeUseCase } from './application/use-cases/audio-transcribe/audio-transcribe.use-case';
@@ -66,6 +67,7 @@ import { SettingsConfig } from './infrastructure/config/settings/settings.config
     ConversationMessageCleaningService,
     ConversationStructuringService,
     ConversationChunkingService,
+    FixFilePatternUseCase,
     RawAudioTranscriptionOrchestratorService,
     KwoledgeIngestionUseCase,
     UpdateAudioModelsUseCase,
