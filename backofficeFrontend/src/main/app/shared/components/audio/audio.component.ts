@@ -21,6 +21,7 @@ import type { ChatMessageDirection } from '../../../shell/services/view-stages/c
 })
 export class AudioComponent implements OnDestroy {
   private static readonly RESOURCE_HEAD_TIMEOUT_MS = 4_500;
+  private static readonly SUPPORTED_AUDIO_EXTENSIONS = ['opus', 'mp3', 'm4a'] as const;
   public readonly messageId = input<string>('');
   public readonly direction = input<ChatMessageDirection>('incoming');
   public readonly resourceUrl = input<string | undefined>(undefined);
@@ -35,6 +36,7 @@ export class AudioComponent implements OnDestroy {
   protected readonly errorTooltipOpen = signal<boolean>(false);
   protected readonly copyFeedbackVisible = signal<boolean>(false);
   protected readonly failedResourceUrlEncoded = signal<string | null>(null);
+  private readonly correctedResourceUrlEncoded = signal<string | null>(null);
   protected readonly failedResourceUrlDecoded = computed(() =>
     this.decodeHttpUrl(this.failedResourceUrlEncoded())
   );
@@ -114,6 +116,7 @@ export class AudioComponent implements OnDestroy {
       if (!candidateUrl) {
         this.resourceCheckStatus.set('idle');
         this.failedResourceUrlEncoded.set(null);
+        this.correctedResourceUrlEncoded.set(null);
         this.resetPlaybackState();
         this.destroyAudioElement();
         return;
@@ -121,6 +124,7 @@ export class AudioComponent implements OnDestroy {
 
       this.resourceCheckStatus.set('checking');
       this.failedResourceUrlEncoded.set(null);
+      this.correctedResourceUrlEncoded.set(null);
       void this.checkResourceAvailability(candidateUrl);
     });
 
@@ -291,7 +295,7 @@ export class AudioComponent implements OnDestroy {
       return null;
     }
 
-    return this.resolveCandidateUrl();
+    return this.correctedResourceUrlEncoded() ?? this.resolveCandidateUrl();
   }
 
   private resolveCandidateUrl(): string | null {
@@ -403,6 +407,18 @@ export class AudioComponent implements OnDestroy {
       }
 
       if (response.status === 404) {
+        const correctedUrl = await this.findAvailableAlternativeUrl(url);
+        if (requestId !== this.resourceCheckRequestId) {
+          return;
+        }
+
+        if (correctedUrl) {
+          this.correctedResourceUrlEncoded.set(correctedUrl);
+          this.resourceCheckStatus.set('available');
+          this.failedResourceUrlEncoded.set(null);
+          return;
+        }
+
         this.resourceCheckStatus.set('missing');
         this.failedResourceUrlEncoded.set(url);
         return;
@@ -421,9 +437,164 @@ export class AudioComponent implements OnDestroy {
         return;
       }
 
-      this.resourceCheckStatus.set('available');
-      this.failedResourceUrlEncoded.set(null);
+      // HEAD can fail due to CORS while the media file still exists and is playable.
+      // First probe the current URL; if it is not available, retry alternate extensions.
+      const probeStatus = await this.probeAudioReachability(
+        url,
+        AudioComponent.RESOURCE_HEAD_TIMEOUT_MS
+      );
+      if (requestId !== this.resourceCheckRequestId) {
+        return;
+      }
+
+      if (probeStatus === 'available') {
+        this.resourceCheckStatus.set('available');
+        this.failedResourceUrlEncoded.set(null);
+        return;
+      }
+
+      const correctedUrl = await this.findAvailableAlternativeUrl(url);
+      if (requestId !== this.resourceCheckRequestId) {
+        return;
+      }
+
+      if (correctedUrl) {
+        this.correctedResourceUrlEncoded.set(correctedUrl);
+        this.resourceCheckStatus.set('available');
+        this.failedResourceUrlEncoded.set(null);
+        return;
+      }
+
+      this.resourceCheckStatus.set('missing');
+      this.failedResourceUrlEncoded.set(url);
     }
+  }
+
+  private async findAvailableAlternativeUrl(url: string): Promise<string | null> {
+    const currentExtension = this.extractAudioExtension(url);
+    if (!currentExtension) {
+      return null;
+    }
+
+    const alternatives = AudioComponent.SUPPORTED_AUDIO_EXTENSIONS.filter(
+      (extension) => extension !== currentExtension
+    );
+
+    for (const extension of alternatives) {
+      const candidateUrl = this.replaceAudioExtension(url, extension);
+      if (!candidateUrl) {
+        continue;
+      }
+
+      try {
+        const response = await fetch(candidateUrl, {
+          method: 'HEAD',
+          signal: AbortSignal.timeout(AudioComponent.RESOURCE_HEAD_TIMEOUT_MS)
+        });
+
+        if (response.status === 200) {
+          return candidateUrl;
+        }
+      } catch {
+        // ignore and fallback to media probe below
+      }
+
+      const probeStatus = await this.probeAudioReachability(
+        candidateUrl,
+        AudioComponent.RESOURCE_HEAD_TIMEOUT_MS
+      );
+      if (probeStatus === 'available') {
+        return candidateUrl;
+      }
+    }
+
+    return null;
+  }
+
+  private extractAudioExtension(url: string): (typeof AudioComponent.SUPPORTED_AUDIO_EXTENSIONS)[number] | null {
+    const path = this.extractPathFromUrl(url).toLowerCase();
+    const match = path.match(/\.([a-z0-9]+)$/i);
+    const extension = match?.[1] ?? '';
+
+    if (
+      AudioComponent.SUPPORTED_AUDIO_EXTENSIONS.includes(
+        extension as (typeof AudioComponent.SUPPORTED_AUDIO_EXTENSIONS)[number]
+      )
+    ) {
+      return extension as (typeof AudioComponent.SUPPORTED_AUDIO_EXTENSIONS)[number];
+    }
+
+    return null;
+  }
+
+  private replaceAudioExtension(
+    url: string,
+    extension: (typeof AudioComponent.SUPPORTED_AUDIO_EXTENSIONS)[number]
+  ): string | null {
+    const [base, suffix] = this.splitUrlBeforeQueryOrHash(url);
+    const replacedBase = base.replace(/\.[a-z0-9]+$/i, `.${extension}`);
+
+    if (replacedBase === base) {
+      return null;
+    }
+
+    return `${replacedBase}${suffix}`;
+  }
+
+  private extractPathFromUrl(url: string): string {
+    try {
+      return new URL(url).pathname;
+    } catch {
+      return this.splitUrlBeforeQueryOrHash(url)[0];
+    }
+  }
+
+  private splitUrlBeforeQueryOrHash(url: string): [string, string] {
+    const match = url.match(/^([^?#]+)([?#].*)?$/);
+    if (!match) {
+      return [url, ''];
+    }
+
+    return [match[1] ?? url, match[2] ?? ''];
+  }
+
+  private probeAudioReachability(
+    url: string,
+    timeoutMs: number
+  ): Promise<'available' | 'missing'> {
+    return new Promise((resolve) => {
+      const probeAudio = new Audio();
+      let settled = false;
+      let timeoutId: number | null = null;
+
+      const finalize = (status: 'available' | 'missing'): void => {
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+        if (timeoutId !== null) {
+          window.clearTimeout(timeoutId);
+        }
+
+        probeAudio.removeEventListener('loadedmetadata', onReady);
+        probeAudio.removeEventListener('canplay', onReady);
+        probeAudio.removeEventListener('error', onError);
+        probeAudio.src = '';
+        resolve(status);
+      };
+
+      const onReady = (): void => finalize('available');
+      const onError = (): void => finalize('missing');
+
+      probeAudio.preload = 'metadata';
+      probeAudio.addEventListener('loadedmetadata', onReady);
+      probeAudio.addEventListener('canplay', onReady);
+      probeAudio.addEventListener('error', onError);
+      timeoutId = window.setTimeout(() => finalize('missing'), timeoutMs);
+      probeAudio.src = url;
+      probeAudio.load();
+    });
   }
 
   private isTimeoutError(error: unknown): boolean {
