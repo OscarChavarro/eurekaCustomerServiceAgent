@@ -35,7 +35,7 @@
         (pointerdown)="onWaveformPointerDown($event)"
       >
         @for (barHeight of normalizedWaveBars(); track $index) {
-          <span class="wave-bar" [style.height.%]="barHeight"></span>
+          <span class="wave-bar" [style.height.px]="barHeight"></span>
         }
         <span
           class="audio-progress-dot"

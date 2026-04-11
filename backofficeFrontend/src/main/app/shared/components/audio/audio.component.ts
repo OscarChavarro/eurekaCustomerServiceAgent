@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
 import {
+  AfterViewInit,
   Component,
   HostListener,
   OnDestroy,
@@ -21,10 +22,17 @@ import type { ChatMessageDirection } from '../../../shell/services/view-stages/c
   templateUrl: './audio.component.html',
   styleUrl: './audio.component.sass'
 })
-export class AudioComponent implements OnDestroy {
+export class AudioComponent implements AfterViewInit, OnDestroy {
   private static readonly RESOURCE_HEAD_TIMEOUT_MS = 4_500;
   private static readonly SUPPORTED_AUDIO_EXTENSIONS = ['opus', 'mp3', 'm4a'] as const;
-  private static readonly DISPLAY_WAVE_BARS_COUNT = 64;
+  private static readonly DEFAULT_DISPLAY_WAVE_BARS_COUNT = 64;
+  private static readonly MIN_DISPLAY_WAVE_BARS_COUNT = 36;
+  private static readonly MAX_DISPLAY_WAVE_BARS_COUNT = 320;
+  // Keep these in sync with .wave-bar width and .audio-waveform gap in SASS.
+  private static readonly WAVE_BAR_WIDTH_PX = 3;
+  private static readonly WAVE_BAR_GAP_PX = 5;
+  private static readonly WAVE_BAR_MIN_HEIGHT_PX = 4;
+  private static readonly WAVE_BAR_MAX_HEIGHT_PX = 22;
   public readonly messageId = input<string>('');
   public readonly direction = input<ChatMessageDirection>('incoming');
   public readonly resourceUrl = input<string | undefined>(undefined);
@@ -54,7 +62,12 @@ export class AudioComponent implements OnDestroy {
     this.formatTimeLabel(this.totalTimeSeconds())
   );
   protected readonly normalizedWaveBars = computed(() =>
-    this.buildWaveBarsForDisplay(this.waveBars(), AudioComponent.DISPLAY_WAVE_BARS_COUNT)
+    this.buildWaveBarsForDisplay(
+      this.waveBars(),
+      this.resolveDisplayWaveBarsCount(this.waveformWidthPx()),
+      AudioComponent.WAVE_BAR_MIN_HEIGHT_PX,
+      AudioComponent.WAVE_BAR_MAX_HEIGHT_PX
+    )
   );
   protected readonly displayTranscription = computed(() => {
     const value = this.transcription()?.trim();
@@ -72,12 +85,14 @@ export class AudioComponent implements OnDestroy {
   protected readonly isSeeking = signal<boolean>(false);
   @ViewChild('waveformTrack')
   private waveformTrackElement: ElementRef<HTMLDivElement> | null = null;
+  private readonly waveformWidthPx = signal<number>(0);
 
   private audioElement: HTMLAudioElement | null = null;
   private progressAnimationFrameId: number | null = null;
   private resourceCheckRequestId = 0;
   private copyFeedbackTimeoutId: number | null = null;
   private pendingSeekPercent: number | null = null;
+  private resizeObserver: ResizeObserver | null = null;
   private readonly onLoadedMetadata = (): void => {
     const audio = this.audioElement;
     if (!audio || !Number.isFinite(audio.duration)) {
@@ -299,7 +314,12 @@ export class AudioComponent implements OnDestroy {
   ngOnDestroy(): void {
     this.clearCopyFeedbackTimeout();
     this.isSeeking.set(false);
+    this.disconnectWaveformResizeObserver();
     this.destroyAudioElement();
+  }
+
+  ngAfterViewInit(): void {
+    this.setupWaveformResizeObserver();
   }
 
   private getOrCreateAudioElement(): HTMLAudioElement | null {
@@ -717,24 +737,74 @@ export class AudioComponent implements OnDestroy {
     this.copyFeedbackTimeoutId = null;
   }
 
-  private buildWaveBarsForDisplay(sourceBars: number[] | undefined, targetCount: number): number[] {
-    const fallbackBar = 56;
-    const fallbackBars = Array.from({ length: targetCount }, () => fallbackBar);
+  private setupWaveformResizeObserver(): void {
+    this.disconnectWaveformResizeObserver();
+
+    const waveformElement = this.waveformTrackElement?.nativeElement;
+    if (!waveformElement || typeof ResizeObserver === 'undefined') {
+      return;
+    }
+
+    this.waveformWidthPx.set(waveformElement.clientWidth);
+    this.resizeObserver = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) {
+        return;
+      }
+
+      const width = entry.contentRect?.width ?? waveformElement.clientWidth;
+      this.waveformWidthPx.set(width);
+    });
+    this.resizeObserver.observe(waveformElement);
+  }
+
+  private disconnectWaveformResizeObserver(): void {
+    if (!this.resizeObserver) {
+      return;
+    }
+
+    this.resizeObserver.disconnect();
+    this.resizeObserver = null;
+  }
+
+  private resolveDisplayWaveBarsCount(waveformWidthPx: number): number {
+    if (!Number.isFinite(waveformWidthPx) || waveformWidthPx <= 0) {
+      return AudioComponent.DEFAULT_DISPLAY_WAVE_BARS_COUNT;
+    }
+
+    const fullStepPx = AudioComponent.WAVE_BAR_WIDTH_PX + AudioComponent.WAVE_BAR_GAP_PX;
+    const estimatedCount = Math.floor((waveformWidthPx + AudioComponent.WAVE_BAR_GAP_PX) / fullStepPx);
+
+    return Math.max(
+      AudioComponent.MIN_DISPLAY_WAVE_BARS_COUNT,
+      Math.min(AudioComponent.MAX_DISPLAY_WAVE_BARS_COUNT, estimatedCount)
+    );
+  }
+
+  private buildWaveBarsForDisplay(
+    sourceBars: number[] | undefined,
+    targetCount: number,
+    minHeightPx: number,
+    maxHeightPx: number
+  ): number[] {
+    const fallbackBarHeightPx = 8;
+    const fallbackBars = Array.from({ length: targetCount }, () => fallbackBarHeightPx);
 
     if (!Array.isArray(sourceBars)) {
       return fallbackBars;
     }
 
-    const normalized = sourceBars
-      .filter((bar): bar is number => Number.isFinite(bar))
-      .map((bar) => Math.max(0, Math.min(100, bar)));
+    const numericBars = sourceBars.filter((bar): bar is number => Number.isFinite(bar));
+    const maxBarValue = numericBars.reduce((max, value) => Math.max(max, value), 0);
+    const unitScale = maxBarValue <= 1.5 ? 100 : 1;
+    const normalized = numericBars.map((bar) => Math.max(0, Math.min(100, bar * unitScale)));
 
     if (normalized.length === 0) {
       return fallbackBars;
     }
 
     if (normalized.length === targetCount) {
-      return normalized.map((bar) => this.toWaveHeightPercent(bar));
+      return normalized.map((bar) => this.toWaveHeightPixels(bar, minHeightPx, maxHeightPx));
     }
 
     const result: number[] = [];
@@ -751,16 +821,14 @@ export class AudioComponent implements OnDestroy {
       const leftValue = normalized[leftIndex] ?? 0;
       const rightValue = normalized[rightIndex] ?? leftValue;
       const interpolated = leftValue + (rightValue - leftValue) * interpolationFactor;
-      result.push(this.toWaveHeightPercent(interpolated));
+      result.push(this.toWaveHeightPixels(interpolated, minHeightPx, maxHeightPx));
     }
 
     return result;
   }
 
-  private toWaveHeightPercent(value: number): number {
-    // Keep bars always visible while preserving relative waveform shape.
-    const minHeightPercent = 18;
-    const maxHeightPercent = 100;
-    return Math.round(minHeightPercent + ((maxHeightPercent - minHeightPercent) * value) / 100);
+  private toWaveHeightPixels(value: number, minHeightPx: number, maxHeightPx: number): number {
+    const bounded = Math.max(0, Math.min(100, value));
+    return Math.round(minHeightPx + ((maxHeightPx - minHeightPx) * bounded) / 100);
   }
 }
