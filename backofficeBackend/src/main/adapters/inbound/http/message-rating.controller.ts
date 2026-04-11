@@ -24,7 +24,7 @@ export class MessageRatingController {
     }
 
     if (!request.stage || !this.isValidStage(request.stage)) {
-      throw new BadRequestException('Field "stage" must be one of: raw, clean, structure, chunk.');
+      throw new BadRequestException('Field "stage" must be one of: raw, clean, normalize, structure, chunk.');
     }
 
     if (!request.stageId || request.stageId.trim().length === 0) {
@@ -52,7 +52,13 @@ export class MessageRatingController {
   }
 
   private isValidStage(stage: string): stage is RevisionStage {
-    return stage === 'raw' || stage === 'clean' || stage === 'structure' || stage === 'chunk';
+    return (
+      stage === 'raw' ||
+      stage === 'clean' ||
+      stage === 'normalize' ||
+      stage === 'structure' ||
+      stage === 'chunk'
+    );
   }
 
   private isValidMutationValue(value: string): value is RevisionMutationValue {

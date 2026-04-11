@@ -18,6 +18,7 @@ export class GetMessageRatingsUseCase {
       ratings: {
         raw: {},
         clean: {},
+        normalize: {},
         structure: {},
         chunk: {}
       }

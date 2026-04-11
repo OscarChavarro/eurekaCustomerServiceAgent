@@ -159,6 +159,7 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
   protected readonly availableViewModes: ConversationViewMode[] = [
     'raw',
     'clean',
+    'normalize',
     'structure',
     'chunk',
     'embed',
@@ -390,6 +391,10 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
       return this.t(I18N_KEYS.shell.STAGE_CLEAN);
     }
 
+    if (viewMode === 'normalize') {
+      return this.t(I18N_KEYS.shell.STAGE_NORMALIZE);
+    }
+
     if (viewMode === 'structure') {
       return this.t(I18N_KEYS.shell.STAGE_STRUCTURE);
     }
@@ -444,6 +449,10 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
 
     if (stageLabel === 'clean') {
       return this.t(I18N_KEYS.shell.STAGE_CLEAN);
+    }
+
+    if (stageLabel === 'normalize') {
+      return this.t(I18N_KEYS.shell.STAGE_NORMALIZE);
     }
 
     if (stageLabel === 'structure') {
@@ -1020,6 +1029,7 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
   protected canRateAsGoodOrBad(message: ChatMessage): boolean {
     return (
       message.reviewStage === 'clean' ||
+      message.reviewStage === 'normalize' ||
       message.reviewStage === 'structure' ||
       message.reviewStage === 'chunk'
     );

@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import type { ConversationCsvSourcePort } from '../../ports/inbound/conversation-csv-source.port';
 import type {
   ConversationsRepositoryPort,
+  NormalizedConversationStageMessage,
   RawConversationStageMessage
 } from '../../ports/outbound/conversations-repository.port';
 import type { EmbeddingPort } from '../../ports/outbound/embedding.port';
@@ -20,6 +21,7 @@ import {
 import { TOKENS } from '../../ports/tokens';
 import { ConversationChunkingService } from './conversation-chunking.service';
 import { ConversationCsvRecordTranslatorService } from './conversation-csv-record-translator.service';
+import { ConversationMediaNormalizationService } from './conversation-media-normalization.service';
 import { ConversationMessageCleaningService } from './conversation-message-cleaning.service';
 import { ConversationStructuringService } from './conversation-structuring.service';
 import type { KwoledgeIngestionCommand } from './kwoledge-ingestion.command';
@@ -105,6 +107,7 @@ type ProcessedConversationStages = {
   conversationId: string;
   contactName: string | null;
   rawMessages: RawStageMessage[];
+  normalizedMessages: RawStageMessage[];
   cleanedMessages: CleanedStageMessage[];
   structuredMessages: StructuredStageMessage[];
   chunks: ChunkStageMessage[];
@@ -131,6 +134,7 @@ export class KwoledgeIngestionUseCase {
     @Inject(TOKENS.ProcessedConversationStageStorePort)
     private readonly processedConversationStageStorePort: ProcessedConversationStageStorePort,
     private readonly conversationCsvRecordTranslatorService: ConversationCsvRecordTranslatorService,
+    private readonly conversationMediaNormalizationService: ConversationMediaNormalizationService,
     private readonly conversationMessageCleaningService: ConversationMessageCleaningService,
     private readonly conversationStructuringService: ConversationStructuringService,
     private readonly conversationChunkingService: ConversationChunkingService,
@@ -179,6 +183,21 @@ export class KwoledgeIngestionUseCase {
       );
       this.logConversationPhase(currentPosition, totalConversations, conversationId, 'clean');
 
+      const normalizedStage = await this.runNormalizationStage(
+        conversationMetadata.filePattern,
+        rawStageMessages
+      );
+      await this.conversationsRepositoryPort.upsertNormalizedMessages(
+        conversationId,
+        normalizedStage.messages
+      );
+      this.logConversationPhase(
+        currentPosition,
+        totalConversations,
+        conversationId,
+        `normalize (${normalizedStage.normalizedCount} updated, ${normalizedStage.missingCount} missing)`
+      );
+
       const conversationStructuredTurns = this.runStructuringStage(conversationCleanedMessages);
       await this.conversationsRepositoryPort.upsertStructuredMessages(
         conversationId,
@@ -213,6 +232,7 @@ export class KwoledgeIngestionUseCase {
       await this.persistProcessedConversation(
         conversationId,
         conversationRawMessages,
+        normalizedStage.messages,
         conversationCleanedMessages,
         conversationStructuredTurns,
         conversationSemanticChunks,
@@ -222,7 +242,7 @@ export class KwoledgeIngestionUseCase {
       this.rawAudioTranscriptionOrchestratorService.enqueueMany(
         this.toRawAudioTranscriptionCandidates(
           conversationId,
-          conversationRawMessages,
+          normalizedStage.messages,
           conversationMetadata.filePattern
         )
       );
@@ -256,6 +276,20 @@ export class KwoledgeIngestionUseCase {
 
   private runCleaningStage(rawMessages: RawConversationMessage[]): CleanedConversationMessage[] {
     return this.conversationMessageCleaningService.clean(rawMessages);
+  }
+
+  private async runNormalizationStage(
+    filePattern: string | null,
+    rawStageMessages: RawConversationStageMessage[]
+  ): Promise<{
+    messages: NormalizedConversationStageMessage[];
+    normalizedCount: number;
+    missingCount: number;
+  }> {
+    return this.conversationMediaNormalizationService.normalizeConversation(
+      filePattern,
+      rawStageMessages
+    );
   }
 
   private runStructuringStage(
@@ -322,6 +356,7 @@ export class KwoledgeIngestionUseCase {
   private async persistProcessedConversation(
     conversationId: string,
     rawMessages: RawConversationMessage[],
+    normalizedMessages: NormalizedConversationStageMessage[],
     cleanedMessages: CleanedConversationMessage[],
     structuredTurns: StructuredConversationTurn[],
     semanticChunks: SemanticConversationChunk[],
@@ -330,6 +365,7 @@ export class KwoledgeIngestionUseCase {
     const stages = this.buildProcessedConversationStages(
       conversationId,
       rawMessages,
+      normalizedMessages,
       cleanedMessages,
       structuredTurns,
       semanticChunks,
@@ -342,15 +378,30 @@ export class KwoledgeIngestionUseCase {
   private buildProcessedConversationStages(
     conversationId: string,
     rawMessages: RawConversationMessage[],
+    normalizedMessages: NormalizedConversationStageMessage[],
     cleanedMessages: CleanedConversationMessage[],
     structuredTurns: StructuredConversationTurn[],
     semanticChunks: SemanticConversationChunk[],
     embeddedChunks: EmbeddedChunk[]
   ): ProcessedConversationStages {
+    const sourceFileByExternalId = new Map(
+      rawMessages.map((rawMessage) => [rawMessage.externalId, rawMessage.sourceFile])
+    );
+
     return {
       conversationId,
       contactName: this.resolveConversationContactName(rawMessages),
       rawMessages: rawMessages.map((message) => this.toRawStageMessage(message)),
+      normalizedMessages: normalizedMessages.map((message) => ({
+        externalId: message.externalId,
+        sentAt: message.sentAt,
+        sender: message.sender,
+        text: message.text,
+        sourceFile: sourceFileByExternalId.get(message.externalId) ?? 'unknown',
+        rowNumber: message.rowNumber,
+        direction: message.direction,
+        normalizedFields: message.normalizedFields
+      })),
       cleanedMessages: cleanedMessages.map((message) => this.toCleanedStageMessage(message)),
       structuredMessages: structuredTurns.map((turn) => this.toStructuredStageMessage(turn)),
       chunks: semanticChunks.map((chunk) => this.toChunkStageMessage(chunk)),
@@ -474,8 +525,6 @@ export class KwoledgeIngestionUseCase {
     lastMessageDate: string | null;
     lastMessageText: string | null;
   } {
-    const contactName = this.resolveConversationContactName(rawMessages);
-
     const conversationalMessages = rawMessages.filter(
       (rawMessage) =>
         rawMessage.direction === MessageDirection.Incoming ||
@@ -505,8 +554,8 @@ export class KwoledgeIngestionUseCase {
     return {
       createdAt: new Date(),
       source: rawMessages[0]?.sourceFile ?? 'unknown',
-      filePattern: this.resolvePreferredConversationFilePattern(contactName, rawMessages),
-      contactName,
+      filePattern: this.resolveConversationFilePattern(rawMessages),
+      contactName: this.resolveConversationContactName(rawMessages),
       firstMessageDate,
       lastMessageDate,
       lastMessageText:
@@ -524,42 +573,6 @@ export class KwoledgeIngestionUseCase {
     }
 
     return null;
-  }
-
-  private resolvePreferredConversationFilePattern(
-    contactName: string | null,
-    rawMessages: RawConversationMessage[]
-  ): string | null {
-    const filePatternFromContactName = this.resolveConversationFilePatternFromContactName(
-      contactName
-    );
-    if (filePatternFromContactName) {
-      return filePatternFromContactName;
-    }
-
-    return this.resolveConversationFilePattern(rawMessages);
-  }
-
-  private resolveConversationFilePatternFromContactName(contactName: string | null): string | null {
-    if (!contactName) {
-      return null;
-    }
-
-    const normalizedContactLabel = contactName
-      .replace(/^whatsapp\s*-\s*/i, '')
-      .trim();
-    if (!normalizedContactLabel) {
-      return null;
-    }
-
-    const emojiNormalizedLabel = this.replaceEmojiLikeCharsWithUnderscore(normalizedContactLabel)
-      .replace(/[\u00A0\u2007\u202F]/g, ' ')
-      .trim();
-    if (!emojiNormalizedLabel) {
-      return null;
-    }
-
-    return `WhatsApp - ${emojiNormalizedLabel}`;
   }
 
   private resolveConversationFilePattern(rawMessages: RawConversationMessage[]): string | null {
@@ -620,31 +633,27 @@ export class KwoledgeIngestionUseCase {
 
   private toRawAudioTranscriptionCandidates(
     conversationId: string,
-    rawMessages: RawConversationMessage[],
+    normalizedMessages: NormalizedConversationStageMessage[],
     conversationFilePattern: string | null
   ): RawAudioTranscriptionCandidate[] {
-    return rawMessages.map((rawMessage) => ({
+    return normalizedMessages.map((rawMessage) => ({
       conversationId,
       rawMessageExternalId: rawMessage.externalId,
-      conversationFilePattern: conversationFilePattern ?? rawMessage.filePattern,
+      conversationFilePattern,
       rawMessageSentAt: rawMessage.sentAt,
-      normalizedFields: {
-        chatSession: rawMessage.normalizedFields.chatSession,
-        messageDate: rawMessage.normalizedFields.messageDate,
-        attachment: rawMessage.normalizedFields.attachment
-      }
+      normalizedFields: { ...(rawMessage.normalizedFields ?? {}) }
     }));
   }
 
   private resolveRawMessageFilePattern(rawMessage: RawConversationMessage): string | null {
-    const filePatternFromSourceFile = this.normalizeFilePatternFromSourceFile(
-      rawMessage.filePattern
+    const filePatternFromChatSession = this.normalizeFilePatternFromChatSession(
+      rawMessage.normalizedFields.chatSession
     );
-    if (filePatternFromSourceFile) {
-      return filePatternFromSourceFile;
+    if (filePatternFromChatSession) {
+      return filePatternFromChatSession;
     }
 
-    return this.normalizeFilePatternFromChatSession(rawMessage.normalizedFields.chatSession);
+    return this.normalizeFilePatternFromSourceFile(rawMessage.filePattern);
   }
 
   private normalizeFilePatternFromSourceFile(pattern: string | null): string | null {

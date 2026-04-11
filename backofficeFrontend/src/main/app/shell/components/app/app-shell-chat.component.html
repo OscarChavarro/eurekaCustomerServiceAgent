@@ -379,7 +379,7 @@
               [class.incoming]="message.direction === 'incoming'"
               [class.outgoing]="message.direction === 'outgoing'"
               [class.system]="message.direction === 'system'"
-              [class.has-audio]="!!message.audioFileName"
+              [class.has-audio]="!!message.audioFileName || !!message.audioResourceUrl"
               [class.has-rating]="!!selectedReaction(currentConversation.id, message)"
               [class.group-start]="isGroupStart(currentConversation.messages, $index)"
               [class.group-end]="isGroupEnd(currentConversation.messages, $index)"
@@ -451,7 +451,7 @@
               @if (message.mediaUrl) {
                 <app-image [mediaUrl]="message.mediaUrl" />
               }
-              @if (message.audioFileName) {
+              @if (message.audioFileName || message.audioResourceUrl) {
                 <app-audio
                   [messageId]="message.id"
                   [direction]="message.direction"

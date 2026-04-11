@@ -9,7 +9,7 @@ import { MongoClientProvider } from './mongo-client.provider';
 type MongoMessageRatingDocument = {
   _id: string;
   conversationId: string;
-  stage: 'raw' | 'clean' | 'structure' | 'chunk';
+  stage: 'raw' | 'clean' | 'normalize' | 'structure' | 'chunk';
   stageId: string;
   rating: 'warning' | 'good' | 'bad';
   ratedAt: Date;

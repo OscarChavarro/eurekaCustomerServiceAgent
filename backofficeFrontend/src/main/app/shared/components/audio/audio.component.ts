@@ -17,7 +17,6 @@ import {
 import { I18nService } from '../../../core/i18n/services/i18n.service';
 import { I18nStateService } from '../../../core/i18n/services/i18n-state.service';
 import { I18N_KEYS } from '../../../core/i18n/translations/i18n-keys.const';
-import { NameFixesForIMazingMediaDump } from '../../services/name-fixes-for-imazing-media-dump.service';
 import type { ChatMessageDirection } from '../../../shell/services/view-stages/conversation-view.types';
 
 type TriedResourceLink = {
@@ -33,7 +32,6 @@ type TriedResourceLink = {
   styleUrl: './audio.component.sass'
 })
 export class AudioComponent implements AfterViewInit, OnDestroy {
-  private static readonly RESOURCE_HEAD_TIMEOUT_MS = 4_500;
   private static readonly DEFAULT_DISPLAY_WAVE_BARS_COUNT = 64;
   private static readonly MIN_DISPLAY_WAVE_BARS_COUNT = 36;
   private static readonly MAX_DISPLAY_WAVE_BARS_COUNT = 320;
@@ -55,16 +53,21 @@ export class AudioComponent implements AfterViewInit, OnDestroy {
   protected readonly isPlaying = signal<boolean>(false);
   protected readonly currentTimeSeconds = signal<number>(0);
   protected readonly totalTimeSeconds = signal<number>(0);
-  protected readonly resourceCheckStatus = signal<'idle' | 'checking' | 'available' | 'missing'>('idle');
+  protected readonly resourceCheckStatus = signal<'idle' | 'available' | 'missing'>('idle');
   protected readonly errorTooltipOpen = signal<boolean>(false);
   protected readonly copyFeedbackVisible = signal<boolean>(false);
   protected readonly failedResourceUrlEncoded = signal<string | null>(null);
   protected readonly attemptedResourceUrlsEncoded = signal<string[]>([]);
-  private readonly correctedResourceUrlEncoded = signal<string | null>(null);
   protected readonly failedResourceUrlDecoded = computed(() =>
     this.decodeHttpUrl(this.failedResourceUrlEncoded())
   );
-  protected readonly hasPlayableResource = computed(() => this.resolvePlayableUrl() !== null);
+  protected readonly hasPlayableResource = computed(() => {
+    if (this.hasMissingResource()) {
+      return false;
+    }
+
+    return this.resolveCandidateUrl() !== null;
+  });
   protected readonly hasMissingResource = computed(() => this.resourceCheckStatus() === 'missing');
   protected readonly attemptedResourceLinks = computed<TriedResourceLink[]>(() =>
     this.attemptedResourceUrlsEncoded().map((encoded) => ({
@@ -106,13 +109,11 @@ export class AudioComponent implements AfterViewInit, OnDestroy {
 
   private audioElement: HTMLAudioElement | null = null;
   private progressAnimationFrameId: number | null = null;
-  private resourceCheckRequestId = 0;
   private copyFeedbackTimeoutId: number | null = null;
   private pendingSeekPercent: number | null = null;
   private resizeObserver: ResizeObserver | null = null;
   private readonly i18nService = inject(I18nService);
   private readonly i18nStateService = inject(I18nStateService);
-  private readonly nameFixesForIMazingMediaDump = inject(NameFixesForIMazingMediaDump);
   private readonly onLoadedMetadata = (): void => {
     const audio = this.audioElement;
     if (!audio || !Number.isFinite(audio.duration)) {
@@ -172,17 +173,14 @@ export class AudioComponent implements AfterViewInit, OnDestroy {
         this.resourceCheckStatus.set('idle');
         this.failedResourceUrlEncoded.set(null);
         this.attemptedResourceUrlsEncoded.set([]);
-        this.correctedResourceUrlEncoded.set(null);
         this.resetPlaybackState();
         this.destroyAudioElement();
         return;
       }
 
-      this.resourceCheckStatus.set('checking');
+      this.resourceCheckStatus.set('available');
       this.failedResourceUrlEncoded.set(null);
-      this.attemptedResourceUrlsEncoded.set(this.buildAttemptedResourceUrls(candidateUrl));
-      this.correctedResourceUrlEncoded.set(null);
-      void this.checkResourceAvailability(candidateUrl);
+      this.attemptedResourceUrlsEncoded.set([candidateUrl]);
     });
 
     effect(() => {
@@ -393,16 +391,16 @@ export class AudioComponent implements AfterViewInit, OnDestroy {
   }
 
   private resolvePlayableUrl(): string | null {
-    if (this.resourceCheckStatus() !== 'available') {
+    if (this.resourceCheckStatus() === 'missing') {
       return null;
     }
 
-    return this.correctedResourceUrlEncoded() ?? this.resolveCandidateUrl();
+    return this.resolveCandidateUrl();
   }
 
   private resolveCandidateUrl(): string | null {
     const resourceUrl = this.resourceUrl()?.trim();
-    if (!resourceUrl || !this.nameFixesForIMazingMediaDump.isSupportedAudioResourceUrl(resourceUrl)) {
+    if (!resourceUrl) {
       return null;
     }
 
@@ -517,185 +515,6 @@ export class AudioComponent implements AfterViewInit, OnDestroy {
 
     cancelAnimationFrame(this.progressAnimationFrameId);
     this.progressAnimationFrameId = null;
-  }
-
-  private async checkResourceAvailability(url: string): Promise<void> {
-    const requestId = ++this.resourceCheckRequestId;
-
-    try {
-      const response = await fetch(url, {
-        method: 'HEAD',
-        signal: AbortSignal.timeout(AudioComponent.RESOURCE_HEAD_TIMEOUT_MS)
-      });
-
-      if (requestId !== this.resourceCheckRequestId) {
-        return;
-      }
-
-      if (response.status === 200) {
-        this.resourceCheckStatus.set('available');
-        this.failedResourceUrlEncoded.set(null);
-        return;
-      }
-
-      if (response.status === 404) {
-        const correctedUrl = await this.findAvailableAlternativeUrl(url);
-        if (requestId !== this.resourceCheckRequestId) {
-          return;
-        }
-
-        if (correctedUrl) {
-          this.correctedResourceUrlEncoded.set(correctedUrl);
-          this.resourceCheckStatus.set('available');
-          this.failedResourceUrlEncoded.set(null);
-          return;
-        }
-
-        this.resourceCheckStatus.set('missing');
-        this.failedResourceUrlEncoded.set(url);
-        return;
-      }
-
-      this.resourceCheckStatus.set('available');
-      this.failedResourceUrlEncoded.set(null);
-    } catch (error) {
-      if (requestId !== this.resourceCheckRequestId) {
-        return;
-      }
-
-      if (this.isTimeoutError(error)) {
-        const correctedUrl = await this.findAvailableAlternativeUrl(url);
-        if (requestId !== this.resourceCheckRequestId) {
-          return;
-        }
-
-        if (correctedUrl) {
-          this.correctedResourceUrlEncoded.set(correctedUrl);
-          this.resourceCheckStatus.set('available');
-          this.failedResourceUrlEncoded.set(null);
-          return;
-        }
-
-        this.resourceCheckStatus.set('missing');
-        this.failedResourceUrlEncoded.set(url);
-        return;
-      }
-
-      // HEAD can fail due to CORS while the media file still exists and is playable.
-      // First probe the current URL; if it is not available, retry alternate extensions.
-      const probeStatus = await this.probeAudioReachability(
-        url,
-        AudioComponent.RESOURCE_HEAD_TIMEOUT_MS
-      );
-      if (requestId !== this.resourceCheckRequestId) {
-        return;
-      }
-
-      if (probeStatus === 'available') {
-        this.resourceCheckStatus.set('available');
-        this.failedResourceUrlEncoded.set(null);
-        return;
-      }
-
-      const correctedUrl = await this.findAvailableAlternativeUrl(url);
-      if (requestId !== this.resourceCheckRequestId) {
-        return;
-      }
-
-      if (correctedUrl) {
-        this.correctedResourceUrlEncoded.set(correctedUrl);
-        this.resourceCheckStatus.set('available');
-        this.failedResourceUrlEncoded.set(null);
-        return;
-      }
-
-      this.resourceCheckStatus.set('missing');
-      this.failedResourceUrlEncoded.set(url);
-    }
-  }
-
-  private async findAvailableAlternativeUrl(url: string): Promise<string | null> {
-    const alternatives = this.nameFixesForIMazingMediaDump.getAlternativeAudioUrls(url);
-
-    for (const candidateUrl of alternatives) {
-      try {
-        const response = await fetch(candidateUrl, {
-          method: 'HEAD',
-          signal: AbortSignal.timeout(AudioComponent.RESOURCE_HEAD_TIMEOUT_MS)
-        });
-
-        if (response.status === 200) {
-          return candidateUrl;
-        }
-      } catch {
-        // ignore and fallback to media probe below
-      }
-
-      const probeStatus = await this.probeAudioReachability(
-        candidateUrl,
-        AudioComponent.RESOURCE_HEAD_TIMEOUT_MS
-      );
-      if (probeStatus === 'available') {
-        return candidateUrl;
-      }
-    }
-
-    return null;
-  }
-
-  private buildAttemptedResourceUrls(url: string): string[] {
-    const alternatives = this.nameFixesForIMazingMediaDump.getAlternativeAudioUrls(url);
-    return [url, ...alternatives].filter(
-      (candidate, index, array) => array.indexOf(candidate) === index
-    );
-  }
-
-  private probeAudioReachability(
-    url: string,
-    timeoutMs: number
-  ): Promise<'available' | 'missing'> {
-    return new Promise((resolve) => {
-      const probeAudio = new Audio();
-      let settled = false;
-      let timeoutId: number | null = null;
-
-      const finalize = (status: 'available' | 'missing'): void => {
-        if (settled) {
-          return;
-        }
-
-        settled = true;
-        if (timeoutId !== null) {
-          window.clearTimeout(timeoutId);
-        }
-
-        probeAudio.removeEventListener('loadedmetadata', onReady);
-        probeAudio.removeEventListener('canplay', onReady);
-        probeAudio.removeEventListener('error', onError);
-        probeAudio.src = '';
-        resolve(status);
-      };
-
-      const onReady = (): void => finalize('available');
-      const onError = (): void => finalize('missing');
-
-      probeAudio.preload = 'metadata';
-      probeAudio.addEventListener('loadedmetadata', onReady);
-      probeAudio.addEventListener('canplay', onReady);
-      probeAudio.addEventListener('error', onError);
-      timeoutId = window.setTimeout(() => finalize('missing'), timeoutMs);
-      probeAudio.src = url;
-      probeAudio.load();
-    });
-  }
-
-  private isTimeoutError(error: unknown): boolean {
-    if (!error || typeof error !== 'object') {
-      return false;
-    }
-
-    const errorName = 'name' in error ? String(error.name) : '';
-    return errorName === 'TimeoutError' || errorName === 'AbortError';
   }
 
   private decodeHttpUrl(url: string | null): string {

@@ -245,6 +245,10 @@ export const SHELL_TRANSLATIONS = {
     en: 'Clean',
     es: 'Limpio'
   },
+  STAGE_NORMALIZE: {
+    en: 'Normalize',
+    es: 'Normalizar'
+  },
   STAGE_STRUCTURE: {
     en: 'Structure',
     es: 'Estructura'

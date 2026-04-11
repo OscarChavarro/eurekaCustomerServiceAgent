@@ -10,29 +10,36 @@ import type { ChatMessage } from './conversation-view.types';
 import { MessageBubbleFactory } from './message-bubble.factory';
 
 @Injectable({ providedIn: 'root' })
-export class RawConversationStageRenderer implements ConversationStageRenderer {
-  readonly mode = 'raw' as const;
+export class NormalizeConversationStageRenderer implements ConversationStageRenderer {
+  readonly mode = 'normalize' as const;
   private readonly messageBubbleFactory = inject(MessageBubbleFactory);
   private readonly frontendSecretsService = inject(FrontendSecretsService);
   private readonly audioExtensions = new Set(['opus', 'mp3', 'm2a', 'm4a']);
   private static readonly WHATSAPP_PREFIX = /^whatsapp\s*-\s*/i;
 
   render(document: BackendConversationDocument): ChatMessage[] {
+    const normalizedByExternalId = new Map<string, BackendConversationRawMessage>();
     const conversationFilePattern = this.resolveConversationFilePattern(document.filePattern);
 
-    return (document.rawMessages ?? []).map((rawMessage) =>
-      this.messageBubbleFactory.createFromRaw(rawMessage, {
-        text: rawMessage.text,
-        mediaUrl: this.toOptionalString(rawMessage.normalizedFields?.['assetUrl']),
-        audioFileName: this.resolveAudioAttachmentName(rawMessage.normalizedFields?.attachment),
-        audioResourceUrl: this.resolveAudioResourceUrl(rawMessage, conversationFilePattern),
-        audioTranscription: this.resolveAudioTranscription(rawMessage.audioDetails),
-        audioWaveBars: this.resolveAudioWaveBars(rawMessage.audioDetails),
-        stageLabel: 'raw',
-        reviewStage: 'raw',
-        reviewStageId: rawMessage.externalId
-      })
-    );
+    (document.normalizedMessages ?? []).forEach((normalizedMessage) => {
+      normalizedByExternalId.set(normalizedMessage.externalId, normalizedMessage);
+    });
+
+    return (document.rawMessages ?? []).map((rawMessage) => {
+      const normalizedMessage = normalizedByExternalId.get(rawMessage.externalId) ?? rawMessage;
+
+      return this.messageBubbleFactory.createFromRaw(normalizedMessage, {
+        text: normalizedMessage.text,
+        mediaUrl: this.toOptionalString(normalizedMessage.normalizedFields?.['assetUrl']),
+        audioFileName: this.resolveAudioAttachmentName(normalizedMessage.normalizedFields?.attachment),
+        audioResourceUrl: this.resolveAudioResourceUrl(normalizedMessage, conversationFilePattern),
+        audioTranscription: this.resolveAudioTranscription(normalizedMessage.audioDetails),
+        audioWaveBars: this.resolveAudioWaveBars(normalizedMessage.audioDetails),
+        stageLabel: 'normalize',
+        reviewStage: 'normalize',
+        reviewStageId: normalizedMessage.externalId
+      });
+    });
   }
 
   private toOptionalString(value: unknown): string | undefined {
@@ -158,8 +165,8 @@ export class RawConversationStageRenderer implements ConversationStageRenderer {
       return null;
     }
 
-    if (RawConversationStageRenderer.WHATSAPP_PREFIX.test(trimmed)) {
-      const label = trimmed.replace(RawConversationStageRenderer.WHATSAPP_PREFIX, '').trim();
+    if (NormalizeConversationStageRenderer.WHATSAPP_PREFIX.test(trimmed)) {
+      const label = trimmed.replace(NormalizeConversationStageRenderer.WHATSAPP_PREFIX, '').trim();
       return label ? `WhatsApp - ${label}` : null;
     }
 
@@ -179,7 +186,7 @@ export class RawConversationStageRenderer implements ConversationStageRenderer {
   }
 
   private extractConversationLabelFromPattern(pattern: string): string {
-    const label = pattern.replace(RawConversationStageRenderer.WHATSAPP_PREFIX, '').trim();
+    const label = pattern.replace(NormalizeConversationStageRenderer.WHATSAPP_PREFIX, '').trim();
     return label.length > 0 ? label : pattern.trim();
   }
 

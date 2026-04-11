@@ -7,6 +7,7 @@ export type GetMessageRatingsResult = {
   ratings: {
     raw: StageRatingsMap;
     clean: StageRatingsMap;
+    normalize: StageRatingsMap;
     structure: StageRatingsMap;
     chunk: StageRatingsMap;
   };

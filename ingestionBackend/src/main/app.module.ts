@@ -19,6 +19,7 @@ import { RawAudioTranscriptionOrchestratorService } from './application/services
 import { ConversationChunkingService } from './application/use-cases/kwoledge-ingestion/conversation-chunking.service';
 import { ConversationCsvRecordTranslatorService } from './application/use-cases/kwoledge-ingestion/conversation-csv-record-translator.service';
 import { ConversationMessageCleaningService } from './application/use-cases/kwoledge-ingestion/conversation-message-cleaning.service';
+import { ConversationMediaNormalizationService } from './application/use-cases/kwoledge-ingestion/conversation-media-normalization.service';
 import { ConversationStructuringService } from './application/use-cases/kwoledge-ingestion/conversation-structuring.service';
 import { FixFilePatternUseCase } from './application/use-cases/fix-file-pattern/fix-file-pattern.use-case';
 import { KwoledgeIngestionUseCase } from './application/use-cases/kwoledge-ingestion/kwoledge-ingestion.use-case';
@@ -35,6 +36,7 @@ import { ProcessedConversationsFolderStartupValidator } from './infrastructure/b
 import { QdrantConnectivityStartupValidator } from './infrastructure/bootstrap/validators/qdrant-connectivity-startup.validator';
 import { WhisperFfmpegStartupValidator } from './infrastructure/bootstrap/validators/whisper-ffmpeg-startup.validator';
 import { StaticAssetsBaseUrlAdapter } from './infrastructure/config/adapters/static-assets-base-url.adapter';
+import { FetchAssetResourceProbeAdapter } from './infrastructure/http/fetch-asset-resource-probe.adapter';
 import { ServiceConfig } from './infrastructure/config/service.config';
 import { SecretsConfig } from './infrastructure/config/settings/secrets.config';
 import { SettingsConfig } from './infrastructure/config/settings/settings.config';
@@ -65,6 +67,7 @@ import { SettingsConfig } from './infrastructure/config/settings/settings.config
     ImazingCsvFileNameService,
     ConversationCsvRecordTranslatorService,
     ConversationMessageCleaningService,
+    ConversationMediaNormalizationService,
     ConversationStructuringService,
     ConversationChunkingService,
     FixFilePatternUseCase,
@@ -84,6 +87,10 @@ import { SettingsConfig } from './infrastructure/config/settings/settings.config
     {
       provide: TOKENS.StaticAssetsBaseUrlPort,
       useExisting: StaticAssetsBaseUrlAdapter
+    },
+    {
+      provide: TOKENS.AssetResourceProbePort,
+      useClass: FetchAssetResourceProbeAdapter
     },
     {
       provide: TOKENS.ConversationCsvSourcePort,

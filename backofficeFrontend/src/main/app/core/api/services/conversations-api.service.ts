@@ -9,6 +9,7 @@ export type BackendConversationRawMessage = {
   direction: string;
   text: string;
   sentAt: string | null;
+  filePattern?: string | null;
   audioDetails?: {
     type?: 'empty' | 'voice' | 'noise' | 'music' | null;
     transcription?: string | null;
@@ -57,6 +58,7 @@ export type BackendConversationDocument = {
   filePattern?: string | null;
   sourceFile?: string | null;
   rawMessages?: BackendConversationRawMessage[];
+  normalizedMessages?: BackendConversationRawMessage[];
   cleanedMessages?: BackendConversationCleanMessage[];
   structuredMessages?: BackendConversationStructuredMessage[];
   chunkedMessages?: BackendConversationChunkMessage[];
@@ -73,7 +75,7 @@ export type PhonePrefixLookupResponse = {
   subzoneName: string | null;
 };
 
-export type RevisionStage = 'raw' | 'clean' | 'structure' | 'chunk';
+export type RevisionStage = 'raw' | 'clean' | 'normalize' | 'structure' | 'chunk';
 export type MessageRatingValue = 'warning' | 'good' | 'bad' | 'cleared';
 
 export type RateMessageRatingRequest = {
@@ -97,6 +99,7 @@ export type MessageRatingsResponse = {
   ratings: {
     raw: Record<string, 'warning'>;
     clean: Record<string, 'good' | 'bad'>;
+    normalize: Record<string, 'good' | 'bad'>;
     structure: Record<string, 'good' | 'bad'>;
     chunk: Record<string, 'good' | 'bad'>;
   };

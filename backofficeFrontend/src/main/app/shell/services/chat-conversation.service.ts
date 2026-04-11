@@ -22,6 +22,7 @@ import {
 } from '../../core/phone/phone-normalization.utils';
 import { ChunkConversationStageRenderer } from './view-stages/chunk-conversation-stage.renderer';
 import { CleanConversationStageRenderer } from './view-stages/clean-conversation-stage.renderer';
+import { NormalizeConversationStageRenderer } from './view-stages/normalize-conversation-stage.renderer';
 import type { ConversationStageRenderer } from './view-stages/conversation-stage-renderer.interface';
 import { formatDateLabel, formatSentAt } from './view-stages/conversation-stage-renderer.utils';
 import { EmbedConversationStageRenderer } from './view-stages/embed-conversation-stage.renderer';
@@ -64,6 +65,7 @@ export class ChatConversationService {
   private readonly i18nStateService = inject(I18nStateService);
   private readonly rawConversationStageRenderer = inject(RawConversationStageRenderer);
   private readonly cleanConversationStageRenderer = inject(CleanConversationStageRenderer);
+  private readonly normalizeConversationStageRenderer = inject(NormalizeConversationStageRenderer);
   private readonly structureConversationStageRenderer = inject(StructureConversationStageRenderer);
   private readonly chunkConversationStageRenderer = inject(ChunkConversationStageRenderer);
   private readonly embedConversationStageRenderer = inject(EmbedConversationStageRenderer);
@@ -86,6 +88,7 @@ export class ChatConversationService {
   private readonly stageRenderers: Record<ConversationViewMode, ConversationStageRenderer> = {
     raw: this.rawConversationStageRenderer,
     clean: this.cleanConversationStageRenderer,
+    normalize: this.normalizeConversationStageRenderer,
     structure: this.structureConversationStageRenderer,
     chunk: this.chunkConversationStageRenderer,
     embed: this.embedConversationStageRenderer
@@ -236,6 +239,7 @@ export class ChatConversationService {
       const currentRatings = current[conversationId] ?? {
         raw: {},
         clean: {},
+        normalize: {},
         structure: {},
         chunk: {}
       };

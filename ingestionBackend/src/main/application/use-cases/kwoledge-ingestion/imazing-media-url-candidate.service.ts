@@ -1,9 +1,6 @@
-import { Injectable } from '@angular/core';
-
 type SupportedAudioExtension = 'opus' | 'mp3' | 'm2a' | 'm4a';
 
-@Injectable({ providedIn: 'root' })
-export class NameFixesForIMazingMediaDump {
+export class ImazingMediaUrlCandidateService {
   private static readonly SUPPORTED_AUDIO_EXTENSIONS: readonly SupportedAudioExtension[] = [
     'opus',
     'mp3',
@@ -18,13 +15,14 @@ export class NameFixesForIMazingMediaDump {
     return this.extractAudioExtension(url) !== null;
   }
 
-  public getAlternativeAudioUrls(url: string): string[] {
+  public getCandidateAudioUrls(url: string): string[] {
     const currentExtension = this.extractAudioExtension(url);
     if (!currentExtension) {
-      return [];
+      return [url];
     }
 
-    const firstPassAlternatives = NameFixesForIMazingMediaDump.SUPPORTED_AUDIO_EXTENSIONS
+    const canonicalEncodedVariant = this.buildCanonicalEncodedVariant(url);
+    const firstPassAlternatives = ImazingMediaUrlCandidateService.SUPPORTED_AUDIO_EXTENSIONS
       .filter((extension) => extension !== currentExtension)
       .map((extension) => this.replaceAudioExtension(url, extension))
       .filter((candidate): candidate is string => candidate !== null);
@@ -32,15 +30,14 @@ export class NameFixesForIMazingMediaDump {
     const thirdPassWithDirectionalWrappedContact =
       this.buildAlternativesWithDirectionalWrappedContact(url);
 
-    const uniqueCandidates = [
+    return [
+      url,
+      canonicalEncodedVariant,
       ...firstPassAlternatives,
       ...secondPassWithNbsp,
       ...thirdPassWithDirectionalWrappedContact
-    ].filter(
-      (candidate, index, array) => array.indexOf(candidate) === index
-    );
-
-    return uniqueCandidates.filter((candidate) => candidate !== url);
+    ].filter((candidate): candidate is string => !!candidate)
+      .filter((candidate, index, array) => array.indexOf(candidate) === index);
   }
 
   private extractAudioExtension(url: string): SupportedAudioExtension | null {
@@ -49,7 +46,7 @@ export class NameFixesForIMazingMediaDump {
     const extension = match?.[1] ?? '';
 
     if (
-      NameFixesForIMazingMediaDump.SUPPORTED_AUDIO_EXTENSIONS.includes(
+      ImazingMediaUrlCandidateService.SUPPORTED_AUDIO_EXTENSIONS.includes(
         extension as SupportedAudioExtension
       )
     ) {
@@ -72,14 +69,14 @@ export class NameFixesForIMazingMediaDump {
 
   private buildAlternativesWithNbspBaseName(url: string): string[] {
     const withNbspContactLabel = this.replaceContactLabel(url, (contactLabel) =>
-      contactLabel.replace(/ /g, NameFixesForIMazingMediaDump.NON_BREAKING_SPACE_UNICODE)
+      contactLabel.replace(/ /g, ImazingMediaUrlCandidateService.NON_BREAKING_SPACE_UNICODE)
     );
     if (!withNbspContactLabel) {
       return [];
     }
 
     const withNbspCurrentExtension = withNbspContactLabel;
-    const withNbspOtherExtensions = NameFixesForIMazingMediaDump.SUPPORTED_AUDIO_EXTENSIONS
+    const withNbspOtherExtensions = ImazingMediaUrlCandidateService.SUPPORTED_AUDIO_EXTENSIONS
       .map((extension) => this.replaceAudioExtension(withNbspContactLabel, extension))
       .filter((candidate): candidate is string => candidate !== null);
 
@@ -94,7 +91,7 @@ export class NameFixesForIMazingMediaDump {
     );
     const wrappedFromNbsp = this.replaceContactLabel(url, (contactLabel) =>
       this.wrapContactLabelWithDirectionalUnicode(
-        contactLabel.replace(/ /g, NameFixesForIMazingMediaDump.NON_BREAKING_SPACE_UNICODE)
+        contactLabel.replace(/ /g, ImazingMediaUrlCandidateService.NON_BREAKING_SPACE_UNICODE)
       )
     );
     const wrappedCandidates = [wrappedFromOriginal, wrappedFromNbsp].filter(
@@ -103,7 +100,7 @@ export class NameFixesForIMazingMediaDump {
 
     const withExtensions = wrappedCandidates.flatMap((candidate) => [
       candidate,
-      ...NameFixesForIMazingMediaDump.SUPPORTED_AUDIO_EXTENSIONS
+      ...ImazingMediaUrlCandidateService.SUPPORTED_AUDIO_EXTENSIONS
         .map((extension) => this.replaceAudioExtension(candidate, extension))
         .filter((value): value is string => !!value)
     ]);
@@ -128,8 +125,14 @@ export class NameFixesForIMazingMediaDump {
 
     const folderIndex = encodedSegments.length - 2;
     const fileIndex = encodedSegments.length - 1;
-    const decodedFolder = this.decodeUrlComponentSafely(encodedSegments[folderIndex]);
-    const decodedFileName = this.decodeUrlComponentSafely(encodedSegments[fileIndex]);
+    const encodedFolder = encodedSegments[folderIndex];
+    const encodedFileName = encodedSegments[fileIndex];
+    if (!encodedFolder || !encodedFileName) {
+      return null;
+    }
+
+    const decodedFolder = this.decodeUrlComponentSafely(encodedFolder);
+    const decodedFileName = this.decodeUrlComponentSafely(encodedFileName);
 
     const contactLabel = this.extractContactLabelFromFolder(decodedFolder);
     if (!contactLabel) {
@@ -156,7 +159,7 @@ export class NameFixesForIMazingMediaDump {
   }
 
   private wrapContactLabelWithDirectionalUnicode(contactLabel: string): string {
-    return `${NameFixesForIMazingMediaDump.LEFT_TO_RIGHT_EMBEDDING_UNICODE}${contactLabel}${NameFixesForIMazingMediaDump.POP_DIRECTIONAL_FORMATTING_UNICODE}`;
+    return `${ImazingMediaUrlCandidateService.LEFT_TO_RIGHT_EMBEDDING_UNICODE}${contactLabel}${ImazingMediaUrlCandidateService.POP_DIRECTIONAL_FORMATTING_UNICODE}`;
   }
 
   private replacePathLastSegmentExtension(
@@ -203,7 +206,7 @@ export class NameFixesForIMazingMediaDump {
   } | null {
     const absoluteMatch = baseUrl.match(/^(https?:\/\/[^/]+)(\/.*)?$/i);
     if (absoluteMatch) {
-      const originPrefix = absoluteMatch[1];
+      const originPrefix = absoluteMatch[1] ?? '';
       const path = absoluteMatch[2] ?? '/';
       const leadingSlash = path.startsWith('/') ? '/' : '';
       const encodedSegments = path.replace(/^\/+/, '').split('/').filter((segment) => segment.length > 0);
@@ -234,5 +237,28 @@ export class NameFixesForIMazingMediaDump {
 
     const withoutPrefix = trimmed.replace(/^whatsapp\s*-\s*/i, '').trim();
     return withoutPrefix.length > 0 ? withoutPrefix : null;
+  }
+
+  private buildCanonicalEncodedVariant(url: string): string | null {
+    const [base, suffix] = this.splitUrlBeforeQueryOrHash(url);
+    const decomposition = this.decomposeBaseUrl(base);
+    if (!decomposition) {
+      return null;
+    }
+
+    const { originPrefix, leadingSlash, encodedSegments } = decomposition;
+    if (encodedSegments.length === 0) {
+      return null;
+    }
+
+    const canonicallyEncodedSegments = encodedSegments.map((segment) =>
+      encodeURIComponent(this.decodeUrlComponentSafely(segment))
+    );
+    const canonicalBase = `${originPrefix}${leadingSlash}${canonicallyEncodedSegments.join('/')}`;
+    if (canonicalBase === base) {
+      return null;
+    }
+
+    return `${canonicalBase}${suffix}`;
   }
 }

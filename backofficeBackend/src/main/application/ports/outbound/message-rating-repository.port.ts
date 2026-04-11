@@ -1,4 +1,4 @@
-export type RevisionStage = 'raw' | 'clean' | 'structure' | 'chunk';
+export type RevisionStage = 'raw' | 'clean' | 'normalize' | 'structure' | 'chunk';
 export type RevisionRatingValue = 'warning' | 'good' | 'bad';
 export type RevisionMutationValue = RevisionRatingValue | 'cleared';
 

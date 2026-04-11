@@ -4,6 +4,7 @@ import type {
   CleanedConversationStageMessage,
   ConversationMetadata,
   ConversationsRepositoryPort,
+  NormalizedConversationStageMessage,
   RawConversationAudioDetails,
   RawConversationAudioMessage,
   RawConversationStageMessage,
@@ -20,6 +21,7 @@ type MongoConversationDocument = {
   lastMessageDate: string | null;
   lastMessageText: string | null;
   rawMessages: RawConversationStageMessage[];
+  normalizedMessages: NormalizedConversationStageMessage[];
   cleanedMessages: CleanedConversationStageMessage[];
   structuredMessages: StructuredConversationStageMessage[];
   chunkedMessages: ChunkedConversationStageMessage[];
@@ -65,6 +67,7 @@ export class MongoConversationsRepositoryAdapter implements ConversationsReposit
           'metadata.source': metadata.source
         },
         $setOnInsert: {
+          normalizedMessages: [],
           cleanedMessages: [],
           structuredMessages: [],
           chunkedMessages: [],
@@ -96,6 +99,41 @@ export class MongoConversationsRepositoryAdapter implements ConversationsReposit
           lastMessageDate: null,
           lastMessageText: null,
           rawMessages: [],
+          normalizedMessages: [],
+          structuredMessages: [],
+          chunkedMessages: [],
+          metadata: {
+            createdAt: new Date(),
+            source: 'unknown'
+          }
+        }
+      },
+      { upsert: true }
+    );
+  }
+
+  public async upsertNormalizedMessages(
+    conversationId: string,
+    normalizedMessages: NormalizedConversationStageMessage[]
+  ): Promise<void> {
+    const collection =
+      await this.mongoClientProvider.getConversationsCollection<MongoConversationDocument>();
+
+    await collection.updateOne(
+      { _id: conversationId },
+      {
+        $set: {
+          normalizedMessages
+        },
+        $setOnInsert: {
+          sourceFile: 'unknown',
+          filePattern: null,
+          contactName: null,
+          firstMessageDate: null,
+          lastMessageDate: null,
+          lastMessageText: null,
+          rawMessages: [],
+          cleanedMessages: [],
           structuredMessages: [],
           chunkedMessages: [],
           metadata: {
@@ -129,6 +167,7 @@ export class MongoConversationsRepositoryAdapter implements ConversationsReposit
           lastMessageDate: null,
           lastMessageText: null,
           rawMessages: [],
+          normalizedMessages: [],
           cleanedMessages: [],
           chunkedMessages: [],
           metadata: {
@@ -162,6 +201,7 @@ export class MongoConversationsRepositoryAdapter implements ConversationsReposit
           lastMessageDate: null,
           lastMessageText: null,
           rawMessages: [],
+          normalizedMessages: [],
           cleanedMessages: [],
           structuredMessages: [],
           metadata: {
@@ -193,6 +233,17 @@ export class MongoConversationsRepositoryAdapter implements ConversationsReposit
         }
       }
     );
+    await collection.updateOne(
+      {
+        _id: conversationId,
+        'normalizedMessages.externalId': rawMessageExternalId
+      },
+      {
+        $set: {
+          'normalizedMessages.$.audioDetails': audioDetails
+        }
+      }
+    );
   }
 
   public async updateConversationFilePattern(
@@ -221,8 +272,25 @@ export class MongoConversationsRepositoryAdapter implements ConversationsReposit
     const rawAudioMessages = await collection
       .aggregate<RawAudioMessageProjection>([
         {
+          $addFields: {
+            normalizedMessages: { $ifNull: ['$normalizedMessages', []] },
+            rawMessages: { $ifNull: ['$rawMessages', []] }
+          }
+        },
+        {
+          $addFields: {
+            audioSourceMessages: {
+              $cond: [
+                { $gt: [{ $size: '$normalizedMessages' }, 0] },
+                '$normalizedMessages',
+                '$rawMessages'
+              ]
+            }
+          }
+        },
+        {
           $match: {
-            rawMessages: {
+            audioSourceMessages: {
               $elemMatch: {
                 'normalizedFields.attachment': {
                   $type: 'string',
@@ -233,11 +301,11 @@ export class MongoConversationsRepositoryAdapter implements ConversationsReposit
           }
         },
         {
-          $unwind: '$rawMessages'
+          $unwind: '$audioSourceMessages'
         },
         {
           $match: {
-            'rawMessages.normalizedFields.attachment': {
+            'audioSourceMessages.normalizedFields.attachment': {
               $type: 'string',
               $regex: audioAttachmentRegex
             }
@@ -249,10 +317,10 @@ export class MongoConversationsRepositoryAdapter implements ConversationsReposit
             conversationId: '$_id',
             conversationFilePattern: '$filePattern',
             conversationContactName: '$contactName',
-            rawMessageExternalId: '$rawMessages.externalId',
-            rawMessageSentAt: '$rawMessages.sentAt',
-            normalizedFields: '$rawMessages.normalizedFields',
-            audioDetails: '$rawMessages.audioDetails'
+            rawMessageExternalId: '$audioSourceMessages.externalId',
+            rawMessageSentAt: '$audioSourceMessages.sentAt',
+            normalizedFields: '$audioSourceMessages.normalizedFields',
+            audioDetails: '$audioSourceMessages.audioDetails'
           }
         }
       ])

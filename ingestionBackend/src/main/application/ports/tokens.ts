@@ -9,5 +9,6 @@ export const TOKENS = {
   FailedAudioResourceLogPort: Symbol('FailedAudioResourceLogPort'),
   AudioTranscribeWorkerPoolPort: Symbol('AudioTranscribeWorkerPoolPort'),
   AudioWaveformBarsPort: Symbol('AudioWaveformBarsPort'),
-  StaticAssetsBaseUrlPort: Symbol('StaticAssetsBaseUrlPort')
+  StaticAssetsBaseUrlPort: Symbol('StaticAssetsBaseUrlPort'),
+  AssetResourceProbePort: Symbol('AssetResourceProbePort')
 } as const;

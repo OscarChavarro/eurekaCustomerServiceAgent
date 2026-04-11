@@ -31,16 +31,14 @@
       <div
         #waveformTrack
         class="audio-waveform"
+        [style.--audio-progress-percent]="normalizedProgressPercent()"
         aria-hidden="true"
         (pointerdown)="onWaveformPointerDown($event)"
       >
         @for (barHeight of normalizedWaveBars(); track $index) {
           <span class="wave-bar" [style.height.px]="barHeight"></span>
         }
-        <span
-          class="audio-progress-dot"
-          [style.left.%]="normalizedProgressPercent()"
-        ></span>
+        <span class="audio-progress-dot"></span>
       </div>
 
       <button

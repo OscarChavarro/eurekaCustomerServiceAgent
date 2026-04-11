@@ -7,19 +7,40 @@ import type { FailedAudioResourceLogPort } from '../../../application/ports/outb
 export class FileSystemFailedAudioResourceLogAdapter
   implements FailedAudioResourceLogPort
 {
-  private readonly logFilePath = resolve(
+  private readonly encodedLogFilePath = resolve(
     process.cwd(),
     'output',
-    'failed-audio-resource-urls.log'
+    'failed-audio-resource-encoded-urls.log'
+  );
+
+  private readonly decodedLogFilePath = resolve(
+    process.cwd(),
+    'output',
+    'failed-audio-resource-decoded-urls.log'
   );
 
   public async resetLog(): Promise<void> {
-    await fs.mkdir(dirname(this.logFilePath), { recursive: true });
-    await fs.writeFile(this.logFilePath, '', { encoding: 'utf-8', flag: 'w' });
+    await fs.mkdir(dirname(this.encodedLogFilePath), { recursive: true });
+    await Promise.all([
+      fs.writeFile(this.encodedLogFilePath, '', { encoding: 'utf-8', flag: 'w' }),
+      fs.writeFile(this.decodedLogFilePath, '', { encoding: 'utf-8', flag: 'w' })
+    ]);
   }
 
   public async appendOriginalUrl(url: string): Promise<void> {
-    await fs.mkdir(dirname(this.logFilePath), { recursive: true });
-    await fs.appendFile(this.logFilePath, `${url}\n`, { encoding: 'utf-8' });
+    await fs.mkdir(dirname(this.encodedLogFilePath), { recursive: true });
+    const decodedUrl = this.decodeUrlSafely(url);
+    await Promise.all([
+      fs.appendFile(this.encodedLogFilePath, `${url}\n`, { encoding: 'utf-8' }),
+      fs.appendFile(this.decodedLogFilePath, `${decodedUrl}\n`, { encoding: 'utf-8' })
+    ]);
+  }
+
+  private decodeUrlSafely(url: string): string {
+    try {
+      return decodeURIComponent(url);
+    } catch {
+      return url;
+    }
   }
 }

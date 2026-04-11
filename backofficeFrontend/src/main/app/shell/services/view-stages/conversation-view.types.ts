@@ -1,5 +1,5 @@
 export type ChatMessageDirection = 'incoming' | 'outgoing' | 'system';
-export type MessageReviewStage = 'raw' | 'clean' | 'structure' | 'chunk';
+export type MessageReviewStage = 'raw' | 'clean' | 'normalize' | 'structure' | 'chunk';
 
 export type ChatMessage = {
   id: string;
@@ -22,4 +22,4 @@ export type ChatMessage = {
   reviewStageId?: string;
 };
 
-export type ConversationViewMode = 'raw' | 'clean' | 'structure' | 'chunk' | 'embed';
+export type ConversationViewMode = 'raw' | 'clean' | 'normalize' | 'structure' | 'chunk' | 'embed';

@@ -29,6 +29,17 @@ export type RawConversationAudioMessage = {
   audioDetails?: RawConversationAudioDetails;
 };
 
+export type NormalizedConversationStageMessage = {
+  externalId: string;
+  sentAt: string | null;
+  sender: string | null;
+  text: string;
+  rowNumber: number;
+  direction: RawConversationDirection;
+  normalizedFields: Record<string, unknown>;
+  audioDetails?: RawConversationAudioDetails;
+};
+
 export type CleanedConversationStageMessage = {
   externalId: string;
   direction: RawConversationDirection;
@@ -71,6 +82,10 @@ export interface ConversationsRepositoryPort {
   upsertStructuredMessages(
     conversationId: string,
     structuredMessages: StructuredConversationStageMessage[]
+  ): Promise<void>;
+  upsertNormalizedMessages(
+    conversationId: string,
+    normalizedMessages: NormalizedConversationStageMessage[]
   ): Promise<void>;
   upsertChunkedMessages(
     conversationId: string,

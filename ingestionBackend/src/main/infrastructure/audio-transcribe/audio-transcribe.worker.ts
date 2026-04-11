@@ -3,7 +3,6 @@ import { dirname, extname, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { parentPort, workerData } from 'node:worker_threads';
 import type { AudioTranscribeResult } from '../../application/use-cases/audio-transcribe/audio-transcribe.result';
-import { NameFixesForIMazingMediaDump } from './name-fixes-for-imazing-media-dump';
 import { WavefileAudioWaveformBarsAdapter } from './wavefile-audio-waveform-bars.adapter';
 
 type WorkerRequestMessage = {
@@ -42,20 +41,11 @@ type WorkerStaticContext = {
   tempWavFilePath: string;
 };
 
-type CandidateAttemptResult = {
-  candidateUrl: string;
-  headOk: boolean;
-  headStatus?: number;
-  headStatusText?: string;
-  error?: string;
-};
-
 const SUPPORTED_AUDIO_EXTENSIONS = ['opus', 'mp3', 'm2a', 'm4a'] as const;
 type SupportedAudioExtension = (typeof SUPPORTED_AUDIO_EXTENSIONS)[number];
 
 const context = createWorkerContext();
 const waveformBarsAdapter = new WavefileAudioWaveformBarsAdapter();
-const nameFixesForIMazingMediaDump = new NameFixesForIMazingMediaDump();
 
 if (!parentPort) {
   process.exit(1);
@@ -107,15 +97,10 @@ async function transcribeUrlToPayload(
   );
 
   try {
-    const downloadedAudio = await downloadAudioFileWithExtensionRetry(
-      url,
-      staticContext.tempBaseFilePath,
-      staticContext.workerIndex
-    );
-    tempAudioFilePath = downloadedAudio.tempAudioFilePath;
-    downloadedAudio.attemptedTempAudioFilePaths.forEach((path) =>
-      attemptedTempAudioFilePaths.add(path)
-    );
+    const extension = resolveAudioExtensionFromUrl(url);
+    tempAudioFilePath = `${staticContext.tempBaseFilePath}.${extension}`;
+    attemptedTempAudioFilePaths.add(tempAudioFilePath);
+    await downloadAudioFile(url, tempAudioFilePath);
     convertAudioToWav(tempAudioFilePath, staticContext.tempWavFilePath);
     bars = waveformBarsAdapter.buildFromWavFile(staticContext.tempWavFilePath, 100);
     const whisperRun = runWhisper(tempAudioFilePath);
@@ -180,97 +165,6 @@ async function downloadAudioFile(url: string, targetPath: string): Promise<void>
 
   const arrayBuffer = await response.arrayBuffer();
   await fs.writeFile(targetPath, Buffer.from(arrayBuffer));
-}
-
-async function downloadAudioFileWithExtensionRetry(
-  originalUrl: string,
-  tempBaseFilePath: string,
-  workerIndex: number
-): Promise<{ tempAudioFilePath: string; attemptedTempAudioFilePaths: Set<string> }> {
-  const candidateUrls = buildRetryCandidateUrls(originalUrl);
-  const attemptedTempAudioFilePaths = new Set<string>();
-  const attempts: CandidateAttemptResult[] = [];
-
-  for (const candidateUrl of candidateUrls) {
-    const extension = resolveAudioExtensionFromUrl(candidateUrl);
-    const tempAudioFilePath = `${tempBaseFilePath}.${extension}`;
-    attemptedTempAudioFilePaths.add(tempAudioFilePath);
-
-    const headResult = await probeAudioResourceWithHead(candidateUrl);
-    attempts.push(headResult);
-
-    if (!headResult.headOk) {
-      await cleanupTempFile(tempAudioFilePath);
-      continue;
-    }
-
-    try {
-      await downloadAudioFile(candidateUrl, tempAudioFilePath);
-      return {
-        tempAudioFilePath,
-        attemptedTempAudioFilePaths
-      };
-    } catch (error) {
-      attempts.push({
-        candidateUrl,
-        headOk: true,
-        error: error instanceof Error ? error.message : String(error)
-      });
-      await cleanupTempFile(tempAudioFilePath);
-    }
-  }
-
-  const attemptsSummary = attempts
-    .map((attempt) => {
-      if (attempt.error) {
-        return `${attempt.candidateUrl} -> error: ${attempt.error}`;
-      }
-      if (typeof attempt.headStatus === 'number') {
-        return `${attempt.candidateUrl} -> HEAD ${attempt.headStatus} ${attempt.headStatusText ?? ''}`.trim();
-      }
-      return `${attempt.candidateUrl} -> HEAD failed`;
-    })
-    .join('\n');
-
-  console.error(
-    `[AudioTranscribeWorker ${workerIndex}] Audio URL resolution failed after trying ${
-      candidateUrls.length
-    } variants.\n${attemptsSummary}`
-  );
-
-  throw new Error(
-    'Audio resource does not exist in extensions [.opus/.mp3/.m2a/.m4a] and all generated URL variants failed.'
-  );
-}
-
-function buildRetryCandidateUrls(url: string): string[] {
-  if (!nameFixesForIMazingMediaDump.isSupportedAudioResourceUrl(url)) {
-    return [url];
-  }
-
-  return nameFixesForIMazingMediaDump.getCandidateAudioUrls(url);
-}
-
-async function probeAudioResourceWithHead(url: string): Promise<CandidateAttemptResult> {
-  try {
-    const response = await fetch(url, {
-      method: 'HEAD',
-      signal: AbortSignal.timeout(15_000)
-    });
-
-    return {
-      candidateUrl: url,
-      headOk: response.ok,
-      headStatus: response.status,
-      headStatusText: response.statusText
-    };
-  } catch (error) {
-    return {
-      candidateUrl: url,
-      headOk: false,
-      error: error instanceof Error ? error.message : String(error)
-    };
-  }
 }
 
 function runWhisper(audioFilePath: string): { success: true } | { success: false; message: string } {
