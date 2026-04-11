@@ -5,17 +5,28 @@
 >
   <div class="audio-main">
     <div class="waveform-row">
-      <button
-        type="button"
-        class="audio-control"
-        [attr.aria-label]="isPlaying() ? 'Pause audio' : 'Play audio'"
-        [disabled]="!hasPlayableResource()"
-        (click)="togglePlayback()"
-      >
-        <span class="material-icons" aria-hidden="true">
-          {{ isPlaying() ? 'pause' : 'play_arrow' }}
-        </span>
-      </button>
+      @if (hasMissingResource()) {
+        <button
+          type="button"
+          class="audio-control is-error"
+          aria-label="Audio not found, show error details"
+          (click)="toggleErrorTooltip()"
+        >
+          <span class="material-icons" aria-hidden="true">priority_high</span>
+        </button>
+      } @else {
+        <button
+          type="button"
+          class="audio-control"
+          [attr.aria-label]="isPlaying() ? 'Pause audio' : 'Play audio'"
+          [disabled]="!hasPlayableResource()"
+          (click)="togglePlayback()"
+        >
+          <span class="material-icons" aria-hidden="true">
+            {{ isPlaying() ? 'pause' : 'play_arrow' }}
+          </span>
+        </button>
+      }
 
       <div class="audio-waveform" aria-hidden="true">
         @for (bar of waveformBars; track bar) {
@@ -36,6 +47,25 @@
         {{ activeSpeedLabel() }}
       </button>
     </div>
+    @if (hasMissingResource() && errorTooltipOpen()) {
+      <div class="audio-error-tooltip" role="note" aria-live="polite">
+        <div class="audio-error-tooltip-header">
+          <span class="audio-error-tooltip-title">Resource URL failed</span>
+          <button
+            type="button"
+            class="audio-error-copy"
+            aria-label="Copy encoded URL"
+            (click)="copyFailedUrlToClipboard()"
+          >
+            <span class="material-icons" aria-hidden="true">content_copy</span>
+          </button>
+        </div>
+        <p class="audio-error-url">{{ failedResourceUrlDecoded() }}</p>
+        @if (copyFeedbackVisible()) {
+          <p class="audio-error-copy-feedback">Copied</p>
+        }
+      </div>
+    }
 
     <div class="audio-times">
       <span>{{ currentTimeLabel() }}</span>

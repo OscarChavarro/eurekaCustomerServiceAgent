@@ -1,5 +1,14 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnDestroy, computed, effect, input, output, signal } from '@angular/core';
+import {
+  Component,
+  HostListener,
+  OnDestroy,
+  computed,
+  effect,
+  input,
+  output,
+  signal
+} from '@angular/core';
 
 import type { ChatMessageDirection } from '../../../shell/services/view-stages/conversation-view.types';
 
@@ -11,6 +20,7 @@ import type { ChatMessageDirection } from '../../../shell/services/view-stages/c
   styleUrl: './audio.component.sass'
 })
 export class AudioComponent implements OnDestroy {
+  private static readonly RESOURCE_HEAD_TIMEOUT_MS = 4_500;
   public readonly messageId = input<string>('');
   public readonly direction = input<ChatMessageDirection>('incoming');
   public readonly resourceUrl = input<string | undefined>(undefined);
@@ -21,7 +31,15 @@ export class AudioComponent implements OnDestroy {
   protected readonly isPlaying = signal<boolean>(false);
   protected readonly currentTimeSeconds = signal<number>(0);
   protected readonly totalTimeSeconds = signal<number>(0);
+  protected readonly resourceCheckStatus = signal<'idle' | 'checking' | 'available' | 'missing'>('idle');
+  protected readonly errorTooltipOpen = signal<boolean>(false);
+  protected readonly copyFeedbackVisible = signal<boolean>(false);
+  protected readonly failedResourceUrlEncoded = signal<string | null>(null);
+  protected readonly failedResourceUrlDecoded = computed(() =>
+    this.decodeHttpUrl(this.failedResourceUrlEncoded())
+  );
   protected readonly hasPlayableResource = computed(() => this.resolvePlayableUrl() !== null);
+  protected readonly hasMissingResource = computed(() => this.resourceCheckStatus() === 'missing');
   protected readonly currentTimeLabel = computed(() =>
     this.formatTimeLabel(this.currentTimeSeconds())
   );
@@ -40,6 +58,8 @@ export class AudioComponent implements OnDestroy {
 
   private audioElement: HTMLAudioElement | null = null;
   private progressAnimationFrameId: number | null = null;
+  private resourceCheckRequestId = 0;
+  private copyFeedbackTimeoutId: number | null = null;
   private readonly onLoadedMetadata = (): void => {
     const audio = this.audioElement;
     if (!audio || !Number.isFinite(audio.duration)) {
@@ -86,6 +106,25 @@ export class AudioComponent implements OnDestroy {
 
   constructor() {
     effect(() => {
+      const candidateUrl = this.resolveCandidateUrl();
+
+      this.errorTooltipOpen.set(false);
+      this.copyFeedbackVisible.set(false);
+
+      if (!candidateUrl) {
+        this.resourceCheckStatus.set('idle');
+        this.failedResourceUrlEncoded.set(null);
+        this.resetPlaybackState();
+        this.destroyAudioElement();
+        return;
+      }
+
+      this.resourceCheckStatus.set('checking');
+      this.failedResourceUrlEncoded.set(null);
+      void this.checkResourceAvailability(candidateUrl);
+    });
+
+    effect(() => {
       const url = this.resolvePlayableUrl();
 
       if (!url) {
@@ -123,6 +162,11 @@ export class AudioComponent implements OnDestroy {
   }
 
   protected async togglePlayback(): Promise<void> {
+    if (this.hasMissingResource()) {
+      this.toggleErrorTooltip();
+      return;
+    }
+
     const audio = this.getOrCreateAudioElement();
     if (!audio) {
       return;
@@ -137,6 +181,10 @@ export class AudioComponent implements OnDestroy {
   }
 
   public playFromAutoAdvance(): void {
+    if (this.hasMissingResource()) {
+      return;
+    }
+
     const audio = this.getOrCreateAudioElement();
     if (!audio || !audio.paused) {
       return;
@@ -149,7 +197,44 @@ export class AudioComponent implements OnDestroy {
     return this.progressPercent();
   }
 
+  protected toggleErrorTooltip(): void {
+    if (!this.hasMissingResource()) {
+      return;
+    }
+
+    this.errorTooltipOpen.update((value) => !value);
+  }
+
+  protected async copyFailedUrlToClipboard(): Promise<void> {
+    const failedUrl = this.failedResourceUrlEncoded();
+    if (!failedUrl || !navigator?.clipboard?.writeText) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(failedUrl);
+      this.copyFeedbackVisible.set(true);
+      this.clearCopyFeedbackTimeout();
+      this.copyFeedbackTimeoutId = window.setTimeout(() => {
+        this.copyFeedbackVisible.set(false);
+        this.copyFeedbackTimeoutId = null;
+      }, 1300);
+    } catch {
+      this.copyFeedbackVisible.set(false);
+    }
+  }
+
+  @HostListener('document:keydown.escape')
+  protected onEscapePressed(): void {
+    if (!this.errorTooltipOpen()) {
+      return;
+    }
+
+    this.errorTooltipOpen.set(false);
+  }
+
   ngOnDestroy(): void {
+    this.clearCopyFeedbackTimeout();
     this.destroyAudioElement();
   }
 
@@ -202,8 +287,16 @@ export class AudioComponent implements OnDestroy {
   }
 
   private resolvePlayableUrl(): string | null {
+    if (this.resourceCheckStatus() !== 'available') {
+      return null;
+    }
+
+    return this.resolveCandidateUrl();
+  }
+
+  private resolveCandidateUrl(): string | null {
     const resourceUrl = this.resourceUrl()?.trim();
-    if (!resourceUrl || !/\.opus(?:$|[?#])/i.test(resourceUrl)) {
+    if (!resourceUrl || !/\.(opus|m4a|mp3)(?:$|[?#])/i.test(resourceUrl)) {
       return null;
     }
 
@@ -288,5 +381,78 @@ export class AudioComponent implements OnDestroy {
 
     cancelAnimationFrame(this.progressAnimationFrameId);
     this.progressAnimationFrameId = null;
+  }
+
+  private async checkResourceAvailability(url: string): Promise<void> {
+    const requestId = ++this.resourceCheckRequestId;
+
+    try {
+      const response = await fetch(url, {
+        method: 'HEAD',
+        signal: AbortSignal.timeout(AudioComponent.RESOURCE_HEAD_TIMEOUT_MS)
+      });
+
+      if (requestId !== this.resourceCheckRequestId) {
+        return;
+      }
+
+      if (response.status === 200) {
+        this.resourceCheckStatus.set('available');
+        this.failedResourceUrlEncoded.set(null);
+        return;
+      }
+
+      if (response.status === 404) {
+        this.resourceCheckStatus.set('missing');
+        this.failedResourceUrlEncoded.set(url);
+        return;
+      }
+
+      this.resourceCheckStatus.set('available');
+      this.failedResourceUrlEncoded.set(null);
+    } catch (error) {
+      if (requestId !== this.resourceCheckRequestId) {
+        return;
+      }
+
+      if (this.isTimeoutError(error)) {
+        this.resourceCheckStatus.set('missing');
+        this.failedResourceUrlEncoded.set(url);
+        return;
+      }
+
+      this.resourceCheckStatus.set('available');
+      this.failedResourceUrlEncoded.set(null);
+    }
+  }
+
+  private isTimeoutError(error: unknown): boolean {
+    if (!error || typeof error !== 'object') {
+      return false;
+    }
+
+    const errorName = 'name' in error ? String(error.name) : '';
+    return errorName === 'TimeoutError' || errorName === 'AbortError';
+  }
+
+  private decodeHttpUrl(url: string | null): string {
+    if (!url) {
+      return '';
+    }
+
+    try {
+      return decodeURI(url);
+    } catch {
+      return url;
+    }
+  }
+
+  private clearCopyFeedbackTimeout(): void {
+    if (this.copyFeedbackTimeoutId === null) {
+      return;
+    }
+
+    window.clearTimeout(this.copyFeedbackTimeoutId);
+    this.copyFeedbackTimeoutId = null;
   }
 }

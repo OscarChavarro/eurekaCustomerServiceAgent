@@ -695,7 +695,7 @@ export class KwoledgeIngestionUseCase {
   }
 
   private formatAssetPhoneLabel(label: string): string {
-    const trimmedLabel = label.trim();
+    const trimmedLabel = this.replaceEmojiLikeCharsWithUnderscore(label.trim());
     const digitsOnly = trimmedLabel.replace(/\D/g, '');
     const isDigitsOnlyInternationalPhone = /^\+\d+$/.test(trimmedLabel);
 
@@ -709,6 +709,13 @@ export class KwoledgeIngestionUseCase {
     }
 
     return trimmedLabel;
+  }
+
+  private replaceEmojiLikeCharsWithUnderscore(value: string): string {
+    const emojiLikeCharsPattern =
+      /[\p{Extended_Pictographic}\p{Regional_Indicator}\u{FE0F}\u{200D}]/gu;
+
+    return value.replace(emojiLikeCharsPattern, '_').replace(/\s+/g, ' ').trim();
   }
 
   private resolveAssetConversationFromPattern(filePattern: string): {

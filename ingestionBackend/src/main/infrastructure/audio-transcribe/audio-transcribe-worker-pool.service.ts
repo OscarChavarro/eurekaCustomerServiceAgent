@@ -282,12 +282,17 @@ implements AudioTranscribeWorkerPoolPort, OnModuleInit, OnModuleDestroy {
   }
 
   private failJob(job: QueueJob, error: Error): void {
-    if (job.reject) {
-      job.reject(error);
+    const payload = this.buildErrorPayload(error);
+    if (job.resolve) {
+      job.resolve(payload);
       return;
     }
-
     this.logger.error(`Audio transcription job failed: ${error.message}`);
+    if (job.onCompleted) {
+      queueMicrotask(() => {
+        job.onCompleted?.(payload);
+      });
+    }
   }
 
   private removeIdleWorkerIndex(index: number): void {
@@ -302,5 +307,20 @@ implements AudioTranscribeWorkerPoolPort, OnModuleInit, OnModuleDestroy {
     } catch {
       return url;
     }
+  }
+
+  private buildErrorPayload(error: Error): AudioTranscribeResult {
+    const normalizedMessage = error.message?.trim() || 'Unknown worker error.';
+    const isHttpError = /http|fetch|socket|status\s+\d{3}|und_err/i.test(normalizedMessage);
+
+    return {
+      type: 'noise',
+      transcription: isHttpError
+        ? `HTTP_ERROR: ${normalizedMessage}`
+        : `TRANSCRIBE_ERROR: ${normalizedMessage}`,
+      totalTimeInSeconds: 0,
+      language: 'unknown',
+      bars: []
+    };
   }
 }
