@@ -5,6 +5,7 @@ import type {
   ConversationMetadata,
   ConversationsRepositoryPort,
   RawConversationAudioDetails,
+  RawConversationAudioMessage,
   RawConversationStageMessage,
   StructuredConversationStageMessage
 } from '../../../application/ports/outbound/conversations-repository.port';
@@ -26,6 +27,15 @@ type MongoConversationDocument = {
     createdAt: Date;
     source: string;
   };
+};
+
+type RawAudioMessageProjection = {
+  conversationId: string;
+  conversationFilePattern: string | null;
+  rawMessageExternalId: string;
+  rawMessageSentAt: string | null;
+  normalizedFields: Record<string, unknown>;
+  audioDetails?: RawConversationAudioDetails;
 };
 
 @Injectable()
@@ -182,6 +192,64 @@ export class MongoConversationsRepositoryAdapter implements ConversationsReposit
         }
       }
     );
+  }
+
+  public async findRawMessagesWithAudioAttachment(): Promise<RawConversationAudioMessage[]> {
+    const collection =
+      await this.mongoClientProvider.getConversationsCollection<MongoConversationDocument>();
+
+    const audioAttachmentRegex = /\.(opus|mp3|m2a|m4a)$/i;
+
+    const rawAudioMessages = await collection
+      .aggregate<RawAudioMessageProjection>([
+        {
+          $match: {
+            rawMessages: {
+              $elemMatch: {
+                'normalizedFields.attachment': {
+                  $type: 'string',
+                  $regex: audioAttachmentRegex
+                }
+              }
+            }
+          }
+        },
+        {
+          $unwind: '$rawMessages'
+        },
+        {
+          $match: {
+            'rawMessages.normalizedFields.attachment': {
+              $type: 'string',
+              $regex: audioAttachmentRegex
+            }
+          }
+        },
+        {
+          $project: {
+            _id: 0,
+            conversationId: '$_id',
+            conversationFilePattern: '$filePattern',
+            rawMessageExternalId: '$rawMessages.externalId',
+            rawMessageSentAt: '$rawMessages.sentAt',
+            normalizedFields: '$rawMessages.normalizedFields',
+            audioDetails: '$rawMessages.audioDetails'
+          }
+        }
+      ])
+      .toArray();
+
+    return rawAudioMessages.map((message) => ({
+      conversationId: message.conversationId,
+      conversationFilePattern:
+        typeof message.conversationFilePattern === 'string'
+          ? message.conversationFilePattern
+          : null,
+      rawMessageExternalId: message.rawMessageExternalId,
+      rawMessageSentAt: message.rawMessageSentAt,
+      normalizedFields: message.normalizedFields,
+      audioDetails: message.audioDetails
+    }));
   }
 
   public async deleteAllConversations(): Promise<number> {

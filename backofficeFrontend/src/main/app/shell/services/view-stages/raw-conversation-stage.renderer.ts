@@ -12,7 +12,7 @@ export class RawConversationStageRenderer implements ConversationStageRenderer {
   private readonly messageBubbleFactory = inject(MessageBubbleFactory);
   private readonly frontendSecretsService = inject(FrontendSecretsService);
   private readonly imageExtensions = new Set(['jpg', 'jpeg', 'gif', 'webp', 'png']);
-  private readonly audioExtensions = new Set(['opus', 'mp3', 'm4a']);
+  private readonly audioExtensions = new Set(['opus', 'mp3', 'm2a', 'm4a']);
   private static readonly WHATSAPP_PREFIX = /^whatsapp\s*-\s*/i;
 
   render(document: BackendConversationDocument): ChatMessage[] {

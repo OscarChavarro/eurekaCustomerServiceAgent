@@ -19,6 +19,15 @@ export type RawConversationAudioDetails = {
   bars: number[];
 };
 
+export type RawConversationAudioMessage = {
+  conversationId: string;
+  conversationFilePattern: string | null;
+  rawMessageExternalId: string;
+  rawMessageSentAt: string | null;
+  normalizedFields: Record<string, unknown>;
+  audioDetails?: RawConversationAudioDetails;
+};
+
 export type CleanedConversationStageMessage = {
   externalId: string;
   direction: RawConversationDirection;
@@ -71,5 +80,6 @@ export interface ConversationsRepositoryPort {
     rawMessageExternalId: string,
     audioDetails: RawConversationAudioDetails
   ): Promise<void>;
+  findRawMessagesWithAudioAttachment(): Promise<RawConversationAudioMessage[]>;
   deleteAllConversations(): Promise<number>;
 }

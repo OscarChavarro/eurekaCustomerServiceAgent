@@ -50,7 +50,7 @@ type CandidateAttemptResult = {
   error?: string;
 };
 
-const SUPPORTED_AUDIO_EXTENSIONS = ['opus', 'mp3', 'm4a'] as const;
+const SUPPORTED_AUDIO_EXTENSIONS = ['opus', 'mp3', 'm2a', 'm4a'] as const;
 type SupportedAudioExtension = (typeof SUPPORTED_AUDIO_EXTENSIONS)[number];
 
 const context = createWorkerContext();
@@ -239,7 +239,7 @@ async function downloadAudioFileWithExtensionRetry(
   );
 
   throw new Error(
-    'Audio resource does not exist in extensions [.opus/.mp3/.m4a] and all generated URL variants failed.'
+    'Audio resource does not exist in extensions [.opus/.mp3/.m2a/.m4a] and all generated URL variants failed.'
   );
 }
 

@@ -1,12 +1,13 @@
 import { Injectable } from '@angular/core';
 
-type SupportedAudioExtension = 'opus' | 'mp3' | 'm4a';
+type SupportedAudioExtension = 'opus' | 'mp3' | 'm2a' | 'm4a';
 
 @Injectable({ providedIn: 'root' })
 export class NameFixesForIMazingMediaDump {
   private static readonly SUPPORTED_AUDIO_EXTENSIONS: readonly SupportedAudioExtension[] = [
     'opus',
     'mp3',
+    'm2a',
     'm4a'
   ];
   private static readonly NON_BREAKING_SPACE_UNICODE = '\u00A0';

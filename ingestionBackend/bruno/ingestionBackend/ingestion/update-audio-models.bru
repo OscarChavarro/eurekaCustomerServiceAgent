@@ -1,0 +1,18 @@
+meta {
+  name: Update Audio Models
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{baseUrl}}/updateAudioModels
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+vars:pre-request {
+  baseUrl: http://localhost:3666
+}

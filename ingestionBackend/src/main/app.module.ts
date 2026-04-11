@@ -5,6 +5,7 @@ import { ImazingCsvFileNameService } from './adapters/inbound/csv/imazing-csv-fi
 import { ConversationsController } from './adapters/inbound/http/conversations.controller';
 import { IngestionController } from './adapters/inbound/http/ingestion.controller';
 import { TranscribeController } from './adapters/inbound/http/transcribe.controller';
+import { UpdateAudioModelsController } from './adapters/inbound/http/update-audio-models.controller';
 import { HttpContactsDirectoryAdapter } from './adapters/outbound/contacts/http-contacts-directory.adapter';
 import { FileSystemFailedAudioResourceLogAdapter } from './adapters/outbound/debug/file-system-failed-audio-resource-log.adapter';
 import { FileSystemProcessedConversationStageStoreAdapter } from './adapters/outbound/debug/file-system-processed-conversation-stage-store.adapter';
@@ -14,11 +15,13 @@ import { MongoConversationsRepositoryAdapter } from './adapters/outbound/mongo/m
 import { MongoEmbeddingsRepositoryAdapter } from './adapters/outbound/mongo/mongo-embeddings.repository.adapter';
 import { QdrantVectorStoreAdapter } from './adapters/outbound/qdrant/qdrant-vector-store.adapter';
 import { TOKENS } from './application/ports/tokens';
+import { RawAudioTranscriptionOrchestratorService } from './application/services/raw-audio-transcription-orchestrator.service';
 import { ConversationChunkingService } from './application/use-cases/kwoledge-ingestion/conversation-chunking.service';
 import { ConversationCsvRecordTranslatorService } from './application/use-cases/kwoledge-ingestion/conversation-csv-record-translator.service';
 import { ConversationMessageCleaningService } from './application/use-cases/kwoledge-ingestion/conversation-message-cleaning.service';
 import { ConversationStructuringService } from './application/use-cases/kwoledge-ingestion/conversation-structuring.service';
 import { KwoledgeIngestionUseCase } from './application/use-cases/kwoledge-ingestion/kwoledge-ingestion.use-case';
+import { UpdateAudioModelsUseCase } from './application/use-cases/update-audio-models/update-audio-models.use-case';
 import { AudioTranscribeUseCase } from './application/use-cases/audio-transcribe/audio-transcribe.use-case';
 import { ConversationsDeleteAllUseCase } from './application/use-cases/conversations-delete-all/conversations-delete-all.use-case';
 import { StartupValidationOrchestrator } from './infrastructure/bootstrap/startup-validation.orchestrator';
@@ -36,7 +39,12 @@ import { SecretsConfig } from './infrastructure/config/settings/secrets.config';
 import { SettingsConfig } from './infrastructure/config/settings/settings.config';
 
 @Module({
-  controllers: [IngestionController, TranscribeController, ConversationsController],
+  controllers: [
+    IngestionController,
+    TranscribeController,
+    ConversationsController,
+    UpdateAudioModelsController
+  ],
   providers: [
     SettingsConfig,
     SecretsConfig,
@@ -58,7 +66,9 @@ import { SettingsConfig } from './infrastructure/config/settings/settings.config
     ConversationMessageCleaningService,
     ConversationStructuringService,
     ConversationChunkingService,
+    RawAudioTranscriptionOrchestratorService,
     KwoledgeIngestionUseCase,
+    UpdateAudioModelsUseCase,
     AudioTranscribeUseCase,
     ConversationsDeleteAllUseCase,
     {
