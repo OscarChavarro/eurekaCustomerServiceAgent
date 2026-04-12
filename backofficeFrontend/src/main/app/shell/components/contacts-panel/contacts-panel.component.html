@@ -81,7 +81,11 @@
                 (click)="selectRow(contact)"
               >
                 <td class="row-index-cell">{{ rowIndex + 1 }}</td>
-                <td class="editable-cell" (dblclick)="onCellDoubleClick(contact)">
+                <td
+                  class="editable-cell"
+                  [class.is-non-compliant-name]="isNonCompliantContactNameCell(contact)"
+                  (dblclick)="onCellDoubleClick(contact)"
+                >
                   @if (isEditingCell(contact)) {
                     <input
                       type="text"
@@ -94,17 +98,40 @@
                       (keydown)="onEditKeydown($event, contact)"
                     />
                   } @else {
-                    @if (chatRouteForContact(contact); as chatRoute) {
-                      <a
-                        class="contact-name-link"
-                        [routerLink]="chatRoute"
-                        (click)="$event.stopPropagation()"
-                      >
-                        {{ contactNameValue(contact) }}
-                      </a>
-                    } @else {
-                      <span class="cell-display-value">{{ contactNameValue(contact) }}</span>
-                    }
+                    <div class="contact-name-cell-content">
+                      @if (shouldShowRecommendedNameButton(contact)) {
+                        <span
+                          class="recommended-name-action"
+                          (mouseenter)="onRecommendedNameButtonMouseEnter(contact)"
+                        >
+                          <button
+                            type="button"
+                            class="recommended-name-button"
+                            aria-label="Mostrar nombre recomendado"
+                            [disabled]="isCreateRecommendedInFlight(contact)"
+                            (click)="onRecommendedNameButtonClick($event, contact)"
+                          >
+                            <span class="material-symbols-outlined">lightbulb</span>
+                          </button>
+                          <span class="recommended-name-tooltip" role="tooltip">
+                            {{ recommendedNameTooltipValue(contact) ?? 'Generando sugerencia...' }}
+                          </span>
+                        </span>
+                      }
+                      @if (chatRouteForContact(contact); as chatRoute) {
+                        <a
+                          class="contact-name-link contact-name-primary"
+                          [routerLink]="chatRoute"
+                          (click)="$event.stopPropagation()"
+                        >
+                          {{ contactNameValue(contact) }}
+                        </a>
+                      } @else {
+                        <span class="cell-display-value contact-name-primary">{{
+                          contactNameValue(contact)
+                        }}</span>
+                      }
+                    </div>
                   }
                 </td>
                 <td class="editable-cell">

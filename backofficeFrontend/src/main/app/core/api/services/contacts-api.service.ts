@@ -21,6 +21,24 @@ export type PatchContactRequest = {
   biographies?: string[];
 };
 
+export type CreateContactRequest = {
+  names?: string[];
+  emailAddresses?: string[];
+  phoneNumbers?: string[];
+  biographies?: string[];
+};
+
+export type CreateContactResponse = {
+  action: 'created';
+  contact: {
+    resourceName: string;
+    names: string[];
+    emailAddresses: string[];
+    phoneNumbers: string[];
+    biographies: string[];
+  };
+};
+
 export type PatchContactResponse = {
   action: 'updated';
   contact: {
@@ -74,6 +92,13 @@ export class ContactsApiService {
 
     return this.httpClient.patch<PatchContactResponse>(
       `${this.frontendSecretsService.contactsBackendBaseUrl}/contacts/${encodedResourceName}`,
+      request
+    );
+  }
+
+  public createContact(request: CreateContactRequest): Observable<CreateContactResponse> {
+    return this.httpClient.post<CreateContactResponse>(
+      `${this.frontendSecretsService.contactsBackendBaseUrl}/contacts`,
       request
     );
   }

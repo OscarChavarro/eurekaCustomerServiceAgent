@@ -20,6 +20,7 @@ import {
 } from '../../../core/api/services/conversations-api.service';
 import {
   ContactsApiService,
+  type CreateContactResponse,
   type BackendContact,
   type DeleteContactRequestItem,
   type PatchContactRequest
@@ -31,6 +32,8 @@ import { I18N_KEYS } from '../../../core/i18n/translations/i18n-keys.const';
 import { ContactsDirectoryStore } from '../../../core/state/contacts-directory.store';
 import { ContactDeleteConfirmModalComponent } from '../../../shared/components/contact-delete-confirm-modal/contact-delete-confirm-modal.component';
 import { PhonePrefixCacheService } from '../../../core/api/services/phone-prefix-cache.service';
+import { ContactFormatValidatorService } from '../../../core/validation/services/contact-format-validator.service';
+import { RecommendedNesContactNameService } from '../../services/recommended-nes-contact-name.service';
 import {
   canonicalizePhoneNumber,
   normalizeConversationSourceId,
@@ -58,6 +61,8 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
   private readonly phoneCountryI18nService = inject(PhoneCountryI18nService);
   private readonly router = inject(Router);
   private readonly phonePrefixCacheService = inject(PhonePrefixCacheService);
+  private readonly contactFormatValidatorService = inject(ContactFormatValidatorService);
+  private readonly recommendedNesContactNameService = inject(RecommendedNesContactNameService);
 
   private readonly groupedRowsState = signal<ContactsWorkbookGroups>(createEmptyWorkbookGroups());
   private readonly activeWorkbookTabState = signal<ContactsWorkbookTab>('contactsWithConversations');
@@ -71,10 +76,14 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
   private readonly selectedRowIdState = signal<string | null>(null);
   private readonly selectedPhoneSlugState = signal<string | null>(null);
   private readonly conversationIdsState = signal<string[]>([]);
+  private readonly conversationFirstMessageDateByIdState = signal<Record<string, string>>({});
   private readonly editingCellState = signal<EditingCell | null>(null);
   private readonly editingDraftValueState = signal<string>('');
   private readonly deleteModalState = signal<DeleteModalState | null>(null);
   private readonly deleteInFlightState = signal<boolean>(false);
+  private readonly recommendedNameByContactIdState = signal<Record<string, string>>({});
+  private readonly recommendedNameLoadingByContactIdState = signal<Record<string, boolean>>({});
+  private readonly createRecommendedInFlightByContactIdState = signal<Record<string, boolean>>({});
 
   protected readonly selectedLanguage = this.i18nStateService.selectedLanguage;
   protected readonly activeWorkbookTab = this.activeWorkbookTabState.asReadonly();
@@ -247,6 +256,41 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
 
   protected contactNameValue(contact: ContactRow): string {
     return contact.contactName ?? this.t(I18N_KEYS.shell.CONTACTS_TABLE_UNKNOWN_NAME);
+  }
+
+  protected isNonCompliantContactNameCell(contact: ContactRow): boolean {
+    if (this.activeWorkbookTabState() !== 'contactsWithConversations') {
+      return false;
+    }
+
+    return !this.contactFormatValidatorService.isCompliant(contact.contactName);
+  }
+
+  protected shouldShowRecommendedNameButton(contact: ContactRow): boolean {
+    return (
+      this.activeWorkbookTabState() === 'conversationsWithoutContacts' &&
+      typeof contact.chatConversationId === 'string' &&
+      contact.chatConversationId.trim().length > 0
+    );
+  }
+
+  protected recommendedNameTooltipValue(contact: ContactRow): string | null {
+    const recommendedByContactId = this.recommendedNameByContactIdState();
+    return recommendedByContactId[contact.id] ?? null;
+  }
+
+  protected onRecommendedNameButtonMouseEnter(contact: ContactRow): void {
+    void this.ensureRecommendedNameForContact(contact);
+  }
+
+  protected onRecommendedNameButtonClick(event: MouseEvent, contact: ContactRow): void {
+    event.stopPropagation();
+    void this.createRecommendedContact(contact);
+  }
+
+  protected isCreateRecommendedInFlight(contact: ContactRow): boolean {
+    const inFlightByContactId = this.createRecommendedInFlightByContactIdState();
+    return inFlightByContactId[contact.id] === true;
   }
 
   protected chatRouteForContact(contact: ContactRow): string[] | null {
@@ -462,6 +506,10 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
     this.errorState.set(false);
     this.countryCodeByPhoneState.set({});
     this.conversationIdsState.set([]);
+    this.conversationFirstMessageDateByIdState.set({});
+    this.recommendedNameByContactIdState.set({});
+    this.recommendedNameLoadingByContactIdState.set({});
+    this.createRecommendedInFlightByContactIdState.set({});
 
     try {
       const [, conversationSummaries] = await Promise.all([
@@ -477,6 +525,9 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
       const mappedContacts = this.mapContactRows(contacts);
       const conversationIds = this.extractConversationIds(conversationSummaries);
       this.conversationIdsState.set(conversationIds);
+      this.conversationFirstMessageDateByIdState.set(
+        this.mapConversationFirstMessageDateByConversationId(conversationSummaries)
+      );
       const groups = this.buildWorkbookGroups(mappedContacts, conversationIds);
       const allRows = [
         ...groups.contactsWithConversations,
@@ -532,6 +583,109 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
   private cancelCellEditing(): void {
     this.editingCellState.set(null);
     this.editingDraftValueState.set('');
+  }
+
+  private async ensureRecommendedNameForContact(contact: ContactRow): Promise<void> {
+    const cachedNames = this.recommendedNameByContactIdState();
+    if (cachedNames[contact.id]) {
+      return;
+    }
+
+    const loadingByContactId = this.recommendedNameLoadingByContactIdState();
+    if (loadingByContactId[contact.id]) {
+      return;
+    }
+
+    this.recommendedNameLoadingByContactIdState.set({
+      ...loadingByContactId,
+      [contact.id]: true
+    });
+
+    try {
+      const conversationId = contact.chatConversationId?.trim() ?? '';
+      const firstMessageDateByConversationId = this.conversationFirstMessageDateByIdState();
+      const firstMessageDate =
+        conversationId.length > 0 ? firstMessageDateByConversationId[conversationId] ?? null : null;
+      const recommendedName = await this.recommendedNesContactNameService.buildRecommendedName({
+        phoneNumbers: [...contact.phoneNumbers],
+        chatConversationId: contact.chatConversationId,
+        firstMessageDate
+      });
+
+      const latestNames = this.recommendedNameByContactIdState();
+      this.recommendedNameByContactIdState.set({
+        ...latestNames,
+        [contact.id]: recommendedName
+      });
+    } catch (error: unknown) {
+      console.error('Unable to build recommended contact name', error);
+    } finally {
+      const latestLoadingByContactId = this.recommendedNameLoadingByContactIdState();
+      if (!latestLoadingByContactId[contact.id]) {
+        return;
+      }
+
+      const { [contact.id]: _, ...nextLoadingByContactId } = latestLoadingByContactId;
+      this.recommendedNameLoadingByContactIdState.set(nextLoadingByContactId);
+    }
+  }
+
+  private async createRecommendedContact(contact: ContactRow): Promise<void> {
+    const inFlightByContactId = this.createRecommendedInFlightByContactIdState();
+    if (inFlightByContactId[contact.id]) {
+      return;
+    }
+
+    this.createRecommendedInFlightByContactIdState.set({
+      ...inFlightByContactId,
+      [contact.id]: true
+    });
+
+    try {
+      await this.ensureRecommendedNameForContact(contact);
+      const recommendedName = this.recommendedNameByContactIdState()[contact.id]?.trim() ?? '';
+      const phoneNumber = this.resolvePhoneForContactCreate(contact);
+
+      if (!recommendedName || !phoneNumber) {
+        return;
+      }
+
+      const response = await firstValueFrom(
+        this.contactsApiService.createContact({
+          names: [recommendedName],
+          phoneNumbers: [phoneNumber]
+        })
+      );
+
+      this.rebuildWorkbookAfterCreate(contact.id, response);
+      this.syncSelectionWithVisibleRows();
+      void this.resolveCountryCodesForRows(this.visibleRows());
+    } catch (error: unknown) {
+      console.error('Unable to create contact from recommendation', error);
+    } finally {
+      const latestInFlightByContactId = this.createRecommendedInFlightByContactIdState();
+      const { [contact.id]: _, ...nextInFlightByContactId } = latestInFlightByContactId;
+      this.createRecommendedInFlightByContactIdState.set(nextInFlightByContactId);
+    }
+  }
+
+  private resolvePhoneForContactCreate(contact: ContactRow): string | null {
+    const firstPhone = contact.phoneNumbers.find(
+      (phone) => typeof phone === 'string' && phone.trim().length > 0
+    );
+    if (firstPhone) {
+      return firstPhone.trim();
+    }
+
+    const conversationId = contact.chatConversationId?.trim();
+    if (!conversationId) {
+      return null;
+    }
+
+    const normalizedConversationId = normalizeConversationSourceId(conversationId);
+    const canonicalConversationPhone = canonicalizePhoneNumber(normalizedConversationId);
+
+    return canonicalConversationPhone?.normalizedValue ?? null;
   }
 
   private async commitCellEditing(contact: ContactRow): Promise<void> {
@@ -693,6 +847,40 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
 
     this.groupedRowsState.set(nextGroups);
     this.selectedRowIdState.set(preferredSelectionId);
+  }
+
+  private rebuildWorkbookAfterCreate(
+    sourceConversationOnlyRowId: string,
+    response: CreateContactResponse
+  ): void {
+    const currentGroups = this.groupedRowsState();
+    const mergedExistingContacts = [
+      ...currentGroups.contactsWithConversations,
+      ...currentGroups.contactsWithoutConversations
+    ].map((row) => ({ ...row, chatConversationId: null }));
+    const createdRow: ContactRow = {
+      id: `created|${response.contact.resourceName}|${mergedExistingContacts.length}`,
+      contactName: this.pickFirstName(response.contact.names),
+      phoneNumbers: this.normalizePhoneNumbers(response.contact.phoneNumbers),
+      resourceName: response.contact.resourceName,
+      chatConversationId: null
+    };
+
+    const nextContacts = [...mergedExistingContacts, createdRow];
+    const conversationIds = this.resolveConversationIdsForRebuild(currentGroups);
+    const nextGroups = this.buildWorkbookGroups(nextContacts, conversationIds);
+    const nextStoreContacts: BackendContact[] = nextContacts.map((row) => ({
+      resourceName: row.resourceName,
+      names: row.contactName ? [row.contactName] : [],
+      phoneNumbers: [...row.phoneNumbers]
+    }));
+
+    this.contactsDirectoryStore.replaceContacts(nextStoreContacts);
+    this.groupedRowsState.set(nextGroups);
+
+    if (this.selectedRowIdState() === sourceConversationOnlyRowId) {
+      this.selectedRowIdState.set(null);
+    }
   }
 
   private resolveConversationIdsForRebuild(currentGroups: ContactsWorkbookGroups): string[] {
@@ -925,6 +1113,26 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
     return summaries
       .map((summary) => summary.id)
       .filter((id): id is string => typeof id === 'string' && id.trim().length > 0);
+  }
+
+  private mapConversationFirstMessageDateByConversationId(
+    summaries: BackendConversationSummary[]
+  ): Record<string, string> {
+    const result: Record<string, string> = {};
+
+    for (const summary of summaries) {
+      const conversationId = typeof summary.id === 'string' ? summary.id.trim() : '';
+      const firstMessageDate =
+        typeof summary.firstMessageDate === 'string' ? summary.firstMessageDate.trim() : '';
+
+      if (!conversationId || !firstMessageDate) {
+        continue;
+      }
+
+      result[conversationId] = firstMessageDate;
+    }
+
+    return result;
   }
 
   private buildWorkbookGroups(

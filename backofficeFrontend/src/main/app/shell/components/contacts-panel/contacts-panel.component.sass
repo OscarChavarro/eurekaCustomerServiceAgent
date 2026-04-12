@@ -42,11 +42,11 @@
 
 .spreadsheet-table th:nth-child(2),
 .spreadsheet-table td:nth-child(2)
-  width: 32%
+  width: 55%
 
 .spreadsheet-table th:nth-child(3),
 .spreadsheet-table td:nth-child(3)
-  width: 46%
+  width: 23%
 
 .spreadsheet-table th:nth-child(4),
 .spreadsheet-table td:nth-child(4)
@@ -138,6 +138,27 @@
 .editable-cell
   padding: 0 !important
 
+.spreadsheet-table tbody td.editable-cell
+  overflow: visible
+
+.spreadsheet-table tbody td.editable-cell.is-non-compliant-name,
+.spreadsheet-table tbody tr.contact-row:hover td.editable-cell.is-non-compliant-name,
+.spreadsheet-table tbody tr.contact-row.is-selected td.editable-cell.is-non-compliant-name
+  background: #ffff80 !important
+
+.contact-name-cell-content
+  display: flex
+  align-items: center
+  width: 100%
+  min-height: 2rem
+
+.contact-name-primary
+  flex: 1 1 auto
+  min-width: 0
+  overflow: hidden
+  text-overflow: ellipsis
+  white-space: nowrap
+
 .cell-editor-input
   width: 100%
   height: 100%
@@ -157,7 +178,7 @@
   padding: 0.3rem 0.55rem
 
 .contact-name-link
-  display: inline-block
+  display: block
   padding: 0.3rem 0.55rem
   color: #1b4d9b
   font-weight: 600
@@ -173,6 +194,66 @@
   outline: 2px solid #1b4d9b
   outline-offset: 2px
   border-radius: 0.2rem
+
+.recommended-name-action
+  position: relative
+  display: inline-flex
+  align-items: center
+  justify-content: flex-start
+  margin-right: 0.2rem
+
+.recommended-name-button
+  width: 1.9rem
+  min-width: 1.9rem
+  height: 1.9rem
+  border: 0
+  border-radius: 0
+  background: #1d4ed8
+  color: #ffffff
+  display: inline-flex
+  align-items: center
+  justify-content: center
+  cursor: pointer
+  padding: 0
+
+.recommended-name-button:hover
+  background: #1e40af
+
+.recommended-name-button:disabled
+  background: #93aee8
+  cursor: not-allowed
+
+.recommended-name-button:focus-visible
+  outline: 2px solid #1d4ed8
+  outline-offset: 2px
+
+.recommended-name-button .material-symbols-outlined
+  font-size: 1.1rem
+  line-height: 1
+
+.recommended-name-tooltip
+  position: absolute
+  left: calc(100% + 0.2rem)
+  top: 50%
+  transform: translateY(-50%)
+  z-index: 12
+  max-width: 20rem
+  padding: 0.35rem 0.5rem
+  border-radius: 0.35rem
+  background: #0f172a
+  color: #ffffff
+  opacity: 0.8
+  box-shadow: 0 0.4rem 0.8rem rgba(0, 0, 0, 0.18)
+  white-space: nowrap
+  font-size: 0.8rem
+  line-height: 1.2
+  visibility: hidden
+  pointer-events: none
+  transition: visibility 120ms ease
+
+.recommended-name-action:hover .recommended-name-tooltip,
+.recommended-name-action:focus-within .recommended-name-tooltip
+  visibility: visible
 
 .country-cell
   padding: 0 !important

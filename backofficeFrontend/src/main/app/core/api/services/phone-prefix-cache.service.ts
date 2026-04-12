@@ -6,7 +6,7 @@ import {
   type PhonePrefixLookupResponse
 } from './conversations-api.service';
 
-type PhonePrefixAreaCacheEntry = {
+export type PhonePrefixAreaCacheEntry = {
   countryCode: string | null;
   countryName: string | null;
   dialCode: string;
@@ -23,6 +23,11 @@ export class PhonePrefixCacheService {
   private readonly conversationsApiService = inject(ConversationsApiService);
 
   public async resolveCountryCode(phone: string): Promise<string | null> {
+    const areaInfo = await this.resolveAreaInfo(phone);
+    return areaInfo?.countryCode ?? null;
+  }
+
+  public async resolveAreaInfo(phone: string): Promise<PhonePrefixAreaCacheEntry | null> {
     const phoneDigits = this.normalizeDigits(phone);
     if (!phoneDigits) {
       return null;
@@ -31,7 +36,7 @@ export class PhonePrefixCacheService {
     const cacheStore = this.readStore();
     const cacheHit = this.findByPhoneDigits(cacheStore, phoneDigits);
     if (cacheHit) {
-      return cacheHit.countryCode;
+      return cacheHit;
     }
 
     const lookup = await this.lookupPhonePrefix(phone);
@@ -50,7 +55,7 @@ export class PhonePrefixCacheService {
     };
     this.writeStore(nextStore);
 
-    return normalized.countryCode;
+    return normalized;
   }
 
   private findByPhoneDigits(
