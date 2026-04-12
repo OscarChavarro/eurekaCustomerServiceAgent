@@ -119,13 +119,21 @@
                         </span>
                       }
                       @if (chatRouteForContact(contact); as chatRoute) {
-                        <a
-                          class="contact-name-link contact-name-primary"
-                          [routerLink]="chatRoute"
-                          (click)="$event.stopPropagation()"
-                        >
-                          {{ contactNameValue(contact) }}
-                        </a>
+                        @if (shouldRenderContactNameAsLink()) {
+                          <span class="contact-name-primary">
+                            <a
+                              class="contact-name-link"
+                              [routerLink]="chatRoute"
+                              (click)="$event.stopPropagation()"
+                            >
+                              {{ contactNameValue(contact) }}
+                            </a>
+                          </span>
+                        } @else {
+                          <span class="cell-display-value contact-name-primary">{{
+                            contactNameValue(contact)
+                          }}</span>
+                        }
                       } @else {
                         <span class="cell-display-value contact-name-primary">{{
                           contactNameValue(contact)

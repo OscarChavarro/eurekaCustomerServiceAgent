@@ -332,6 +332,10 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
     return ['/chat', routeSlug];
   }
 
+  protected shouldRenderContactNameAsLink(): boolean {
+    return this.activeWorkbookTabState() !== 'conversationsWithoutContacts';
+  }
+
   protected selectRow(contact: ContactRow): void {
     this.selectedRowIdState.set(contact.id);
   }
@@ -432,7 +436,7 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
   }
 
   protected onCellDoubleClick(contact: ContactRow): void {
-    if (!this.hasPatchableResourceName(contact)) {
+    if (!this.canStartInlineNameEditing(contact)) {
       return;
     }
 
@@ -657,7 +661,9 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
     }
 
     const resourceName = this.normalizeResourceName(contact.resourceName);
-    if (!resourceName) {
+    const canCreateFromConversationRow = this.canCreateContactFromConversationRow(contact);
+
+    if (!resourceName && !canCreateFromConversationRow) {
       this.cancelCellEditing();
       return;
     }
@@ -669,6 +675,29 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
     this.cancelCellEditing();
 
     if (!hasChanges) {
+      return;
+    }
+
+    if (!resourceName) {
+      const phoneNumber = this.resolvePhoneForContactCreate(contact);
+      if (!phoneNumber || newName.length === 0) {
+        return;
+      }
+
+      try {
+        const createResult = await firstValueFrom(
+          this.contactsApiService.createContact({
+            names: [newName],
+            phoneNumbers: [phoneNumber]
+          })
+        );
+        this.rebuildWorkbookAfterCreate(contact.id, createResult);
+        this.syncSelectionWithVisibleRows();
+        void this.resolveCountryCodesForRows(this.visibleRows());
+      } catch (error: unknown) {
+        console.error('Unable to create contact after inline edition', error);
+      }
+
       return;
     }
 
@@ -896,6 +925,38 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
 
   private hasPatchableResourceName(contact: ContactRow): boolean {
     return this.normalizeResourceName(contact.resourceName) !== null;
+  }
+
+  private canCreateContactFromConversationRow(contact: ContactRow): boolean {
+    return (
+      this.activeWorkbookTabState() === 'conversationsWithoutContacts' &&
+      this.normalizeResourceName(contact.resourceName) === null &&
+      typeof contact.chatConversationId === 'string' &&
+      contact.chatConversationId.trim().length > 0
+    );
+  }
+
+  private canStartInlineNameEditing(contact: ContactRow): boolean {
+    return this.hasPatchableResourceName(contact) || this.canCreateContactFromConversationRow(contact);
+  }
+
+  private resolvePhoneForContactCreate(contact: ContactRow): string | null {
+    const firstPhone = contact.phoneNumbers.find(
+      (phone) => typeof phone === 'string' && phone.trim().length > 0
+    );
+    if (firstPhone) {
+      return firstPhone.trim();
+    }
+
+    const conversationId = contact.chatConversationId?.trim();
+    if (!conversationId) {
+      return null;
+    }
+
+    const normalizedConversationId = normalizeConversationSourceId(conversationId);
+    const canonicalConversationPhone = canonicalizePhoneNumber(normalizedConversationId);
+
+    return canonicalConversationPhone?.normalizedValue ?? null;
   }
 
   private normalizeResourceName(resourceName: string | undefined): string | null {
