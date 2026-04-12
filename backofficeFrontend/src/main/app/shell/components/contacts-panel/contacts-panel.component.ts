@@ -11,13 +11,12 @@ import {
   inject,
   signal
 } from '@angular/core';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 
 import {
   ConversationsApiService,
-  type BackendConversationSummary,
-  type PhonePrefixLookupResponse
+  type BackendConversationSummary
 } from '../../../core/api/services/conversations-api.service';
 import {
   ContactsApiService,
@@ -31,6 +30,7 @@ import { PhoneCountryI18nService } from '../../../core/i18n/services/phone-count
 import { I18N_KEYS } from '../../../core/i18n/translations/i18n-keys.const';
 import { ContactsDirectoryStore } from '../../../core/state/contacts-directory.store';
 import { ContactDeleteConfirmModalComponent } from '../../../shared/components/contact-delete-confirm-modal/contact-delete-confirm-modal.component';
+import { PhonePrefixCacheService } from '../../../core/api/services/phone-prefix-cache.service';
 import {
   canonicalizePhoneNumber,
   normalizeConversationSourceId,
@@ -39,7 +39,7 @@ import {
 
 @Component({
   selector: 'app-contacts-panel',
-  imports: [CommonModule, ContactDeleteConfirmModalComponent],
+  imports: [CommonModule, RouterLink, ContactDeleteConfirmModalComponent],
   templateUrl: './contacts-panel.component.html',
   styleUrl: './contacts-panel.component.sass'
 })
@@ -57,6 +57,7 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
   private readonly i18nStateService = inject(I18nStateService);
   private readonly phoneCountryI18nService = inject(PhoneCountryI18nService);
   private readonly router = inject(Router);
+  private readonly phonePrefixCacheService = inject(PhonePrefixCacheService);
 
   private readonly groupedRowsState = signal<ContactsWorkbookGroups>(createEmptyWorkbookGroups());
   private readonly activeWorkbookTabState = signal<ContactsWorkbookTab>('contactsWithConversations');
@@ -246,6 +247,27 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
 
   protected contactNameValue(contact: ContactRow): string {
     return contact.contactName ?? this.t(I18N_KEYS.shell.CONTACTS_TABLE_UNKNOWN_NAME);
+  }
+
+  protected chatRouteForContact(contact: ContactRow): string[] | null {
+    const conversationId = contact.chatConversationId?.trim();
+    if (!conversationId) {
+      return null;
+    }
+
+    const normalizedConversationId = normalizeConversationSourceId(conversationId).trim();
+    if (!normalizedConversationId) {
+      return null;
+    }
+
+    const canonicalConversationPhone = canonicalizePhoneNumber(normalizedConversationId);
+    const routeSlug = canonicalConversationPhone?.digitsOnly ?? normalizedConversationId.replace(/^\+/, '');
+
+    if (!routeSlug) {
+      return null;
+    }
+
+    return ['/chat', routeSlug];
   }
 
   protected selectRow(contact: ContactRow): void {
@@ -1200,44 +1222,16 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
     }
 
     const resolved = { ...currentMap };
-    const concurrency = Math.min(8, missingPhones.length);
-    let nextIndex = 0;
 
-    const workers = Array.from({ length: concurrency }, async () => {
-      while (nextIndex < missingPhones.length) {
-        const index = nextIndex;
-        nextIndex += 1;
-        const phone = missingPhones[index];
+    for (const phone of missingPhones) {
+      resolved[phone] = await this.lookupCountryCodeForPhone(phone);
+    }
 
-        if (!phone) {
-          continue;
-        }
-
-        resolved[phone] = await this.lookupCountryCodeForPhone(phone);
-      }
-    });
-
-    await Promise.all(workers);
     this.countryCodeByPhoneState.set(resolved);
   }
 
   private async lookupCountryCodeForPhone(phone: string): Promise<string | null> {
-    try {
-      const lookup = await firstValueFrom(this.conversationsApiService.getPhonePrefix(phone));
-      return this.normalizeCountryCode(lookup);
-    } catch {
-      return null;
-    }
-  }
-
-  private normalizeCountryCode(lookup: PhonePrefixLookupResponse): string | null {
-    const countryCode = lookup.countryCode?.trim().toUpperCase();
-
-    if (!countryCode || !/^[A-Z]{2}$/.test(countryCode)) {
-      return null;
-    }
-
-    return countryCode;
+    return this.phonePrefixCacheService.resolveCountryCode(phone);
   }
 
   private countryCodesForContact(

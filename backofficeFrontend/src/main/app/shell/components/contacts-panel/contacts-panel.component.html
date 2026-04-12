@@ -94,7 +94,17 @@
                       (keydown)="onEditKeydown($event, contact)"
                     />
                   } @else {
-                    <span class="cell-display-value">{{ contactNameValue(contact) }}</span>
+                    @if (chatRouteForContact(contact); as chatRoute) {
+                      <a
+                        class="contact-name-link"
+                        [routerLink]="chatRoute"
+                        (click)="$event.stopPropagation()"
+                      >
+                        {{ contactNameValue(contact) }}
+                      </a>
+                    } @else {
+                      <span class="cell-display-value">{{ contactNameValue(contact) }}</span>
+                    }
                   }
                 </td>
                 <td class="editable-cell">
