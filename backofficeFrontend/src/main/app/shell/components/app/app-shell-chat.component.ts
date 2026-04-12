@@ -41,6 +41,11 @@ import {
   ChatMessage,
   ConversationViewMode,
 } from '../../services/chat-conversation.service';
+import { ChatConversationCyclerService } from '../../services/chat-conversation-cycler.service';
+import {
+  ChatMessageSegmentationService,
+  type ChatMessageTextSegment
+} from '../../services/chat-message-segmentation.service';
 import { ContactsPanelComponent } from '../contacts-panel/contacts-panel.component';
 import {
   canonicalizePhoneNumber,
@@ -71,12 +76,13 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
   private readonly i18nService = inject(I18nService);
   private readonly i18nStateService = inject(I18nStateService);
   private readonly phoneCountryI18nService = inject(PhoneCountryI18nService);
+  private readonly chatConversationCyclerService = inject(ChatConversationCyclerService);
+  private readonly chatMessageSegmentationService = inject(ChatMessageSegmentationService);
   private readonly router = inject(Router);
   private readonly activatedRoute = inject(ActivatedRoute);
   private readonly searchTermState = signal<string>('');
   private readonly composerMessageState = signal<string>('');
   private readonly languageDropdownOpenState = signal<boolean>(false);
-  private readonly textSegmentsCache = new Map<string, TextSegment[]>();
   private readonly phoneLookupCache = new Map<string, PhonePrefixLookupResponse | null>();
   private hoverIntentTimeoutId: ReturnType<typeof setTimeout> | null = null;
   private activeHoveredPhone: string | null = null;
@@ -785,21 +791,8 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
     return audioOrdinal;
   }
 
-  protected getTextSegments(text: string | undefined): TextSegment[] {
-    if (!text) {
-      return [];
-    }
-
-    const cached = this.textSegmentsCache.get(text);
-
-    if (cached) {
-      return cached;
-    }
-
-    const segments = splitTextIntoSegments(text);
-    this.textSegmentsCache.set(text, segments);
-
-    return segments;
+  protected getTextSegments(text: string | undefined): ChatMessageTextSegment[] {
+    return this.chatMessageSegmentationService.getSegments(text);
   }
 
   protected trackByTextSegment(index: number): number {
@@ -1457,47 +1450,25 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
 
   private selectPreviousConversation(): void {
     const conversations = this.filteredConversations();
+    const previousConversationId = this.chatConversationCyclerService.resolvePreviousConversationId(
+      conversations,
+      this.activeConversationId()
+    );
 
-    if (conversations.length === 0) {
-      return;
-    }
-
-    const activeConversationId = this.activeConversationId();
-    if (!activeConversationId) {
-      this.selectConversation(conversations[0]!.id);
-      return;
-    }
-
-    const activeIndex = conversations.findIndex((conversation) => conversation.id === activeConversationId);
-    const previousIndex =
-      activeIndex <= 0 ? conversations.length - 1 : activeIndex - 1;
-    const previousConversation = conversations[previousIndex];
-
-    if (previousConversation) {
-      this.selectConversation(previousConversation.id);
+    if (previousConversationId) {
+      this.selectConversation(previousConversationId);
     }
   }
 
   private selectNextConversation(): void {
     const conversations = this.filteredConversations();
+    const nextConversationId = this.chatConversationCyclerService.resolveNextConversationId(
+      conversations,
+      this.activeConversationId()
+    );
 
-    if (conversations.length === 0) {
-      return;
-    }
-
-    const activeConversationId = this.activeConversationId();
-    if (!activeConversationId) {
-      this.selectConversation(conversations[0]!.id);
-      return;
-    }
-
-    const activeIndex = conversations.findIndex((conversation) => conversation.id === activeConversationId);
-    const nextIndex =
-      activeIndex < 0 || activeIndex >= conversations.length - 1 ? 0 : activeIndex + 1;
-    const nextConversation = conversations[nextIndex];
-
-    if (nextConversation) {
-      this.selectConversation(nextConversation.id);
+    if (nextConversationId) {
+      this.selectConversation(nextConversationId);
     }
   }
 }
@@ -1509,11 +1480,6 @@ type ContactsPageSlug =
   | 'contacts-without-conversations';
 
 const DEFAULT_CONTACTS_PAGE_SLUG: ContactsPageSlug = 'contacts-with-conversations';
-
-type TextSegment =
-  | { type: 'text'; value: string }
-  | { type: 'link'; value: string; href: string }
-  | { type: 'phone'; value: string };
 
 type PhoneTooltipState = {
   phone: string;
@@ -1528,67 +1494,3 @@ type UsedContextPopupState = {
   left: number;
   top: number;
 };
-
-function splitTextIntoSegments(text: string): TextSegment[] {
-  const pattern = /\b((?:https?:\/\/|www\.)[^\s<]+)|(\+\d[\d\s().-]{4,}\d)/gi;
-  const segments: TextSegment[] = [];
-  let currentIndex = 0;
-
-  for (const match of text.matchAll(pattern)) {
-    const fullMatch = match[0];
-    const startIndex = match.index ?? 0;
-
-    if (startIndex > currentIndex) {
-      segments.push({
-        type: 'text',
-        value: text.slice(currentIndex, startIndex)
-      });
-    }
-
-    const urlCandidate = match[1];
-    const phoneCandidate = match[2];
-
-    if (urlCandidate) {
-      const normalizedUrl = normalizeMatchedUrl(urlCandidate);
-      const trailingSuffix = urlCandidate.slice(normalizedUrl.length);
-      const href = normalizedUrl.startsWith('http') ? normalizedUrl : `https://${normalizedUrl}`;
-
-      segments.push({
-        type: 'link',
-        value: normalizedUrl,
-        href
-      });
-
-      if (trailingSuffix) {
-        segments.push({
-          type: 'text',
-          value: trailingSuffix
-        });
-      }
-    } else if (phoneCandidate) {
-      segments.push({
-        type: 'phone',
-        value: normalizeMatchedPhone(phoneCandidate)
-      });
-    }
-
-    currentIndex = startIndex + fullMatch.length;
-  }
-
-  if (currentIndex < text.length) {
-    segments.push({
-      type: 'text',
-      value: text.slice(currentIndex)
-    });
-  }
-
-  return segments;
-}
-
-function normalizeMatchedUrl(matchedUrl: string): string {
-  return matchedUrl.replace(/[),.;!?]+$/, '');
-}
-
-function normalizeMatchedPhone(matchedPhone: string): string {
-  return matchedPhone.replace(/[),.;!?]+$/, '');
-}

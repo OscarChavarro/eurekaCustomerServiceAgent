@@ -33,7 +33,10 @@ import { ContactsDirectoryStore } from '../../../core/state/contacts-directory.s
 import { ContactDeleteConfirmModalComponent } from '../../../shared/components/contact-delete-confirm-modal/contact-delete-confirm-modal.component';
 import { PhonePrefixCacheService } from '../../../core/api/services/phone-prefix-cache.service';
 import { ContactFormatValidatorService } from '../../../core/validation/services/contact-format-validator.service';
-import { RecommendedNesContactNameService } from '../../services/recommended-nes-contact-name.service';
+import {
+  ContactNameRecomendationService,
+  type BlueActionContactRow
+} from '../../services/contact-name-recomendation.service';
 import {
   canonicalizePhoneNumber,
   normalizeConversationSourceId,
@@ -62,7 +65,7 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
   private readonly router = inject(Router);
   private readonly phonePrefixCacheService = inject(PhonePrefixCacheService);
   private readonly contactFormatValidatorService = inject(ContactFormatValidatorService);
-  private readonly recommendedNesContactNameService = inject(RecommendedNesContactNameService);
+  private readonly contactNameRecomendationService = inject(ContactNameRecomendationService);
 
   private readonly groupedRowsState = signal<ContactsWorkbookGroups>(createEmptyWorkbookGroups());
   private readonly activeWorkbookTabState = signal<ContactsWorkbookTab>('contactsWithConversations');
@@ -81,9 +84,6 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
   private readonly editingDraftValueState = signal<string>('');
   private readonly deleteModalState = signal<DeleteModalState | null>(null);
   private readonly deleteInFlightState = signal<boolean>(false);
-  private readonly recommendedNameByContactIdState = signal<Record<string, string>>({});
-  private readonly recommendedNameLoadingByContactIdState = signal<Record<string, boolean>>({});
-  private readonly createRecommendedInFlightByContactIdState = signal<Record<string, boolean>>({});
 
   protected readonly selectedLanguage = this.i18nStateService.selectedLanguage;
   protected readonly activeWorkbookTab = this.activeWorkbookTabState.asReadonly();
@@ -267,30 +267,48 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
   }
 
   protected shouldShowRecommendedNameButton(contact: ContactRow): boolean {
-    return (
-      this.activeWorkbookTabState() === 'conversationsWithoutContacts' &&
-      typeof contact.chatConversationId === 'string' &&
-      contact.chatConversationId.trim().length > 0
+    return this.contactNameRecomendationService.shouldShowRecommendedNameButton(
+      this.activeWorkbookTabState(),
+      this.toBlueActionContactRow(contact)
+    );
+  }
+
+  protected shouldShowLlamadaRenameButton(contact: ContactRow): boolean {
+    return this.contactNameRecomendationService.shouldShowLlamadaRenameButton(
+      this.activeWorkbookTabState(),
+      this.toBlueActionContactRow(contact)
+    );
+  }
+
+  protected shouldShowBlueActionButton(contact: ContactRow): boolean {
+    return this.contactNameRecomendationService.shouldShowBlueActionButton(
+      this.activeWorkbookTabState(),
+      this.toBlueActionContactRow(contact)
     );
   }
 
   protected recommendedNameTooltipValue(contact: ContactRow): string | null {
-    const recommendedByContactId = this.recommendedNameByContactIdState();
-    return recommendedByContactId[contact.id] ?? null;
+    return this.contactNameRecomendationService.tooltipValue(
+      this.activeWorkbookTabState(),
+      this.toBlueActionContactRow(contact)
+    );
   }
 
   protected onRecommendedNameButtonMouseEnter(contact: ContactRow): void {
-    void this.ensureRecommendedNameForContact(contact);
+    void this.contactNameRecomendationService.preload(
+      this.activeWorkbookTabState(),
+      this.toBlueActionContactRow(contact),
+      this.firstMessageDateForContact(contact)
+    );
   }
 
   protected onRecommendedNameButtonClick(event: MouseEvent, contact: ContactRow): void {
     event.stopPropagation();
-    void this.createRecommendedContact(contact);
+    void this.executeBlueAction(contact);
   }
 
   protected isCreateRecommendedInFlight(contact: ContactRow): boolean {
-    const inFlightByContactId = this.createRecommendedInFlightByContactIdState();
-    return inFlightByContactId[contact.id] === true;
+    return this.contactNameRecomendationService.isInFlight(contact.id);
   }
 
   protected chatRouteForContact(contact: ContactRow): string[] | null {
@@ -507,9 +525,7 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
     this.countryCodeByPhoneState.set({});
     this.conversationIdsState.set([]);
     this.conversationFirstMessageDateByIdState.set({});
-    this.recommendedNameByContactIdState.set({});
-    this.recommendedNameLoadingByContactIdState.set({});
-    this.createRecommendedInFlightByContactIdState.set({});
+    this.contactNameRecomendationService.resetState();
 
     try {
       const [, conversationSummaries] = await Promise.all([
@@ -585,107 +601,53 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
     this.editingDraftValueState.set('');
   }
 
-  private async ensureRecommendedNameForContact(contact: ContactRow): Promise<void> {
-    const cachedNames = this.recommendedNameByContactIdState();
-    if (cachedNames[contact.id]) {
-      return;
-    }
-
-    const loadingByContactId = this.recommendedNameLoadingByContactIdState();
-    if (loadingByContactId[contact.id]) {
-      return;
-    }
-
-    this.recommendedNameLoadingByContactIdState.set({
-      ...loadingByContactId,
-      [contact.id]: true
-    });
-
+  private async executeBlueAction(contact: ContactRow): Promise<void> {
     try {
-      const conversationId = contact.chatConversationId?.trim() ?? '';
-      const firstMessageDateByConversationId = this.conversationFirstMessageDateByIdState();
-      const firstMessageDate =
-        conversationId.length > 0 ? firstMessageDateByConversationId[conversationId] ?? null : null;
-      const recommendedName = await this.recommendedNesContactNameService.buildRecommendedName({
-        phoneNumbers: [...contact.phoneNumbers],
-        chatConversationId: contact.chatConversationId,
-        firstMessageDate
-      });
-
-      const latestNames = this.recommendedNameByContactIdState();
-      this.recommendedNameByContactIdState.set({
-        ...latestNames,
-        [contact.id]: recommendedName
-      });
-    } catch (error: unknown) {
-      console.error('Unable to build recommended contact name', error);
-    } finally {
-      const latestLoadingByContactId = this.recommendedNameLoadingByContactIdState();
-      if (!latestLoadingByContactId[contact.id]) {
-        return;
-      }
-
-      const { [contact.id]: _, ...nextLoadingByContactId } = latestLoadingByContactId;
-      this.recommendedNameLoadingByContactIdState.set(nextLoadingByContactId);
-    }
-  }
-
-  private async createRecommendedContact(contact: ContactRow): Promise<void> {
-    const inFlightByContactId = this.createRecommendedInFlightByContactIdState();
-    if (inFlightByContactId[contact.id]) {
-      return;
-    }
-
-    this.createRecommendedInFlightByContactIdState.set({
-      ...inFlightByContactId,
-      [contact.id]: true
-    });
-
-    try {
-      await this.ensureRecommendedNameForContact(contact);
-      const recommendedName = this.recommendedNameByContactIdState()[contact.id]?.trim() ?? '';
-      const phoneNumber = this.resolvePhoneForContactCreate(contact);
-
-      if (!recommendedName || !phoneNumber) {
-        return;
-      }
-
-      const response = await firstValueFrom(
-        this.contactsApiService.createContact({
-          names: [recommendedName],
-          phoneNumbers: [phoneNumber]
-        })
+      const result = await this.contactNameRecomendationService.execute(
+        this.activeWorkbookTabState(),
+        this.toBlueActionContactRow(contact),
+        this.firstMessageDateForContact(contact)
       );
 
-      this.rebuildWorkbookAfterCreate(contact.id, response);
-      this.syncSelectionWithVisibleRows();
-      void this.resolveCountryCodesForRows(this.visibleRows());
+      if (result.kind === 'created') {
+        this.rebuildWorkbookAfterCreate(contact.id, result.response);
+        this.syncSelectionWithVisibleRows();
+        void this.resolveCountryCodesForRows(this.visibleRows());
+        return;
+      }
+
+      if (result.kind === 'renamed') {
+        this.rebuildWorkbookAfterPatch(contact.id, {
+          contactName: result.renamedName,
+          phoneNumbers: [...contact.phoneNumbers],
+          resourceName: result.resourceName
+        });
+        this.syncSelectionWithVisibleRows();
+        void this.resolveCountryCodesForRows(this.visibleRows());
+      }
     } catch (error: unknown) {
-      console.error('Unable to create contact from recommendation', error);
-    } finally {
-      const latestInFlightByContactId = this.createRecommendedInFlightByContactIdState();
-      const { [contact.id]: _, ...nextInFlightByContactId } = latestInFlightByContactId;
-      this.createRecommendedInFlightByContactIdState.set(nextInFlightByContactId);
+      console.error('Unable to execute blue action button flow', error);
     }
   }
 
-  private resolvePhoneForContactCreate(contact: ContactRow): string | null {
-    const firstPhone = contact.phoneNumbers.find(
-      (phone) => typeof phone === 'string' && phone.trim().length > 0
-    );
-    if (firstPhone) {
-      return firstPhone.trim();
-    }
+  private toBlueActionContactRow(contact: ContactRow): BlueActionContactRow {
+    return {
+      id: contact.id,
+      contactName: contact.contactName,
+      phoneNumbers: [...contact.phoneNumbers],
+      resourceName: contact.resourceName,
+      chatConversationId: contact.chatConversationId
+    };
+  }
 
-    const conversationId = contact.chatConversationId?.trim();
+  private firstMessageDateForContact(contact: ContactRow): string | null {
+    const conversationId = contact.chatConversationId?.trim() ?? '';
     if (!conversationId) {
       return null;
     }
 
-    const normalizedConversationId = normalizeConversationSourceId(conversationId);
-    const canonicalConversationPhone = canonicalizePhoneNumber(normalizedConversationId);
-
-    return canonicalConversationPhone?.normalizedValue ?? null;
+    const firstMessageDateByConversationId = this.conversationFirstMessageDateByIdState();
+    return firstMessageDateByConversationId[conversationId] ?? null;
   }
 
   private async commitCellEditing(contact: ContactRow): Promise<void> {
