@@ -1067,8 +1067,8 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
   }
 
   private syncOperationModeWithRoute(): void {
-    const routePath = this.activatedRoute.snapshot.routeConfig?.path ?? '';
-    this.operationModeState.set(this.resolveOperationModeFromRoutePath(routePath));
+    const currentUrl = this.router.url;
+    this.operationModeState.set(this.resolveOperationModeFromUrl(currentUrl));
     this.selectedContactsPageSlugState.set(
       this.normalizeContactsPageSlug(this.activatedRoute.snapshot.paramMap.get('page')) ?? DEFAULT_CONTACTS_PAGE_SLUG
     );
@@ -1080,12 +1080,20 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
     );
   }
 
-  private resolveOperationModeFromRoutePath(path: string): OperationMode {
-    if (path.startsWith('time')) {
+  private resolveOperationModeFromUrl(url: string): OperationMode {
+    const [pathWithoutQuery] = url.split('?');
+    const normalizedPath = pathWithoutQuery.trim().toLowerCase();
+
+    if (normalizedPath === '/time' || normalizedPath.startsWith('/time/')) {
       return 'time';
     }
 
-    if (path.startsWith('contacts') || path.startsWith('contact') || path.startsWith('conversations')) {
+    if (
+      normalizedPath === '/contacts' ||
+      normalizedPath.startsWith('/contacts/') ||
+      normalizedPath.startsWith('/contact/') ||
+      normalizedPath.startsWith('/conversations/')
+    ) {
       return 'contacts';
     }
 
@@ -1195,12 +1203,11 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
       return;
     }
 
-    const currentRoutePath = this.activatedRoute.snapshot.routeConfig?.path ?? '';
     const currentRoutePhoneSlug = this.normalizeChatRouteSlug(
       this.activatedRoute.snapshot.paramMap.get('phoneNumber')
     );
-    const isAlreadyOnSameChatRoute = currentRoutePath.startsWith('chat')
-      && currentRoutePhoneSlug === routePhoneNumber;
+    const isOnChatUrl = this.router.url.startsWith('/chat');
+    const isAlreadyOnSameChatRoute = isOnChatUrl && currentRoutePhoneSlug === routePhoneNumber;
 
     if (isAlreadyOnSameChatRoute) {
       return;
