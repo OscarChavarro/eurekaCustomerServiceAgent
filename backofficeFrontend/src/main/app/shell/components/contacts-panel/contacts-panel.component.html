@@ -81,39 +81,24 @@
                 (click)="selectRow(contact)"
               >
                 <td class="row-index-cell">{{ rowIndex + 1 }}</td>
-                <td class="editable-cell" (dblclick)="onCellDoubleClick(contact, 'contactName')">
-                  @if (isEditingCell(contact, 'contactName')) {
+                <td class="editable-cell" (dblclick)="onCellDoubleClick(contact)">
+                  @if (isEditingCell(contact)) {
                     <input
                       type="text"
                       class="cell-editor-input"
                       [value]="editingDraftValue()"
-                      data-edit-field="contactName"
                       [attr.data-edit-contact-id]="contact.id"
                       (click)="$event.stopPropagation()"
                       (dblclick)="$event.stopPropagation()"
-                      (input)="onEditInput($event, 'contactName')"
-                      (keydown)="onEditKeydown($event, contact, 'contactName')"
+                      (input)="onEditInput($event)"
+                      (keydown)="onEditKeydown($event, contact)"
                     />
                   } @else {
                     <span class="cell-display-value">{{ contactNameValue(contact) }}</span>
                   }
                 </td>
-                <td class="editable-cell" (dblclick)="onCellDoubleClick(contact, 'phoneNumber')">
-                  @if (isEditingCell(contact, 'phoneNumber')) {
-                    <input
-                      type="text"
-                      class="cell-editor-input"
-                      [value]="editingDraftValue()"
-                      data-edit-field="phoneNumber"
-                      [attr.data-edit-contact-id]="contact.id"
-                      (click)="$event.stopPropagation()"
-                      (dblclick)="$event.stopPropagation()"
-                      (input)="onEditInput($event, 'phoneNumber')"
-                      (keydown)="onEditKeydown($event, contact, 'phoneNumber')"
-                    />
-                  } @else {
-                    <span class="cell-display-value">{{ phoneNumbersValue(contact) }}</span>
-                  }
+                <td class="editable-cell">
+                  <span class="cell-display-value">{{ phoneNumbersValue(contact) }}</span>
                 </td>
                 <td
                   class="country-cell"

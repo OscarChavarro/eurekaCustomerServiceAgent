@@ -1,0 +1,28 @@
+meta {
+  name: Create Contact
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/contacts
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "names": ["Desayuno"],
+    "emailAddresses": ["desayuno@example.com"],
+    "phoneNumbers": ["+34 600 000 000"],
+    "biographies": ["Cliente preferente"]
+  }
+}
+
+vars:pre-request {
+  baseUrl: http://localhost:3669
+}

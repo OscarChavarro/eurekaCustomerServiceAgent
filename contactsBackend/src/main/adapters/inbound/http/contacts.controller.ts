@@ -4,21 +4,26 @@ import {
   Controller,
   Delete,
   Get,
+  Param,
+  Patch,
   ParseArrayPipe,
-  Put,
+  Post,
   Query
 } from '@nestjs/common';
+import { CreateGoogleContactUseCase } from '../../../application/use-cases/02-contacts/create-google-contact.use-case';
 import { DeleteGoogleContactsUseCase } from '../../../application/use-cases/02-contacts/delete-google-contacts.use-case';
 import { ListGoogleContactsUseCase } from '../../../application/use-cases/02-contacts/list-google-contacts.use-case';
-import { UpsertGoogleContactUseCase } from '../../../application/use-cases/02-contacts/upsert-google-contact.use-case';
+import { PatchGoogleContactUseCase } from '../../../application/use-cases/02-contacts/patch-google-contact.use-case';
+import { CreateContactRequest } from './dto/create-contact.request';
 import { DeleteContactRequestItem } from './dto/delete-contact.request';
-import { UpsertContactRequest } from './dto/upsert-contact.request';
+import { PatchContactRequest } from './dto/patch-contact.request';
 
 @Controller('contacts')
 export class ContactsController {
   constructor(
     private readonly listGoogleContactsUseCase: ListGoogleContactsUseCase,
-    private readonly upsertGoogleContactUseCase: UpsertGoogleContactUseCase,
+    private readonly createGoogleContactUseCase: CreateGoogleContactUseCase,
+    private readonly patchGoogleContactUseCase: PatchGoogleContactUseCase,
     private readonly deleteGoogleContactsUseCase: DeleteGoogleContactsUseCase
   ) {}
 
@@ -33,13 +38,27 @@ export class ContactsController {
     return this.listGoogleContactsUseCase.execute({ pageSize: parsed });
   }
 
-  @Put('upsert')
-  public async upsertContact(@Body() request: UpsertContactRequest): Promise<unknown> {
-    return this.upsertGoogleContactUseCase.execute({
-      currentName: request.currentName?.trim(),
-      currentPhoneNumber: request.currentPhoneNumber?.trim(),
-      newName: request.newName.trim(),
-      newPhoneNumber: request.newPhoneNumber.trim()
+  @Post()
+  public async createContact(@Body() request: CreateContactRequest): Promise<unknown> {
+    return this.createGoogleContactUseCase.execute({
+      names: request.names,
+      emailAddresses: request.emailAddresses,
+      phoneNumbers: request.phoneNumbers,
+      biographies: request.biographies
+    });
+  }
+
+  @Patch(':resourceName')
+  public async patchContact(
+    @Param('resourceName') resourceName: string,
+    @Body() request: PatchContactRequest
+  ): Promise<unknown> {
+    return this.patchGoogleContactUseCase.execute({
+      resourceName,
+      names: request.names,
+      emailAddresses: request.emailAddresses,
+      phoneNumbers: request.phoneNumbers,
+      biographies: request.biographies
     });
   }
 

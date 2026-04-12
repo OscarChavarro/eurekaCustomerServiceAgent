@@ -9,6 +9,7 @@ export type ListGoogleContactsCommand = {
 
 export type ListGoogleContactsResult = {
   contacts: Array<{
+    resourceName: string;
     names: string[];
     phoneNumbers: string[];
   }>;
@@ -48,6 +49,7 @@ export class ListGoogleContactsUseCase {
 
     return {
       contacts: collected.map((contact) => ({
+        resourceName: contact.resourceName,
         names: contact.displayName ? [contact.displayName] : [],
         phoneNumbers: contact.phoneNumbers
       }))

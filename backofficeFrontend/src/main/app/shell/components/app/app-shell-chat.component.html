@@ -128,7 +128,10 @@
         }
       </div>
     } @else if (isContactsMode()) {
-      <app-contacts-panel [selectedPhoneSlug]="selectedContactPhoneSlug()"></app-contacts-panel>
+      <app-contacts-panel
+        [selectedPhoneSlug]="selectedContactPhoneSlug()"
+        [selectedWorkbookPageSlug]="selectedContactsPageSlug()"
+      ></app-contacts-panel>
     } @else {
       <div class="chat-panels">
         <ng-container [ngTemplateOutlet]="chatPanelsTemplate"></ng-container>

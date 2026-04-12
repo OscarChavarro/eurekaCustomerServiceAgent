@@ -11,6 +11,7 @@ import {
   inject,
   signal
 } from '@angular/core';
+import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 
 import {
@@ -21,7 +22,8 @@ import {
 import {
   ContactsApiService,
   type BackendContact,
-  type DeleteContactRequestItem
+  type DeleteContactRequestItem,
+  type PatchContactRequest
 } from '../../../core/api/services/contacts-api.service';
 import { I18nService } from '../../../core/i18n/services/i18n.service';
 import { I18nStateService } from '../../../core/i18n/services/i18n-state.service';
@@ -43,6 +45,7 @@ import {
 })
 export class ContactsPanelComponent implements OnInit, OnChanges {
   @Input() public selectedPhoneSlug: string | null = null;
+  @Input() public selectedWorkbookPageSlug: ContactsWorkbookPageSlug | null = null;
 
   @ViewChild('spreadsheetTableScroll')
   private spreadsheetTableScrollRef?: ElementRef<HTMLDivElement>;
@@ -53,6 +56,7 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
   private readonly i18nService = inject(I18nService);
   private readonly i18nStateService = inject(I18nStateService);
   private readonly phoneCountryI18nService = inject(PhoneCountryI18nService);
+  private readonly router = inject(Router);
 
   private readonly groupedRowsState = signal<ContactsWorkbookGroups>(createEmptyWorkbookGroups());
   private readonly activeWorkbookTabState = signal<ContactsWorkbookTab>('contactsWithConversations');
@@ -60,8 +64,8 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
   private readonly errorState = signal<boolean>(false);
   private readonly countryCodeByPhoneState = signal<Record<string, string | null>>({});
   private readonly sortState = signal<ContactsSortState>({
-    field: null,
-    direction: null
+    field: 'contactName',
+    direction: 'asc'
   });
   private readonly selectedRowIdState = signal<string | null>(null);
   private readonly selectedPhoneSlugState = signal<string | null>(null);
@@ -106,14 +110,19 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (!('selectedPhoneSlug' in changes)) {
-      return;
+    if ('selectedWorkbookPageSlug' in changes) {
+      const tabFromSlug = this.workbookTabFromPageSlug(this.selectedWorkbookPageSlug);
+      if (tabFromSlug) {
+        this.activeWorkbookTabState.set(tabFromSlug);
+      }
     }
 
-    this.selectedPhoneSlugState.set(this.normalizePhoneSlug(this.selectedPhoneSlug));
-    const selectedBySlug = this.selectContactByPhoneSlug({ smoothScroll: false });
-    if (!selectedBySlug) {
-      this.syncSelectionWithVisibleRows();
+    if ('selectedPhoneSlug' in changes) {
+      this.selectedPhoneSlugState.set(this.normalizePhoneSlug(this.selectedPhoneSlug));
+      const selectedBySlug = this.selectContactByPhoneSlug({ smoothScroll: false });
+      if (!selectedBySlug) {
+        this.syncSelectionWithVisibleRows();
+      }
     }
   }
 
@@ -141,6 +150,7 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
     this.cancelCellEditing();
     this.cancelDeleteModal();
     this.activeWorkbookTabState.set(tab);
+    this.updateRouteForWorkbookTab(tab);
     this.syncSelectionWithVisibleRows();
   }
 
@@ -296,9 +306,9 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
     return contact.phoneNumbers.join(', ');
   }
 
-  protected isEditingCell(contact: ContactRow, field: EditableField): boolean {
+  protected isEditingCell(contact: ContactRow): boolean {
     const editingCell = this.editingCellState();
-    return editingCell?.contactId === contact.id && editingCell.field === field;
+    return editingCell?.contactId === contact.id;
   }
 
   protected editingDraftValue(): string {
@@ -337,27 +347,25 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
     return this.t(I18N_KEYS.shell.CONTACTS_DELETE_MODAL_CANCEL);
   }
 
-  protected onCellDoubleClick(contact: ContactRow, field: EditableField): void {
+  protected onCellDoubleClick(contact: ContactRow): void {
+    if (!this.hasPatchableResourceName(contact)) {
+      return;
+    }
+
     this.selectRow(contact);
-    this.startCellEditing(contact, field);
+    this.startCellEditing(contact);
   }
 
-  protected onEditInput(event: Event, field: EditableField): void {
+  protected onEditInput(event: Event): void {
     const target = event.target;
     if (!(target instanceof HTMLInputElement)) {
       return;
     }
 
-    const nextValue =
-      field === 'phoneNumber' ? this.normalizePhoneDraftValue(target.value) : target.value;
-
-    this.editingDraftValueState.set(nextValue);
-    if (target.value !== nextValue) {
-      target.value = nextValue;
-    }
+    this.editingDraftValueState.set(target.value);
   }
 
-  protected onEditKeydown(event: KeyboardEvent, contact: ContactRow, field: EditableField): void {
+  protected onEditKeydown(event: KeyboardEvent, contact: ContactRow): void {
     event.stopPropagation();
 
     if (event.key === 'Escape') {
@@ -371,7 +379,7 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
     }
 
     event.preventDefault();
-    void this.commitCellEditing(contact, field);
+    void this.commitCellEditing(contact);
   }
 
   protected onDeleteEntryClick(event: MouseEvent, contact: ContactRow): void {
@@ -471,21 +479,19 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
     }
   }
 
-  private startCellEditing(contact: ContactRow, field: EditableField): void {
-    const currentValue = field === 'contactName' ? (contact.contactName ?? '') : (contact.phoneNumbers[0] ?? '');
-    const draftValue = field === 'phoneNumber' ? this.normalizePhoneDraftValue(currentValue) : currentValue;
+  private startCellEditing(contact: ContactRow): void {
+    const draftValue = contact.contactName ?? '';
     this.editingCellState.set({
-      contactId: contact.id,
-      field
+      contactId: contact.id
     });
     this.editingDraftValueState.set(draftValue);
-    this.focusEditingInput(contact.id, field);
+    this.focusEditingInput(contact.id);
   }
 
-  private focusEditingInput(contactId: string, field: EditableField): void {
+  private focusEditingInput(contactId: string): void {
     queueMicrotask(() => {
       requestAnimationFrame(() => {
-        const selector = `input[data-edit-contact-id=\"${this.escapeForCssSelector(contactId)}\"][data-edit-field=\"${field}\"]`;
+        const selector = `input[data-edit-contact-id=\"${this.escapeForCssSelector(contactId)}\"]`;
         const input = document.querySelector<HTMLInputElement>(selector);
         if (!input) {
           return;
@@ -501,32 +507,26 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
     return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
   }
 
-  private normalizePhoneDraftValue(value: string): string {
-    const onlyAllowedChars = value.replace(/[^+\d]/g, '');
-    const hasLeadingPlus = onlyAllowedChars.startsWith('+');
-    const digits = onlyAllowedChars.replace(/\D+/g, '');
-
-    return hasLeadingPlus ? `+${digits}` : digits;
-  }
-
   private cancelCellEditing(): void {
     this.editingCellState.set(null);
     this.editingDraftValueState.set('');
   }
 
-  private async commitCellEditing(contact: ContactRow, field: EditableField): Promise<void> {
+  private async commitCellEditing(contact: ContactRow): Promise<void> {
     const editingCell = this.editingCellState();
-    if (!editingCell || editingCell.contactId !== contact.id || editingCell.field !== field) {
+    if (!editingCell || editingCell.contactId !== contact.id) {
       return;
     }
 
-    const currentName = contact.contactName ?? '';
-    const currentPhoneNumber = contact.phoneNumbers[0] ?? '';
-    const draftValue = this.editingDraftValueState();
-    const newName = field === 'contactName' ? draftValue : currentName;
-    const newPhoneNumber =
-      field === 'phoneNumber' ? this.normalizePhoneDraftValue(draftValue) : currentPhoneNumber;
-    const hasChanges = newName !== currentName || newPhoneNumber !== currentPhoneNumber;
+    const resourceName = this.normalizeResourceName(contact.resourceName);
+    if (!resourceName) {
+      this.cancelCellEditing();
+      return;
+    }
+
+    const currentName = (contact.contactName ?? '').trim();
+    const newName = this.editingDraftValueState().trim();
+    const hasChanges = newName !== currentName;
 
     this.cancelCellEditing();
 
@@ -534,23 +534,27 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
       return;
     }
 
+    const patchRequest: PatchContactRequest = {
+      names: newName.length > 0 ? [newName] : []
+    };
+
     try {
-      await firstValueFrom(
-        this.contactsApiService.upsertContact({
-          currentName,
-          currentPhoneNumber,
-          newName,
-          newPhoneNumber
-        })
+      const patchResult = await firstValueFrom(
+        this.contactsApiService.patchContact(resourceName, patchRequest)
       );
-      this.rebuildWorkbookAfterUpsert(contact.id, {
+      this.rebuildWorkbookAfterPatch(contact.id, {
         contactName: newName,
-        phoneNumbers: newPhoneNumber.length > 0 ? [newPhoneNumber] : []
+        phoneNumbers: [...contact.phoneNumbers],
+        resourceName:
+          typeof patchResult.contact.resourceName === 'string' &&
+          patchResult.contact.resourceName.trim().length > 0
+            ? patchResult.contact.resourceName.trim()
+            : resourceName
       });
       this.syncSelectionWithVisibleRows();
       void this.resolveCountryCodesForRows(this.visibleRows());
     } catch (error: unknown) {
-      console.error('Unable to upsert contact after inline edition', error);
+      console.error('Unable to patch contact after inline edition', error);
     }
   }
 
@@ -628,7 +632,7 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
     };
   }
 
-  private rebuildWorkbookAfterUpsert(contactId: string, edition: ContactEdition): void {
+  private rebuildWorkbookAfterPatch(contactId: string, edition: ContactEdition): void {
     const currentGroups = this.groupedRowsState();
     const mergedExistingContacts = [
       ...currentGroups.contactsWithConversations,
@@ -645,11 +649,13 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
         id: contactId,
         contactName: edition.contactName.trim().length > 0 ? edition.contactName.trim() : null,
         phoneNumbers: edition.phoneNumbers,
+        resourceName: edition.resourceName,
         chatConversationId: null
       });
     }
 
     const nextStoreContacts: BackendContact[] = mergedExistingContacts.map((row) => ({
+      resourceName: row.resourceName,
       names: row.contactName ? [row.contactName] : [],
       phoneNumbers: [...row.phoneNumbers]
     }));
@@ -714,6 +720,60 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
     );
 
     return byEditedValues?.id ?? null;
+  }
+
+  private hasPatchableResourceName(contact: ContactRow): boolean {
+    return this.normalizeResourceName(contact.resourceName) !== null;
+  }
+
+  private normalizeResourceName(resourceName: string | undefined): string | null {
+    if (typeof resourceName !== 'string') {
+      return null;
+    }
+
+    const normalized = resourceName.trim();
+    return normalized.length > 0 ? normalized : null;
+  }
+
+  private workbookTabFromPageSlug(pageSlug: ContactsWorkbookPageSlug | null): ContactsWorkbookTab | null {
+    if (pageSlug === 'contacts-with-conversations') {
+      return 'contactsWithConversations';
+    }
+
+    if (pageSlug === 'conversations-without-contacts') {
+      return 'conversationsWithoutContacts';
+    }
+
+    if (pageSlug === 'contacts-without-conversations') {
+      return 'contactsWithoutConversations';
+    }
+
+    return null;
+  }
+
+  private pageSlugFromWorkbookTab(tab: ContactsWorkbookTab): ContactsWorkbookPageSlug {
+    if (tab === 'contactsWithConversations') {
+      return 'contacts-with-conversations';
+    }
+
+    if (tab === 'conversationsWithoutContacts') {
+      return 'conversations-without-contacts';
+    }
+
+    return 'contacts-without-conversations';
+  }
+
+  private updateRouteForWorkbookTab(tab: ContactsWorkbookTab): void {
+    const pageSlug = this.pageSlugFromWorkbookTab(tab);
+    const currentPageSlug = this.selectedWorkbookPageSlug;
+
+    if (currentPageSlug === pageSlug) {
+      return;
+    }
+
+    void this.router.navigate(['/contacts', pageSlug], {
+      queryParamsHandling: 'merge'
+    });
   }
 
   private syncSelectionWithVisibleRows(): void {
@@ -938,6 +998,7 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
       id: `conversation-only|${conversation.id}|${index}`,
       contactName: conversation.displayName || conversation.id,
       phoneNumbers: conversation.normalizedPhone ? [conversation.normalizedPhone] : [],
+      resourceName: undefined,
       chatConversationId: conversation.id
     };
   }
@@ -961,11 +1022,16 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
     return contacts.map((contact, index) => {
       const contactName = this.pickFirstName(contact.names);
       const phoneNumbers = this.normalizePhoneNumbers(contact.phoneNumbers);
+      const resourceName =
+        typeof contact.resourceName === 'string' && contact.resourceName.trim().length > 0
+          ? contact.resourceName.trim()
+          : undefined;
 
       return {
         id: `${contactName ?? 'unknown'}|${phoneNumbers.join('|')}|${index}`,
         contactName,
         phoneNumbers,
+        resourceName,
         chatConversationId: null
       };
     });
@@ -1235,12 +1301,14 @@ type ContactRow = {
   id: string;
   contactName: string | null;
   phoneNumbers: string[];
+  resourceName?: string;
   chatConversationId: string | null;
 };
 
 type ContactEdition = {
   contactName: string;
   phoneNumbers: string[];
+  resourceName?: string;
 };
 
 type CanonicalPhoneNumber = {
@@ -1267,13 +1335,15 @@ type ContactsWorkbookTab =
   | 'conversationsWithoutContacts'
   | 'contactsWithoutConversations';
 
-type ContactsWorkbookGroups = Record<ContactsWorkbookTab, ContactRow[]>;
+type ContactsWorkbookPageSlug =
+  | 'contacts-with-conversations'
+  | 'conversations-without-contacts'
+  | 'contacts-without-conversations';
 
-type EditableField = 'contactName' | 'phoneNumber';
+type ContactsWorkbookGroups = Record<ContactsWorkbookTab, ContactRow[]>;
 
 type EditingCell = {
   contactId: string;
-  field: EditableField;
 };
 
 type DeleteModalState = {

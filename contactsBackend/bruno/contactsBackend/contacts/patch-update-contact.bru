@@ -1,0 +1,29 @@
+meta {
+  name: Patch Contact Name
+  type: http
+  seq: 3
+}
+
+patch {
+  url: {{baseUrl}}/contacts/{{contactResourceNameEncoded}}
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "names": [
+      "{{updatedContactName}}"
+    ]
+  }
+}
+
+vars:pre-request {
+  baseUrl: http://localhost:3669
+  contactResourceNameEncoded: people%2Fc2462453966870106534
+  updatedContactName: Desconocido
+}

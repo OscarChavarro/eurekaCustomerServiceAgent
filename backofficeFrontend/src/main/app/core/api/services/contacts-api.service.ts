@@ -5,6 +5,7 @@ import { Observable } from 'rxjs';
 import { FrontendSecretsService } from './frontend-secrets.service';
 
 export type BackendContact = {
+  resourceName?: string;
   names: string[];
   phoneNumbers: string[];
 };
@@ -13,18 +14,21 @@ export type BackendContactsResponse = {
   contacts: BackendContact[];
 };
 
-export type UpsertContactRequest = {
-  currentName?: string;
-  currentPhoneNumber?: string;
-  newName: string;
-  newPhoneNumber: string;
+export type PatchContactRequest = {
+  names?: string[];
+  emailAddresses?: string[];
+  phoneNumbers?: string[];
+  biographies?: string[];
 };
 
-export type UpsertContactResponse = {
-  action: 'created' | 'updated';
+export type PatchContactResponse = {
+  action: 'updated';
   contact: {
-    name: string;
+    resourceName: string;
+    names: string[];
+    emailAddresses: string[];
     phoneNumbers: string[];
+    biographies: string[];
   };
 };
 
@@ -35,7 +39,6 @@ export type DeleteContactRequestItem = {
 
 export type DeleteContactsResponse = {
   action: 'deleted';
-  mode: 'simulated';
   requestedCount: number;
   contacts: Array<{
     nameToDelete: string;
@@ -58,9 +61,19 @@ export class ContactsApiService {
     );
   }
 
-  public upsertContact(request: UpsertContactRequest): Observable<UpsertContactResponse> {
-    return this.httpClient.put<UpsertContactResponse>(
-      `${this.frontendSecretsService.contactsBackendBaseUrl}/contacts/upsert`,
+  public patchContact(
+    resourceName: string,
+    request: PatchContactRequest
+  ): Observable<PatchContactResponse> {
+    const normalizedResourceName = resourceName.trim();
+    if (!normalizedResourceName) {
+      throw new Error('resourceName is required to patch a Google contact.');
+    }
+
+    const encodedResourceName = encodeURIComponent(normalizedResourceName);
+
+    return this.httpClient.patch<PatchContactResponse>(
+      `${this.frontendSecretsService.contactsBackendBaseUrl}/contacts/${encodedResourceName}`,
       request
     );
   }

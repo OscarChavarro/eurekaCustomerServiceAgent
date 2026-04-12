@@ -2,7 +2,10 @@ export type GoogleContact = {
   resourceName: string;
   etag?: string;
   displayName: string;
+  names: string[];
+  emailAddresses: string[];
   phoneNumbers: string[];
+  biographies: string[];
 };
 
 export type ListGoogleContactsResult = {
@@ -11,19 +14,27 @@ export type ListGoogleContactsResult = {
 };
 
 export type CreateGoogleContactCommand = {
-  displayName: string;
-  phoneNumber: string;
+  names?: string[];
+  emailAddresses?: string[];
+  phoneNumbers?: string[];
+  biographies?: string[];
 };
 
-export type UpdateGoogleContactCommand = {
+export type PatchGoogleContactCommand = {
   resourceName: string;
-  etag: string;
-  displayName: string;
-  phoneNumber: string;
+  names?: string[];
+  emailAddresses?: string[];
+  phoneNumbers?: string[];
+  biographies?: string[];
+};
+
+export type DeleteGoogleContactCommand = {
+  resourceName: string;
 };
 
 export interface GooglePeoplePort {
   listContacts(accessToken: string, pageSize: number, pageToken?: string): Promise<ListGoogleContactsResult>;
   createContact(accessToken: string, command: CreateGoogleContactCommand): Promise<GoogleContact>;
-  updateContact(accessToken: string, command: UpdateGoogleContactCommand): Promise<GoogleContact>;
+  patchContact(accessToken: string, command: PatchGoogleContactCommand): Promise<GoogleContact>;
+  deleteContact(accessToken: string, command: DeleteGoogleContactCommand): Promise<void>;
 }

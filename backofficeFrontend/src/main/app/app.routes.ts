@@ -21,10 +21,11 @@ export const routes: Routes = [
   },
   {
     path: 'contacts',
-    component: AppShellChatComponent
+    pathMatch: 'full',
+    redirectTo: 'contacts/contacts-with-conversations'
   },
   {
-    path: 'contacts/:phoneSlug',
+    path: 'contacts/:page',
     component: AppShellChatComponent
   },
   {

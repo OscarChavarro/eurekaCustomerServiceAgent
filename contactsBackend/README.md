@@ -8,18 +8,24 @@ NestJS microservice to authenticate with Google OAuth2 and manage contacts using
 - `GET /auth/google/start`
 - `GET /auth/google/callback`
 - `GET /contacts`
+- `POST /contacts`
+- `PATCH /contacts/:resourceName`
 - `DELETE /contacts`
-- `PUT /contacts/upsert`
 
 ### Contacts pagination behavior
 
 `GET /contacts` fetches all contacts from Google People API by following `nextPageToken` until exhaustion.
 `pageSize` controls per-request page size (1..1000), but the endpoint response includes the full aggregated list.
 
-`PUT /contacts/upsert` expects payload:
-`{ currentName?: string, currentPhoneNumber?: string, newName: string, newPhoneNumber: string }`.
-If `currentName` and `currentPhoneNumber` are both empty/missing it is treated as `created`;
-otherwise it is treated as `updated`.
+`POST /contacts` expects payload:
+`{ names?: string[], emailAddresses?: string[], phoneNumbers?: string[], biographies?: string[] }`.
+Only provided fields are sent to Google People API.
+
+`PATCH /contacts/:resourceName` expects payload:
+`{ names?: string[], emailAddresses?: string[], phoneNumbers?: string[], biographies?: string[] }`.
+The backend first fetches the existing Google contact, merges existing data for omitted fields,
+and updates only fields explicitly provided in the request.
+Use URL-encoded resource names in the path (for example `people%2Fc1234567890`).
 
 `DELETE /contacts` expects payload:
 `[{ nameToDelete?: string, phoneToDelete?: string }]`.

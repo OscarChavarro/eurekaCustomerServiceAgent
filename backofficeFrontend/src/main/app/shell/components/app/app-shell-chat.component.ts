@@ -92,6 +92,7 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
   private readonly embedNearestLoadingState = signal<boolean>(false);
   private readonly operationModeState = signal<OperationMode>('chat');
   private readonly selectedContactPhoneSlugState = signal<string | null>(null);
+  private readonly selectedContactsPageSlugState = signal<ContactsPageSlug>(DEFAULT_CONTACTS_PAGE_SLUG);
   private readonly pendingChatPhoneNumberFromRouteState = signal<string | null>(null);
   private readonly chatHiddenInTimeModeState = signal<boolean>(false);
   private readonly timeRangeSelectorOpenState = signal<boolean>(false);
@@ -128,6 +129,7 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
   protected readonly languageDropdownOpen = this.languageDropdownOpenState.asReadonly();
   protected readonly operationMode = this.operationModeState.asReadonly();
   protected readonly selectedContactPhoneSlug = this.selectedContactPhoneSlugState.asReadonly();
+  protected readonly selectedContactsPageSlug = this.selectedContactsPageSlugState.asReadonly();
   protected readonly isEmbedMode = computed(() => this.viewMode() === 'embed');
   protected readonly embedNumberOfPoints = this.embedNumberOfPointsState.asReadonly();
   protected readonly embedNearestBlocks = this.embedNearestBlocksState.asReadonly();
@@ -491,7 +493,9 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
       return;
     }
 
-    void this.router.navigate(['/contacts', phoneSlug]);
+    void this.router.navigate(['/contacts', this.selectedContactsPageSlugState()], {
+      queryParams: { phoneSlug }
+    });
   }
 
   protected selectConversation(conversationId: string): void {
@@ -573,7 +577,9 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
 
   protected setOperationMode(mode: OperationMode): void {
     if (mode === 'contacts') {
-      void this.router.navigate(['/contacts']);
+      void this.router.navigate(['/contacts', this.selectedContactsPageSlugState()], {
+        queryParamsHandling: 'merge'
+      });
       return;
     }
 
@@ -1070,8 +1076,11 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
   private syncOperationModeWithRoute(): void {
     const routePath = this.activatedRoute.snapshot.routeConfig?.path ?? '';
     this.operationModeState.set(this.resolveOperationModeFromRoutePath(routePath));
+    this.selectedContactsPageSlugState.set(
+      this.normalizeContactsPageSlug(this.activatedRoute.snapshot.paramMap.get('page')) ?? DEFAULT_CONTACTS_PAGE_SLUG
+    );
     this.selectedContactPhoneSlugState.set(
-      this.normalizePhoneSlug(this.activatedRoute.snapshot.paramMap.get('phoneSlug'))
+      this.normalizePhoneSlug(this.activatedRoute.snapshot.queryParamMap.get('phoneSlug'))
     );
     this.pendingChatPhoneNumberFromRouteState.set(
       this.normalizeChatPhoneNumber(this.activatedRoute.snapshot.paramMap.get('phoneNumber'))
@@ -1103,6 +1112,22 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
 
     if (/^\d+$/.test(normalized)) {
       return normalized;
+    }
+
+    return null;
+  }
+
+  private normalizeContactsPageSlug(pageSlug: string | null): ContactsPageSlug | null {
+    if (pageSlug === 'contacts-with-conversations') {
+      return 'contacts-with-conversations';
+    }
+
+    if (pageSlug === 'conversations-without-contacts') {
+      return 'conversations-without-contacts';
+    }
+
+    if (pageSlug === 'contacts-without-conversations') {
+      return 'contacts-without-conversations';
     }
 
     return null;
@@ -1478,6 +1503,12 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
 }
 
 type OperationMode = 'chat' | 'time' | 'contacts';
+type ContactsPageSlug =
+  | 'contacts-with-conversations'
+  | 'conversations-without-contacts'
+  | 'contacts-without-conversations';
+
+const DEFAULT_CONTACTS_PAGE_SLUG: ContactsPageSlug = 'contacts-with-conversations';
 
 type TextSegment =
   | { type: 'text'; value: string }
