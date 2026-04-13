@@ -81,6 +81,10 @@ export const SHELL_TRANSLATIONS = {
     en: 'Contacts with conversations',
     es: 'Contactos con conversaciones'
   },
+  CONTACTS_WORKBOOK_PROSPECTS: {
+    en: 'Prospects',
+    es: 'Prospectos'
+  },
   CONTACTS_WORKBOOK_CONVERSATIONS_WITHOUT_CONTACTS: {
     en: 'Conversations with no contacts',
     es: 'Conversaciones sin contactos'
@@ -104,6 +108,14 @@ export const SHELL_TRANSLATIONS = {
   CONTACTS_TABLE_UNKNOWN_NAME: {
     en: '(No name)',
     es: '(Sin nombre)'
+  },
+  CONTACTS_NAME_TOOLTIP_NON_COMPLIANT: {
+    en: 'Check cell data format',
+    es: 'Revisa el formato de datos de la celda'
+  },
+  CONTACTS_NAME_TOOLTIP_REPEATED: {
+    en: 'Warning: repeated!',
+    es: 'Advertencia: repetido!'
   },
   CONTACTS_SORT_ASC: {
     en: 'Sort ascending',

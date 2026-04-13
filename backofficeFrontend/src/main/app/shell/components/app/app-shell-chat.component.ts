@@ -499,7 +499,7 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
       return;
     }
 
-    void this.router.navigate(['/contacts', this.selectedContactsPageSlugState()], {
+    void this.router.navigate(['/contacts', this.resolveContactsPageSlugForConversation(conversation)], {
       queryParams: { phoneSlug }
     });
   }
@@ -1123,6 +1123,10 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
       return 'contacts-with-conversations';
     }
 
+    if (pageSlug === 'prospects') {
+      return 'prospects';
+    }
+
     if (pageSlug === 'conversations-without-contacts') {
       return 'conversations-without-contacts';
     }
@@ -1273,6 +1277,17 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
     }
 
     return hasCountryCode ? `plus-${digits}` : digits;
+  }
+
+  private resolveContactsPageSlugForConversation(conversation: ChatConversation): ContactsPageSlug {
+    const candidateName = conversation.linkedContactName ?? conversation.contactName;
+    const normalizedName = typeof candidateName === 'string' ? candidateName.trim() : '';
+
+    if (normalizedName.startsWith('Prospecto')) {
+      return 'prospects';
+    }
+
+    return 'contacts-with-conversations';
   }
 
   protected t(key: (typeof I18N_KEYS)['shell'][keyof (typeof I18N_KEYS)['shell']]): string {
@@ -1483,6 +1498,7 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
 type OperationMode = 'chat' | 'time' | 'contacts';
 type ContactsPageSlug =
   | 'contacts-with-conversations'
+  | 'prospects'
   | 'conversations-without-contacts'
   | 'contacts-without-conversations';
 

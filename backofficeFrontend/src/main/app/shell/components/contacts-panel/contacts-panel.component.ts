@@ -108,6 +108,9 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
   protected readonly contactsWithConversationsCount = computed(
     () => this.groupedRowsState().contactsWithConversations.length
   );
+  protected readonly prospectsWithConversationsCount = computed(
+    () => this.groupedRowsState().prospectsWithConversations.length
+  );
   protected readonly conversationsWithoutContactsCount = computed(
     () => this.groupedRowsState().conversationsWithoutContacts.length
   );
@@ -150,6 +153,10 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
 
   protected conversationsWithoutContactsTabLabel(): string {
     return `${this.t(I18N_KEYS.shell.CONTACTS_WORKBOOK_CONVERSATIONS_WITHOUT_CONTACTS)} (${this.conversationsWithoutContactsCount()})`;
+  }
+
+  protected prospectsWithConversationsTabLabel(): string {
+    return `${this.t(I18N_KEYS.shell.CONTACTS_WORKBOOK_PROSPECTS)} (${this.prospectsWithConversationsCount()})`;
   }
 
   protected contactsWithoutConversationsTabLabel(): string {
@@ -259,11 +266,23 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
   }
 
   protected isNonCompliantContactNameCell(contact: ContactRow): boolean {
-    if (this.activeWorkbookTabState() !== 'contactsWithConversations') {
+    if (!isContactsWithConversationsLikeTab(this.activeWorkbookTabState())) {
       return false;
     }
 
     return !this.contactFormatValidatorService.isCompliant(contact.contactName);
+  }
+
+  protected contactNameCellTooltip(contact: ContactRow): string | null {
+    if (contact.repeated) {
+      return this.t(I18N_KEYS.shell.CONTACTS_NAME_TOOLTIP_REPEATED);
+    }
+
+    if (this.isNonCompliantContactNameCell(contact)) {
+      return this.t(I18N_KEYS.shell.CONTACTS_NAME_TOOLTIP_NON_COMPLIANT);
+    }
+
+    return null;
   }
 
   protected shouldShowRecommendedNameButton(contact: ContactRow): boolean {
@@ -551,6 +570,7 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
       const groups = this.buildWorkbookGroups(mappedContacts, conversationIds);
       const allRows = [
         ...groups.contactsWithConversations,
+        ...groups.prospectsWithConversations,
         ...groups.conversationsWithoutContacts,
         ...groups.contactsWithoutConversations
       ];
@@ -751,6 +771,7 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
     const currentGroups = this.groupedRowsState();
     const nextGroups: ContactsWorkbookGroups = {
       contactsWithConversations: currentGroups.contactsWithConversations.filter((row) => row.id !== contactId),
+      prospectsWithConversations: currentGroups.prospectsWithConversations.filter((row) => row.id !== contactId),
       conversationsWithoutContacts: currentGroups.conversationsWithoutContacts.filter((row) => row.id !== contactId),
       contactsWithoutConversations: currentGroups.contactsWithoutConversations.filter((row) => row.id !== contactId)
     };
@@ -803,6 +824,7 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
     const currentGroups = this.groupedRowsState();
     const mergedExistingContacts = [
       ...currentGroups.contactsWithConversations,
+      ...currentGroups.prospectsWithConversations,
       ...currentGroups.contactsWithoutConversations
     ]
       .map((row) => (row.id === contactId ? { ...row, ...edition } : row))
@@ -817,7 +839,8 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
         contactName: edition.contactName.trim().length > 0 ? edition.contactName.trim() : null,
         phoneNumbers: edition.phoneNumbers,
         resourceName: edition.resourceName,
-        chatConversationId: null
+        chatConversationId: null,
+        repeated: false
       });
     }
 
@@ -847,6 +870,7 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
     const currentGroups = this.groupedRowsState();
     const mergedExistingContacts = [
       ...currentGroups.contactsWithConversations,
+      ...currentGroups.prospectsWithConversations,
       ...currentGroups.contactsWithoutConversations
     ].map((row) => ({ ...row, chatConversationId: null }));
     const createdRow: ContactRow = {
@@ -854,7 +878,8 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
       contactName: this.pickFirstName(response.contact.names),
       phoneNumbers: this.normalizePhoneNumbers(response.contact.phoneNumbers),
       resourceName: response.contact.resourceName,
-      chatConversationId: null
+      chatConversationId: null,
+      repeated: false
     };
 
     const nextContacts = [...mergedExistingContacts, createdRow];
@@ -888,6 +913,13 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
       }
     }
 
+    for (const row of currentGroups.prospectsWithConversations) {
+      const conversationId = row.chatConversationId?.trim();
+      if (conversationId) {
+        discoveredConversationIds.add(conversationId);
+      }
+    }
+
     for (const row of currentGroups.conversationsWithoutContacts) {
       const conversationId = row.chatConversationId?.trim();
       if (conversationId) {
@@ -905,6 +937,7 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
   ): string | null {
     const allRows = [
       ...groups.contactsWithConversations,
+      ...groups.prospectsWithConversations,
       ...groups.conversationsWithoutContacts,
       ...groups.contactsWithoutConversations
     ];
@@ -973,6 +1006,10 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
       return 'contactsWithConversations';
     }
 
+    if (pageSlug === 'prospects') {
+      return 'prospectsWithConversations';
+    }
+
     if (pageSlug === 'conversations-without-contacts') {
       return 'conversationsWithoutContacts';
     }
@@ -987,6 +1024,10 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
   private pageSlugFromWorkbookTab(tab: ContactsWorkbookTab): ContactsWorkbookPageSlug {
     if (tab === 'contactsWithConversations') {
       return 'contacts-with-conversations';
+    }
+
+    if (tab === 'prospectsWithConversations') {
+      return 'prospects';
     }
 
     if (tab === 'conversationsWithoutContacts') {
@@ -1042,6 +1083,7 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
     const groups = this.groupedRowsState();
     const orderedTabs: ContactsWorkbookTab[] = [
       'contactsWithConversations',
+      'prospectsWithConversations',
       'contactsWithoutConversations',
       'conversationsWithoutContacts'
     ];
@@ -1165,6 +1207,7 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
     const conversations = conversationIds.map((id) => this.toConversationEntry(id));
     const matchedConversationIds = new Set<string>();
     const contactsWithConversations: ContactRow[] = [];
+    const prospectsWithConversations: ContactRow[] = [];
     const contactsWithoutConversations: ContactRow[] = [];
 
     for (const contact of contacts) {
@@ -1190,10 +1233,15 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
       });
 
       if (hasConversation) {
-        contactsWithConversations.push({
+        const contactWithConversation: ContactRow = {
           ...contact,
           chatConversationId: firstMatchedConversationId
-        });
+        };
+        if (this.isProspectContactName(contact.contactName)) {
+          prospectsWithConversations.push(contactWithConversation);
+        } else {
+          contactsWithConversations.push(contactWithConversation);
+        }
       } else {
         contactsWithoutConversations.push(contact);
       }
@@ -1203,11 +1251,20 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
       .filter((conversation) => !matchedConversationIds.has(conversation.id))
       .map((conversation, index) => this.toConversationOnlyRow(conversation, index));
 
-    return {
+    return this.markRepeatedContactNames({
       contactsWithConversations,
+      prospectsWithConversations,
       conversationsWithoutContacts,
       contactsWithoutConversations
-    };
+    });
+  }
+
+  private isProspectContactName(contactName: string | null): boolean {
+    if (!contactName) {
+      return false;
+    }
+
+    return contactName.trim().startsWith('Prospecto');
   }
 
   private toConversationEntry(conversationId: string): ConversationComparisonEntry {
@@ -1252,7 +1309,8 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
       contactName: conversation.displayName || conversation.id,
       phoneNumbers: conversation.normalizedPhone ? [conversation.normalizedPhone] : [],
       resourceName: undefined,
-      chatConversationId: conversation.id
+      chatConversationId: conversation.id,
+      repeated: false
     };
   }
 
@@ -1285,9 +1343,54 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
         contactName,
         phoneNumbers,
         resourceName,
-        chatConversationId: null
+        chatConversationId: null,
+        repeated: false
       };
     });
+  }
+
+  private markRepeatedContactNames(groups: ContactsWorkbookGroups): ContactsWorkbookGroups {
+    const allRows = [
+      ...groups.contactsWithConversations,
+      ...groups.prospectsWithConversations,
+      ...groups.conversationsWithoutContacts,
+      ...groups.contactsWithoutConversations
+    ];
+    const countsByName = new Map<string, number>();
+
+    for (const row of allRows) {
+      const key = this.toRepeatedNameKey(row.contactName);
+      if (!key) {
+        continue;
+      }
+
+      countsByName.set(key, (countsByName.get(key) ?? 0) + 1);
+    }
+
+    const mapGroup = (rows: ContactRow[]): ContactRow[] =>
+      rows.map((row) => {
+        const key = this.toRepeatedNameKey(row.contactName);
+        return {
+          ...row,
+          repeated: key ? (countsByName.get(key) ?? 0) > 1 : false
+        };
+      });
+
+    return {
+      contactsWithConversations: mapGroup(groups.contactsWithConversations),
+      prospectsWithConversations: mapGroup(groups.prospectsWithConversations),
+      conversationsWithoutContacts: mapGroup(groups.conversationsWithoutContacts),
+      contactsWithoutConversations: mapGroup(groups.contactsWithoutConversations)
+    };
+  }
+
+  private toRepeatedNameKey(name: string | null): string | null {
+    if (!name) {
+      return null;
+    }
+
+    const normalized = name.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+    return normalized.length > 0 ? normalized : null;
   }
 
   private pickFirstName(names: string[]): string | null {
@@ -1528,6 +1631,7 @@ type ContactRow = {
   phoneNumbers: string[];
   resourceName?: string;
   chatConversationId: string | null;
+  repeated: boolean;
 };
 
 type ContactEdition = {
@@ -1557,11 +1661,13 @@ type ContactsSortState = {
 
 type ContactsWorkbookTab =
   | 'contactsWithConversations'
+  | 'prospectsWithConversations'
   | 'conversationsWithoutContacts'
   | 'contactsWithoutConversations';
 
 type ContactsWorkbookPageSlug =
   | 'contacts-with-conversations'
+  | 'prospects'
   | 'conversations-without-contacts'
   | 'contacts-without-conversations';
 
@@ -1586,6 +1692,7 @@ type ConversationComparisonEntry = {
 function createEmptyWorkbookGroups(): ContactsWorkbookGroups {
   return {
     contactsWithConversations: [],
+    prospectsWithConversations: [],
     conversationsWithoutContacts: [],
     contactsWithoutConversations: []
   };
@@ -1598,4 +1705,8 @@ function buildFlagEmoji(countryCode: string): string {
     .split('')
     .map((letter) => String.fromCodePoint(127397 + letter.charCodeAt(0)))
     .join('');
+}
+
+function isContactsWithConversationsLikeTab(tab: ContactsWorkbookTab): boolean {
+  return tab === 'contactsWithConversations' || tab === 'prospectsWithConversations';
 }

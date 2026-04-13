@@ -17,6 +17,7 @@ import {
 
 export type ContactsWorkbookTab =
   | 'contactsWithConversations'
+  | 'prospectsWithConversations'
   | 'conversationsWithoutContacts'
   | 'contactsWithoutConversations';
 
@@ -69,7 +70,7 @@ export class ContactNameRecomendationService {
     tab: ContactsWorkbookTab,
     contact: BlueActionContactRow
   ): boolean {
-    if (tab !== 'contactsWithConversations') {
+    if (!isContactsWithConversationsLikeTab(tab)) {
       return false;
     }
 
@@ -248,7 +249,7 @@ export class ContactNameRecomendationService {
       return '';
     }
 
-    if (tab !== 'contactsWithConversations') {
+    if (!isContactsWithConversationsLikeTab(tab)) {
       return recommendedName;
     }
 
@@ -258,4 +259,8 @@ export class ContactNameRecomendationService {
 
     return `${recommendedName} llamada`;
   }
+}
+
+function isContactsWithConversationsLikeTab(tab: ContactsWorkbookTab): boolean {
+  return tab === 'contactsWithConversations' || tab === 'prospectsWithConversations';
 }

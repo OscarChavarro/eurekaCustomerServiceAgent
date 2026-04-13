@@ -84,6 +84,8 @@
                 <td
                   class="editable-cell"
                   [class.is-non-compliant-name]="isNonCompliantContactNameCell(contact)"
+                  [class.is-repeated-name]="contact.repeated"
+                  [attr.title]="contactNameCellTooltip(contact)"
                   (dblclick)="onCellDoubleClick(contact)"
                 >
                   @if (isEditingCell(contact)) {
@@ -194,6 +196,16 @@
       (click)="selectWorkbookTab('contactsWithConversations')"
     >
       {{ contactsWithConversationsTabLabel() }}
+    </button>
+    <button
+      type="button"
+      role="tab"
+      class="workbook-tab"
+      [class.is-active]="isWorkbookTabActive('prospectsWithConversations')"
+      [attr.aria-selected]="isWorkbookTabActive('prospectsWithConversations')"
+      (click)="selectWorkbookTab('prospectsWithConversations')"
+    >
+      {{ prospectsWithConversationsTabLabel() }}
     </button>
     <button
       type="button"
