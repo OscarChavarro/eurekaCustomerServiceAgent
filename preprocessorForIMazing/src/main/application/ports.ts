@@ -14,6 +14,16 @@ export interface CsvParserPort {
   parse(content: string): CsvRecord[];
 }
 
+export interface ContactEntry {
+  names: string[];
+  phoneNumbers: string[];
+}
+
+export interface ContactsBackendPort {
+  assertHealth(): Promise<void>;
+  listContacts(): Promise<ContactEntry[]>;
+}
+
 export interface LoggerPort {
   info(message: string): void;
   warn(message: string): void;

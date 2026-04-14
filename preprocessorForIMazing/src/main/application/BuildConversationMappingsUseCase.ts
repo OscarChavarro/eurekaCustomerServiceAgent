@@ -2,7 +2,7 @@ import * as path from 'path';
 
 import { CsvRecord, ConversationMapping } from '../domain/Conversation';
 import { NameNormalizer } from '../domain/NameNormalizer';
-import { PhoneNumberExtractor } from '../domain/PhoneNumberExtractor';
+import { ResolveConversationPhoneNumberUseCase } from './ResolveConversationPhoneNumberUseCase';
 import { CsvParserPort, FileSystemPort, LoggerPort } from './ports';
 
 export interface BuildConversationMappingsResult {
@@ -14,8 +14,8 @@ export class BuildConversationMappingsUseCase {
   constructor(
     private readonly fileSystem: FileSystemPort,
     private readonly csvParser: CsvParserPort,
-    private readonly phoneNumberExtractor: PhoneNumberExtractor,
     private readonly nameNormalizer: NameNormalizer,
+    private readonly resolveConversationPhoneNumberUseCase: ResolveConversationPhoneNumberUseCase,
     private readonly logger: LoggerPort
   ) {}
 
@@ -29,15 +29,19 @@ export class BuildConversationMappingsUseCase {
       const csvPath: string = path.join(csvFolderPath, csvFileName);
       const content: string = await this.fileSystem.readTextFile(csvPath);
       const records: CsvRecord[] = this.csvParser.parse(content);
-      const phoneNumber: string | null = this.phoneNumberExtractor.extract(records);
+      const originalBaseName: string = this.nameNormalizer.removeExtension(csvFileName);
+      const cleanConversationName: string = this.nameNormalizer.removeWhatsAppPrefix(originalBaseName);
+      const phoneNumber: string | null = await this.resolveConversationPhoneNumberUseCase.execute({
+        records,
+        conversationName: cleanConversationName
+      });
 
       if (phoneNumber === null) {
         unprocessedCsvFiles.push(csvFileName);
-        this.logger.warn(`No incoming phone number found in ${csvFileName}`);
+        this.logger.warn(`No phone number strategy matched for ${csvFileName}`);
         continue;
       }
 
-      const originalBaseName: string = this.nameNormalizer.removeExtension(csvFileName);
       mappings.push({
         csvFileName,
         originalBaseName,

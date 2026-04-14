@@ -25,5 +25,6 @@ declare module 'fs/promises' {
 
 declare const process: {
   argv: string[];
+  cwd(): string;
   exit(code?: number): never;
 };

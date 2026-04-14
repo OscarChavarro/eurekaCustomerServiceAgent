@@ -3,9 +3,13 @@ import * as path from 'path';
 import { NameNormalizer } from '../domain/NameNormalizer';
 import { PhoneNumberExtractor } from '../domain/PhoneNumberExtractor';
 import { BuildConversationMappingsUseCase } from './BuildConversationMappingsUseCase';
-import { CsvParserPort, FileSystemPort, LoggerPort } from './ports';
+import { ResolveConversationPhoneNumberUseCase } from './ResolveConversationPhoneNumberUseCase';
+import { ContactsBackendPort, CsvParserPort, FileSystemPort, LoggerPort } from './ports';
 import { RenameCsvFilesUseCase } from './RenameCsvFilesUseCase';
 import { RenameMediaUseCase } from './RenameMediaUseCase';
+import { ResolvePhoneFromContactsBackendStrategy } from './strategies/ResolvePhoneFromContactsBackendStrategy';
+import { ResolvePhoneFromIncomingMessageStrategy } from './strategies/ResolvePhoneFromIncomingMessageStrategy';
+import { ResolvePhoneFromNumericConversationNameStrategy } from './strategies/ResolvePhoneFromNumericConversationNameStrategy';
 import { WriteUnprocessedLogUseCase } from './WriteUnprocessedLogUseCase';
 
 export class PreprocessWhatsappExportUseCase {
@@ -13,20 +17,29 @@ export class PreprocessWhatsappExportUseCase {
   private readonly renameCsvFilesUseCase: RenameCsvFilesUseCase;
   private readonly renameMediaUseCase: RenameMediaUseCase;
   private readonly writeUnprocessedLogUseCase: WriteUnprocessedLogUseCase;
+  private readonly contactsBackend: ContactsBackendPort;
 
   constructor(
     private readonly fileSystem: FileSystemPort,
     csvParser: CsvParserPort,
+    contactsBackend: ContactsBackendPort,
     logger: LoggerPort
   ) {
     const nameNormalizer: NameNormalizer = new NameNormalizer();
     const phoneNumberExtractor: PhoneNumberExtractor = new PhoneNumberExtractor();
+    const resolveConversationPhoneNumberUseCase = new ResolveConversationPhoneNumberUseCase([
+      new ResolvePhoneFromIncomingMessageStrategy(phoneNumberExtractor),
+      new ResolvePhoneFromNumericConversationNameStrategy(),
+      new ResolvePhoneFromContactsBackendStrategy(contactsBackend, nameNormalizer, logger)
+    ]);
+
+    this.contactsBackend = contactsBackend;
 
     this.buildConversationMappingsUseCase = new BuildConversationMappingsUseCase(
       fileSystem,
       csvParser,
-      phoneNumberExtractor,
       nameNormalizer,
+      resolveConversationPhoneNumberUseCase,
       logger
     );
     this.renameCsvFilesUseCase = new RenameCsvFilesUseCase(fileSystem, nameNormalizer, logger);
@@ -35,6 +48,8 @@ export class PreprocessWhatsappExportUseCase {
   }
 
   async execute(rootFolderPath: string): Promise<void> {
+    await this.contactsBackend.assertHealth();
+
     const csvFolderPath: string = path.join(rootFolderPath, 'csv');
     const mediaFolderPath: string = path.join(rootFolderPath, 'media');
 

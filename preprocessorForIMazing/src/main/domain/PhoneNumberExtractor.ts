@@ -3,7 +3,7 @@ import { CsvRecord } from './Conversation';
 export class PhoneNumberExtractor {
   extract(records: CsvRecord[]): string | null {
     for (const record of records) {
-      const type: string = (record['Type'] || '').trim().toLowerCase();
+      const type: string = (record.Type || '').trim().toLowerCase();
       if (type !== 'incoming') {
         continue;
       }

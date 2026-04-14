@@ -12,11 +12,14 @@ Given a root folder containing these subfolders:
 The tool:
 
 1. Removes the `WhatsApp - ` prefix from filenames and folder names.
-2. Extracts the contact phone number from the first `Incoming` row found in each CSV file.
-3. Renames each CSV file to `<phone>.csv`.
-4. Renames the matching media folder to `<phone>`.
-5. Renames media files inside that folder by removing the redundant contact name from the filename.
-6. Writes unprocessed CSV filenames to `outlog/unprocessed.txt` when no `Incoming` row with a sender phone number can be found.
+2. Tries to extract the contact phone number from the first `Incoming` row found in each CSV file.
+3. If no `Incoming` phone is found, and the conversation name only contains digits, spaces, `(`, `)` and `+`, it strips non-digits and uses the resulting number.
+4. If still unresolved, it loads contacts once from `contactsBackend` (`GET /contacts`) and tries to match by normalized conversation name.
+5. The tool fails fast before processing if `GET /health` in `contactsBackend` is not available.
+6. Renames each CSV file to `<phone>.csv`.
+7. Renames the matching media folder to `<phone>`.
+8. Renames media files inside that folder by removing the redundant contact name from the filename.
+9. Writes unprocessed CSV filenames to `outlog/unprocessed.txt` when none of the strategies can resolve a phone number.
 
 ## Example
 
@@ -50,6 +53,24 @@ After:
 ```bash
 npm install
 ```
+
+## Secrets configuration
+
+Create `secrets.json` in the project root (same folder as `package.json`) using `secrets-example.json` as template:
+
+```json
+{
+  "contactsBackend": {
+    "baseUrl": "http://localhost:3669",
+    "pageSize": 100,
+    "requestTimeoutMs": 10000
+  }
+}
+```
+
+- `baseUrl`: base URL of `contactsBackend`.
+- `pageSize`: page size sent to `GET /contacts?pageSize=<value>`.
+- `requestTimeoutMs`: timeout for `/health` and `/contacts` requests.
 
 ## Build
 
@@ -86,7 +107,7 @@ The tool creates:
 outlog/unprocessed.txt
 ```
 
-Each line contains the original CSV filename that could not be processed because no usable `Incoming` row with a phone number was found.
+Each line contains the original CSV filename that could not be processed by any strategy.
 
 ## Notes
 
