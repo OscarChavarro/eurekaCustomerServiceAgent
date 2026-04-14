@@ -11,15 +11,20 @@ Given a root folder containing these subfolders:
 
 The tool:
 
-1. Removes the `WhatsApp - ` prefix from filenames and folder names.
-2. Tries to extract the contact phone number from the first `Incoming` row found in each CSV file.
-3. If no `Incoming` phone is found, and the conversation name only contains digits, spaces, `(`, `)` and `+`, it strips non-digits and uses the resulting number.
-4. If still unresolved, it loads contacts once from `contactsBackend` (`GET /contacts`) and tries to match by normalized conversation name.
-5. The tool fails fast before processing if `GET /health` in `contactsBackend` is not available.
-6. Renames each CSV file to `<phone>.csv`.
-7. Renames the matching media folder to `<phone>`.
-8. Renames media files inside that folder by removing the redundant contact name from the filename.
-9. Writes unprocessed CSV filenames to `outlog/unprocessed.txt` when none of the strategies can resolve a phone number.
+1. Creates auxiliary folders at root: `csv_groups`, `csv_disabled`, and `csv_unsupported`.
+2. Scans `csv` and moves group-conversation files to `csv_groups`.
+3. Moves matching media conversation folders to `media/_groups`.
+4. Group detection looks for messages like `<user> created community '<groupName>'` and matches `<groupName>` against the CSV conversation name pattern; it also supports `<user> created this community`.
+5. Removes the `WhatsApp - ` prefix from filenames and folder names.
+6. Tries to extract the contact phone number from the first `Incoming` row found in each CSV file.
+7. If no `Incoming` phone is found, and the conversation name only contains digits, spaces, `(`, `)` and `+`, it strips non-digits and uses the resulting number.
+8. If still unresolved, it loads contacts once from `contactsBackend` (`GET /contacts`) and tries to match by normalized conversation name.
+9. The tool fails fast before processing contacts if `GET /health` in `contactsBackend` is not available.
+10. Renames each CSV file to `<phone>.csv`.
+11. Renames the matching media folder to `<phone>`.
+12. Renames media files inside that folder by removing the redundant contact name from the filename.
+13. Moves unresolved CSV files from `csv` to `csv_unsupported` when none of the strategies can resolve a phone number.
+14. Writes `outlog/unprocessed.txt` with only the CSV filenames that were actually moved to `csv_unsupported`.
 
 ## Example
 
@@ -97,6 +102,10 @@ Where `/path/to/root-folder` contains:
 root-folder/
   csv/
   media/
+    _groups/
+  csv_groups/
+  csv_disabled/
+  csv_unsupported/
 ```
 
 ## Output log
