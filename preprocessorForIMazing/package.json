@@ -6,7 +6,9 @@
   "scripts": {
     "build": "rimraf dist && tsc -p tsconfig.json",
     "start": "node dist/main/cli/index.js",
-    "lint": "tslint -p tsconfig.json -c tslint.json"
+    "lint": "tslint -p tsconfig.json -c tslint.json",
+    "arch:check": "depcruise --config .dependency-cruiser.cjs src/main --output-type err-long",
+    "arch:graph": "mkdir -p doc/architecture && depcruise --config .dependency-cruiser.cjs src/main --output-type dot | dot -T svg > doc/architecture/dependency-graph.svg"
   },
   "keywords": [
     "typescript",
@@ -18,6 +20,7 @@
   "license": "GPL",
   "devDependencies": {
     "@types/node": "20.17.57",
+    "dependency-cruiser": "^16.10.4",
     "rimraf": "5.0.10",
     "tslint": "6.1.3",
     "typescript": "4.9.5"
