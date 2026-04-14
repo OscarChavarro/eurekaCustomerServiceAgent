@@ -77,7 +77,7 @@ export class NormalizeConversationStageRenderer implements ConversationStageRend
     }
 
     const assetConversation = this.resolveAssetConversationFromPattern(effectivePattern);
-    const relativePath = `${assetConversation.folderName}/${formattedDate} - ${assetConversation.label} - ${attachmentFileName}`;
+    const relativePath = `${assetConversation.folderName}/${formattedDate} - ${attachmentFileName}`;
     return this.toNormalizedHttpUrl(this.frontendSecretsService.staticAssetsBaseUrl, relativePath);
   }
 
@@ -142,7 +142,7 @@ export class NormalizeConversationStageRenderer implements ConversationStageRend
     }
 
     const assetConversation = this.resolveAssetConversationFromPattern(effectivePattern);
-    const relativePath = `${assetConversation.folderName}/${formattedDate} - ${assetConversation.label} - ${attachmentFileName}`;
+    const relativePath = `${assetConversation.folderName}/${formattedDate} - ${attachmentFileName}`;
     return this.toNormalizedHttpUrl(this.frontendSecretsService.staticAssetsBaseUrl, relativePath);
   }
 
@@ -209,24 +209,15 @@ export class NormalizeConversationStageRenderer implements ConversationStageRend
       return null;
     }
 
-    if (NormalizeConversationStageRenderer.WHATSAPP_PREFIX.test(trimmed)) {
-      const label = trimmed.replace(NormalizeConversationStageRenderer.WHATSAPP_PREFIX, '').trim();
-      return label ? `WhatsApp - ${label}` : null;
-    }
-
-    return `WhatsApp - ${trimmed}`;
+    const label = trimmed.replace(NormalizeConversationStageRenderer.WHATSAPP_PREFIX, '').trim();
+    return label.length > 0 ? label : null;
   }
 
   private resolveAssetConversationFromPattern(filePattern: string): {
     folderName: string;
-    label: string;
   } {
-    const label = this.extractConversationLabelFromPattern(filePattern);
-    const folderName = filePattern.startsWith('WhatsApp - ')
-      ? filePattern
-      : `WhatsApp - ${label}`;
-
-    return { folderName, label };
+    const folderName = this.extractConversationLabelFromPattern(filePattern);
+    return { folderName };
   }
 
   private extractConversationLabelFromPattern(pattern: string): string {

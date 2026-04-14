@@ -99,7 +99,7 @@ export class ChatConversationService {
       id: 'conv-ana',
       contactName: 'Ana Ruiz',
       linkedContactName: 'Ana Ruiz',
-      filePattern: 'WhatsApp - Ana Ruiz',
+      filePattern: 'Ana Ruiz',
       originalPhoneNumber: '+34600000000',
       phoneNumber: '+34600000000',
       contactAvatar: 'AR',

@@ -601,7 +601,7 @@ export class KwoledgeIngestionUseCase {
 
   private isRenamedPhoneFilePattern(filePattern: string): boolean {
     const withoutPrefix = filePattern.replace(/^whatsapp\s*-\s*/i, '').trim();
-    return /^\+\d+$/.test(withoutPrefix);
+    return /^\+?\d+$/.test(withoutPrefix);
   }
 
   private toRawStageMessage(rawMessage: RawConversationMessage): RawStageMessage {
@@ -684,7 +684,7 @@ export class KwoledgeIngestionUseCase {
     }
 
     const formattedLabel = this.formatAssetPhoneLabel(label);
-    return `WhatsApp - ${formattedLabel}`;
+    return formattedLabel;
   }
 
   private stripDirectionalUnicodeMarkers(value: string): string {

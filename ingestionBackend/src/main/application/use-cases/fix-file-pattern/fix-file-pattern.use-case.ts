@@ -90,7 +90,7 @@ export class FixFilePatternUseCase {
       return currentFilePattern;
     }
 
-    return `WhatsApp - ${emojiNormalizedLabel}`;
+    return emojiNormalizedLabel;
   }
 
   private normalizeContactLabel(contactName: string | null): string | null {

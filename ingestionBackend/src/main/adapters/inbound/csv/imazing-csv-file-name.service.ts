@@ -3,7 +3,6 @@ import { basename, extname } from 'node:path';
 
 @Injectable()
 export class ImazingCsvFileNameService {
-  private static readonly RENAMED_PREFIX = 'Whatsapp - ';
   private static readonly PREFIX_PATTERN = /^whatsapp\s*-\s*/i;
   private static readonly SPAIN_LOCAL_PHONE_PATTERN = /^\d{3}\s\d{2}\s\d{2}\s\d{2}$/;
 
@@ -51,6 +50,10 @@ export class ImazingCsvFileNameService {
       return `+34${digitsOnly}`;
     }
 
+    if (/^\d+$/.test(onlyDigitsAndPlusAndSpaces)) {
+      return digitsOnly;
+    }
+
     return null;
   }
 
@@ -61,6 +64,6 @@ export class ImazingCsvFileNameService {
       throw new Error(`Invalid phone number for CSV rename: ${phoneNumber}`);
     }
 
-    return `${ImazingCsvFileNameService.RENAMED_PREFIX}${normalizedPhone}.csv`;
+    return `${normalizedPhone}.csv`;
   }
 }

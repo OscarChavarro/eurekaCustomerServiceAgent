@@ -157,7 +157,7 @@ export class ConversationMediaNormalizationService {
     }
 
     const assetConversation = this.resolveAssetConversationFromPattern(filePattern);
-    const relativePath = `${assetConversation.folderName}/${formattedDate} - ${assetConversation.label} - ${attachment}`;
+    const relativePath = `${assetConversation.folderName}/${formattedDate} - ${attachment}`;
 
     const normalizedBase = this.staticAssetsBaseUrlPort.getBaseUrl().trim().replace(/\/+$/, '');
     const normalizedPath = relativePath
@@ -171,13 +171,9 @@ export class ConversationMediaNormalizationService {
 
   private resolveAssetConversationFromPattern(filePattern: string): {
     folderName: string;
-    label: string;
   } {
-    const label = this.extractConversationLabelFromPattern(filePattern);
-    const folderName = /^whatsapp\s*-\s*/i.test(filePattern)
-      ? filePattern
-      : `WhatsApp - ${label}`;
-    return { folderName, label };
+    const folderName = this.extractConversationLabelFromPattern(filePattern);
+    return { folderName };
   }
 
   private extractConversationLabelFromPattern(pattern: string): string {

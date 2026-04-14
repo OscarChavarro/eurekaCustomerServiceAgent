@@ -563,12 +563,7 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
   }
 
   private toDeletePayloadConversationId(conversationId: string): string {
-    const prefix = 'WhatsApp - ';
-    const normalizedConversationId = conversationId.startsWith(prefix)
-      ? conversationId.slice(prefix.length)
-      : conversationId;
-
-    return `${prefix}${normalizedConversationId}`;
+    return conversationId.trim();
   }
 
   protected selectConversationFromTimePanel(conversationId: string): void {
