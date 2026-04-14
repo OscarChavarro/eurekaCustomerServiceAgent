@@ -15,16 +15,18 @@ The tool:
 2. Scans `csv` and moves group-conversation files to `csv_groups`.
 3. Moves matching media conversation folders to `media/_groups`.
 4. Group detection looks for messages like `<user> created community '<groupName>'` and matches `<groupName>` against the CSV conversation name pattern; it also supports `<user> created this community`.
-5. Removes the `WhatsApp - ` prefix from filenames and folder names.
-6. Tries to extract the contact phone number from the first `Incoming` row found in each CSV file.
-7. If no `Incoming` phone is found, and the conversation name only contains digits, spaces, `(`, `)` and `+`, it strips non-digits and uses the resulting number.
-8. If still unresolved, it loads contacts once from `contactsBackend` (`GET /contacts`) and tries to match by normalized conversation name.
-9. The tool fails fast before processing contacts if `GET /health` in `contactsBackend` is not available.
-10. Renames each CSV file to `<phone>.csv`.
-11. Renames the matching media folder to `<phone>`.
-12. Renames media files inside that folder by removing the redundant contact name from the filename.
-13. Moves unresolved CSV files from `csv` to `csv_unsupported` when none of the strategies can resolve a phone number.
-14. Writes `outlog/unprocessed.txt` with only the CSV filenames that were actually moved to `csv_unsupported`.
+5. Moves to `csv_disabled` CSV files whose conversation name matches any pattern in `etc/disabledContacts.json`.
+6. Moves to `csv_unsupported` CSV files containing messages like `<digits> es tu código de confirmación de Facebook` (for example OTP conversations).
+7. Removes the `WhatsApp - ` prefix from filenames and folder names.
+8. Tries to extract the contact phone number from the first `Incoming` row found in each CSV file.
+9. If no `Incoming` phone is found, and the conversation name only contains digits, spaces, `(`, `)` and `+`, it strips non-digits and uses the resulting number.
+10. If still unresolved, it loads contacts once from `contactsBackend` (`GET /contacts`) and tries to match by normalized conversation name.
+11. The tool fails fast before processing contacts if `GET /health` in `contactsBackend` is not available.
+12. Renames each CSV file to `<phone>.csv`.
+13. Renames the matching media folder to `<phone>`.
+14. Renames media files inside that folder by removing the redundant contact name from the filename.
+15. Moves unresolved CSV files from `csv` to `csv_unsupported` when none of the strategies can resolve a phone number.
+16. Writes `outlog/unprocessed.txt` with only the CSV filenames that were actually moved to `csv_unsupported`.
 
 ## Example
 

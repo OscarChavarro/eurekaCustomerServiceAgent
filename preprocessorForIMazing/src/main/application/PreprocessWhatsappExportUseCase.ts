@@ -1,10 +1,14 @@
 import * as path from 'path';
 
+import { DisabledConversationMatcher } from '../domain/DisabledConversationMatcher';
 import { EnsureAuxiliaryCsvFoldersUseCase } from './EnsureAuxiliaryCsvFoldersUseCase';
+import { FacebookConfirmationConversationDetector } from '../domain/FacebookConfirmationConversationDetector';
 import { NameNormalizer } from '../domain/NameNormalizer';
 import { GroupConversationDetector } from '../domain/GroupConversationDetector';
 import { PhoneNumberExtractor } from '../domain/PhoneNumberExtractor';
 import { BuildConversationMappingsUseCase } from './BuildConversationMappingsUseCase';
+import { MoveDisabledCsvFilesUseCase } from './MoveDisabledCsvFilesUseCase';
+import { MoveFacebookConfirmationCsvFilesUseCase } from './MoveFacebookConfirmationCsvFilesUseCase';
 import { MoveGroupCsvFilesUseCase } from './MoveGroupCsvFilesUseCase';
 import { MoveGroupMediaFoldersUseCase } from './MoveGroupMediaFoldersUseCase';
 import { MoveUnsupportedCsvFilesUseCase } from './MoveUnsupportedCsvFilesUseCase';
@@ -23,6 +27,8 @@ export class PreprocessWhatsappExportUseCase {
   private readonly renameMediaUseCase: RenameMediaUseCase;
   private readonly writeUnprocessedLogUseCase: WriteUnprocessedLogUseCase;
   private readonly ensureAuxiliaryCsvFoldersUseCase: EnsureAuxiliaryCsvFoldersUseCase;
+  private readonly moveDisabledCsvFilesUseCase: MoveDisabledCsvFilesUseCase;
+  private readonly moveFacebookConfirmationCsvFilesUseCase: MoveFacebookConfirmationCsvFilesUseCase;
   private readonly moveGroupCsvFilesUseCase: MoveGroupCsvFilesUseCase;
   private readonly moveGroupMediaFoldersUseCase: MoveGroupMediaFoldersUseCase;
   private readonly moveUnsupportedCsvFilesUseCase: MoveUnsupportedCsvFilesUseCase;
@@ -32,9 +38,12 @@ export class PreprocessWhatsappExportUseCase {
     private readonly fileSystem: FileSystemPort,
     csvParser: CsvParserPort,
     contactsBackend: ContactsBackendPort,
+    private readonly disabledContactPatterns: string[],
     logger: LoggerPort
   ) {
     const nameNormalizer: NameNormalizer = new NameNormalizer();
+    const disabledConversationMatcher = new DisabledConversationMatcher(nameNormalizer);
+    const facebookConfirmationConversationDetector = new FacebookConfirmationConversationDetector();
     const groupConversationDetector = new GroupConversationDetector(nameNormalizer);
     const phoneNumberExtractor: PhoneNumberExtractor = new PhoneNumberExtractor();
     const resolveConversationPhoneNumberUseCase = new ResolveConversationPhoneNumberUseCase([
@@ -56,6 +65,18 @@ export class PreprocessWhatsappExportUseCase {
     this.renameMediaUseCase = new RenameMediaUseCase(fileSystem, nameNormalizer, logger);
     this.writeUnprocessedLogUseCase = new WriteUnprocessedLogUseCase(fileSystem);
     this.ensureAuxiliaryCsvFoldersUseCase = new EnsureAuxiliaryCsvFoldersUseCase(fileSystem);
+    this.moveDisabledCsvFilesUseCase = new MoveDisabledCsvFilesUseCase(
+      fileSystem,
+      nameNormalizer,
+      disabledConversationMatcher,
+      logger
+    );
+    this.moveFacebookConfirmationCsvFilesUseCase = new MoveFacebookConfirmationCsvFilesUseCase(
+      fileSystem,
+      csvParser,
+      facebookConfirmationConversationDetector,
+      logger
+    );
     this.moveGroupCsvFilesUseCase = new MoveGroupCsvFilesUseCase(
       fileSystem,
       csvParser,
@@ -79,8 +100,13 @@ export class PreprocessWhatsappExportUseCase {
     }
 
     await this.ensureAuxiliaryCsvFoldersUseCase.execute(rootFolderPath);
+    await this.moveDisabledCsvFilesUseCase.execute(rootFolderPath, csvFolderPath, this.disabledContactPatterns);
     const groupedConversations = await this.moveGroupCsvFilesUseCase.execute(rootFolderPath, csvFolderPath);
     await this.moveGroupMediaFoldersUseCase.execute(mediaFolderPath, groupedConversations.movedGroupNormalizedNames);
+    const facebookConfirmationMoveResult = await this.moveFacebookConfirmationCsvFilesUseCase.execute(
+      rootFolderPath,
+      csvFolderPath
+    );
     await this.contactsBackend.assertHealth();
 
     const result = await this.buildConversationMappingsUseCase.execute(csvFolderPath);
@@ -91,6 +117,9 @@ export class PreprocessWhatsappExportUseCase {
       csvFolderPath,
       result.unprocessedCsvFiles
     );
-    await this.writeUnprocessedLogUseCase.execute(rootFolderPath, moveUnsupportedResult.movedCsvFiles);
+    const movedUnsupportedCsvFiles = Array.from(
+      new Set<string>([...facebookConfirmationMoveResult.movedCsvFiles, ...moveUnsupportedResult.movedCsvFiles])
+    );
+    await this.writeUnprocessedLogUseCase.execute(rootFolderPath, movedUnsupportedCsvFiles);
   }
 }

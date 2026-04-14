@@ -2,6 +2,7 @@ import * as path from 'path';
 
 import { PreprocessWhatsappExportUseCase } from '../application/PreprocessWhatsappExportUseCase';
 import { SimpleCsvParser } from '../infrastructure/csv/SimpleCsvParser';
+import { DisabledContactsConfig } from '../infrastructure/config/DisabledContactsConfig';
 import { SecretsConfig } from '../infrastructure/config/SecretsConfig';
 import { ContactsBackendHttpAdapter } from '../infrastructure/contacts/ContactsBackendHttpAdapter';
 import { NodeFileSystemAdapter } from '../infrastructure/fs/NodeFileSystemAdapter';
@@ -15,7 +16,9 @@ async function main(): Promise<void> {
 
   const rootFolderPath: string = path.resolve(rootFolderArgument);
   const secretsConfig: SecretsConfig = new SecretsConfig();
+  const disabledContactsConfig: DisabledContactsConfig = new DisabledContactsConfig();
   const contactsBackendSettings = await secretsConfig.load();
+  const disabledContactPatterns = await disabledContactsConfig.load();
   const contactsBackend = new ContactsBackendHttpAdapter({
     baseUrl: contactsBackendSettings.baseUrl,
     pageSize: contactsBackendSettings.pageSize ?? 100,
@@ -26,6 +29,7 @@ async function main(): Promise<void> {
     new NodeFileSystemAdapter(),
     new SimpleCsvParser(),
     contactsBackend,
+    disabledContactPatterns,
     new ConsoleLogger()
   );
 

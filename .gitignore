@@ -30,3 +30,4 @@ etc/_eureka/
 
 # Secrets in secrets.json are not pushed. Refer to secrets-example.json
 secrets.json
+preprocessorForIMazing/etc/disabledContacts.json

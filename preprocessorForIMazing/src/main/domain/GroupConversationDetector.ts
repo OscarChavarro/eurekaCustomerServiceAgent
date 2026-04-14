@@ -20,8 +20,7 @@ export class GroupConversationDetector {
         continue;
       }
 
-      const normalizedGroupName = this.nameNormalizer.normalizeForMatch(resolvedGroupName);
-      if (normalizedGroupName === normalizedConversationName) {
+      if (this.isMatchingGroupName(resolvedGroupName, conversationName, normalizedConversationName)) {
         return true;
       }
     }
@@ -75,5 +74,23 @@ export class GroupConversationDetector {
     }
 
     return null;
+  }
+
+  private isMatchingGroupName(groupName: string, conversationName: string, normalizedConversationName: string): boolean {
+    const normalizedGroupName = this.nameNormalizer.normalizeForMatch(groupName);
+    if (normalizedGroupName === normalizedConversationName) {
+      return true;
+    }
+
+    // iMazing can replace emojis with "_" in filenames. Compare an alphanumeric-only
+    // canonical form to keep those names equivalent.
+    const groupCanonical = this.toAlphaNumericCanonical(groupName);
+    const conversationCanonical = this.toAlphaNumericCanonical(conversationName);
+    return groupCanonical.length > 0 && groupCanonical === conversationCanonical;
+  }
+
+  private toAlphaNumericCanonical(value: string): string {
+    const normalized = value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    return normalized.replace(/[^a-z0-9]+/g, '');
   }
 }
