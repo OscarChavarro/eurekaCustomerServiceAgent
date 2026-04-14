@@ -21,6 +21,7 @@ const FIELD_TRANSLATION_TABLE: Record<string, TranslatableField> = {
   fechadeenvio: 'sentDate',
 
   messagetype: 'messageType',
+  type: 'messageType',
   tipo: 'messageType',
 
   senderid: 'senderId',
@@ -36,6 +37,7 @@ const FIELD_TRANSLATION_TABLE: Record<string, TranslatableField> = {
   reenviado: 'forwarded',
 
   replyto: 'replyTo',
+  replyingto: 'replyTo',
   respuestapara: 'replyTo',
 
   text: 'text',

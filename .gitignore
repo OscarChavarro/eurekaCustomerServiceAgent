@@ -25,7 +25,7 @@ lerna-debug.log*
 
 # private data
 ingestionBackend/etc/_chatsEureka/
-ingestionBackend/etc/_chatsEureka2/
+ingestionBackend/etc/_chatsEureka.old/
 etc/_eureka/
 
 # Secrets in secrets.json are not pushed. Refer to secrets-example.json

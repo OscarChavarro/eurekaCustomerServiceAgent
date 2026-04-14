@@ -32,6 +32,8 @@ import { TimelinePointerController } from './timeline/timeline-pointer.controlle
 import type { DragMode } from './timeline/timeline-pointer.controller';
 import type { TimelineRenderMetrics } from './timeline/timeline.types';
 
+const TIME_RANGE_SESSION_STORAGE_KEY = 'backoffice.timePanel.timeRange.v1';
+
 @Component({
   selector: 'app-time-panel',
   imports: [CommonModule],
@@ -441,8 +443,17 @@ export class TimePanelComponent implements AfterViewInit, OnChanges, OnDestroy {
       return;
     }
 
+    const restoredRange = this.readPersistedTimeRange();
     const { mainWidth } = this.getMainAreaMetrics();
     const safeMainWidth = Math.max(1, mainWidth);
+    if (restoredRange) {
+      const normalizedStart = this.clampToRange(restoredRange.startMs, state.minTimeMs, state.maxTimeMs);
+      const normalizedEnd = this.clampToRange(restoredRange.endMs, state.minTimeMs, state.maxTimeMs);
+      this.timeRangeModel.setRange(normalizedStart, normalizedEnd);
+      this.model.setHorizontalWindow(normalizedStart, normalizedEnd, safeMainWidth);
+      return;
+    }
+
     const now = Date.now();
     const oneWeekMs = 7 * 24 * 60 * 60 * 1_000;
     const defaultStartMs = now - oneWeekMs;
@@ -485,10 +496,15 @@ export class TimePanelComponent implements AfterViewInit, OnChanges, OnDestroy {
     const range = this.timeRangeModel.getValue();
 
     if (!range) {
+      this.clearPersistedTimeRange();
       this.chatConversationService.setTimeRangeFilter(null);
       return;
     }
 
+    this.persistTimeRange({
+      startMs: range.startTime.getTime(),
+      endMs: range.endTime.getTime()
+    });
     this.chatConversationService.setTimeRangeFilter({
       startMs: range.startTime.getTime(),
       endMs: range.endTime.getTime()
@@ -517,10 +533,88 @@ export class TimePanelComponent implements AfterViewInit, OnChanges, OnDestroy {
       anchorTimeMs: rangeMidpointMs
     };
   }
+
+  private persistTimeRange(range: PersistedTimeRange): void {
+    const storage = this.getSessionStorage();
+    if (!storage) {
+      return;
+    }
+
+    try {
+      storage.setItem(TIME_RANGE_SESSION_STORAGE_KEY, JSON.stringify(range));
+    } catch {
+      // Ignore quota/security errors and keep memory-only behavior for current session.
+    }
+  }
+
+  private clearPersistedTimeRange(): void {
+    const storage = this.getSessionStorage();
+    if (!storage) {
+      return;
+    }
+
+    try {
+      storage.removeItem(TIME_RANGE_SESSION_STORAGE_KEY);
+    } catch {
+      // Ignore quota/security errors.
+    }
+  }
+
+  private readPersistedTimeRange(): PersistedTimeRange | null {
+    const storage = this.getSessionStorage();
+    if (!storage) {
+      return null;
+    }
+
+    const rawValue = storage.getItem(TIME_RANGE_SESSION_STORAGE_KEY);
+    if (!rawValue) {
+      return null;
+    }
+
+    try {
+      const parsed = JSON.parse(rawValue) as unknown;
+      if (!parsed || typeof parsed !== 'object') {
+        return null;
+      }
+
+      const payload = parsed as Partial<PersistedTimeRange>;
+      if (typeof payload.startMs !== 'number' || typeof payload.endMs !== 'number') {
+        return null;
+      }
+
+      if (!Number.isFinite(payload.startMs) || !Number.isFinite(payload.endMs)) {
+        return null;
+      }
+
+      return {
+        startMs: payload.startMs,
+        endMs: payload.endMs
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  private getSessionStorage(): Storage | null {
+    if (typeof window === 'undefined' || typeof window.sessionStorage === 'undefined') {
+      return null;
+    }
+
+    return window.sessionStorage;
+  }
+
+  private clampToRange(value: number, min: number, max: number): number {
+    return Math.min(max, Math.max(min, value));
+  }
 }
 
 type ExternalTimeRangeRequest = {
   requestId: number;
   startTime: Date;
   endTime: Date;
+};
+
+type PersistedTimeRange = {
+  startMs: number;
+  endMs: number;
 };
