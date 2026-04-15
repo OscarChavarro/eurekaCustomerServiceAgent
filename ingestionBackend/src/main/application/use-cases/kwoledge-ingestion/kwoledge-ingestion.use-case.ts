@@ -33,6 +33,7 @@ import {
   SemanticConversationChunk
 } from './kwoledge-ingestion-message.model';
 import {
+  KwoledgeIngestionAudio,
   KwoledgeIngestionLimits,
   KwoledgeIngestionMessagesBreakdown,
   KwoledgeIngestionResult
@@ -117,6 +118,8 @@ type ProcessedConversationStages = {
 @Injectable()
 export class KwoledgeIngestionUseCase {
   private readonly logger = new Logger(KwoledgeIngestionUseCase.name);
+  private static readonly COMPLETION_BANNER =
+    '========================= INGESTION PROCESS COMPLETED ==========================';
 
   constructor(
     @Inject(TOKENS.ConversationCsvSourcePort)
@@ -154,6 +157,7 @@ export class KwoledgeIngestionUseCase {
 
     const allCleanedMessages: CleanedConversationMessage[] = [];
     const allSemanticChunks: SemanticConversationChunk[] = [];
+    const allAudioTranscriptionCandidates: RawAudioTranscriptionCandidate[] = [];
     let totalIndexedChunks = 0;
     let skippedMessages = 0;
 
@@ -184,7 +188,7 @@ export class KwoledgeIngestionUseCase {
       this.logConversationPhase(currentPosition, totalConversations, conversationId, 'clean');
 
       const normalizedStage = await this.runNormalizationStage(
-        conversationMetadata.filePattern,
+        conversationId,
         rawStageMessages
       );
       await this.conversationsRepositoryPort.upsertNormalizedMessages(
@@ -239,8 +243,8 @@ export class KwoledgeIngestionUseCase {
         conversationEmbeddedChunks
       );
 
-      this.rawAudioTranscriptionOrchestratorService.enqueueMany(
-        this.toRawAudioTranscriptionCandidates(
+      allAudioTranscriptionCandidates.push(
+        ...this.toRawAudioTranscriptionCandidates(
           conversationId,
           normalizedStage.messages,
           conversationMetadata.filePattern
@@ -254,6 +258,10 @@ export class KwoledgeIngestionUseCase {
 
     const messagesBreakdown = this.buildMessagesBreakdown(allCleanedMessages);
     const limits = this.buildLimits(allCleanedMessages);
+    const audioSummary = await this.rawAudioTranscriptionOrchestratorService.processManyBlocking(
+      allAudioTranscriptionCandidates
+    );
+    this.logger.log(KwoledgeIngestionUseCase.COMPLETION_BANNER);
 
     return new KwoledgeIngestionResult(
       command.folderPath,
@@ -261,7 +269,8 @@ export class KwoledgeIngestionUseCase {
       totalIndexedChunks,
       skippedMessages,
       messagesBreakdown,
-      limits
+      limits,
+      new KwoledgeIngestionAudio(audioSummary.importedSuccessfully, audioSummary.noise)
     );
   }
 
@@ -279,7 +288,7 @@ export class KwoledgeIngestionUseCase {
   }
 
   private async runNormalizationStage(
-    filePattern: string | null,
+    conversationId: string,
     rawStageMessages: RawConversationStageMessage[]
   ): Promise<{
     messages: NormalizedConversationStageMessage[];
@@ -287,7 +296,7 @@ export class KwoledgeIngestionUseCase {
     missingCount: number;
   }> {
     return this.conversationMediaNormalizationService.normalizeConversation(
-      filePattern,
+      conversationId,
       rawStageMessages
     );
   }

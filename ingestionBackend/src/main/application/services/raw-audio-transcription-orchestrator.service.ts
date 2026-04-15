@@ -21,6 +21,11 @@ export type RawAudioTranscriptionCandidate = {
   };
 };
 
+export type RawAudioTranscriptionSummary = {
+  importedSuccessfully: number;
+  noise: number;
+};
+
 @Injectable()
 export class RawAudioTranscriptionOrchestratorService {
   private readonly logger = new Logger(RawAudioTranscriptionOrchestratorService.name);
@@ -59,6 +64,64 @@ export class RawAudioTranscriptionOrchestratorService {
     return enqueuedJobs;
   }
 
+  public async processManyBlocking(
+    candidates: RawAudioTranscriptionCandidate[]
+  ): Promise<RawAudioTranscriptionSummary> {
+    const audioJobs = candidates
+      .map((candidate) => {
+        const audioResourceUrl = this.resolveAudioResourceUrl(candidate);
+        if (!audioResourceUrl) {
+          return null;
+        }
+
+        return {
+          candidate,
+          audioResourceUrl
+        };
+      })
+      .filter(
+        (
+          value
+        ): value is {
+          candidate: RawAudioTranscriptionCandidate;
+          audioResourceUrl: string;
+        } => value !== null
+      );
+
+    if (audioJobs.length === 0) {
+      return {
+        importedSuccessfully: 0,
+        noise: 0
+      };
+    }
+
+    const payloads = await Promise.all(
+      audioJobs.map(async ({ candidate, audioResourceUrl }) => {
+        const payload = await this.audioTranscribeUseCase
+          .execute(new AudioTranscribeCommand(audioResourceUrl))
+          .catch((error: unknown) => {
+            const message = error instanceof Error ? error.message : String(error);
+            this.logger.error(
+              `Audio transcription execution failed for URL ${audioResourceUrl}: ${message}`
+            );
+            return this.buildTranscriptionExecutionErrorPayload(message);
+          });
+        await this.onAudioTranscriptionCompleted(payload, {
+          conversationId: candidate.conversationId,
+          rawMessageExternalId: candidate.rawMessageExternalId,
+          originalAudioResourceUrl: audioResourceUrl
+        });
+        return payload;
+      })
+    );
+
+    const noise = payloads.filter((payload) => payload.type === 'noise').length;
+    return {
+      importedSuccessfully: payloads.length - noise,
+      noise
+    };
+  }
+
   private async onAudioTranscriptionCompleted(
     payload: AudioTranscribeResult,
     params: Record<string, unknown>
@@ -83,6 +146,8 @@ export class RawAudioTranscriptionOrchestratorService {
       language: payload.language,
       bars: payload.bars
     };
+    const hasAudioDownloadFailure =
+      !!originalAudioResourceUrl && this.isAudioResourceReadFailure(payload);
 
     try {
       await this.conversationsRepositoryPort.upsertRawMessageAudioDetails(
@@ -90,13 +155,17 @@ export class RawAudioTranscriptionOrchestratorService {
         rawMessageExternalId,
         audioDetails
       );
-      if (originalAudioResourceUrl && this.isAudioResourceReadFailure(payload)) {
+      if (originalAudioResourceUrl && hasAudioDownloadFailure) {
         await this.failedAudioResourceLogPort.appendOriginalUrl(originalAudioResourceUrl);
       }
     } catch (error) {
       this.logger.error(
         `Unable to persist audioDetails for conversationId=${conversationId}, rawMessageExternalId=${rawMessageExternalId}. ${String(error)}`
       );
+    }
+
+    if (originalAudioResourceUrl && hasAudioDownloadFailure) {
+      this.logger.error(`Audio download failed. Failed URL: ${originalAudioResourceUrl}`);
     }
   }
 
@@ -110,6 +179,16 @@ export class RawAudioTranscriptionOrchestratorService {
       transcription.includes('audio resource does not exist') ||
       transcription.includes('could not download audio file')
     );
+  }
+
+  private buildTranscriptionExecutionErrorPayload(message: string): AudioTranscribeResult {
+    return {
+      type: 'noise',
+      transcription: `TRANSCRIBE_ERROR: ${message}`,
+      totalTimeInSeconds: 0,
+      language: 'unknown',
+      bars: []
+    };
   }
 
   private resolveAudioResourceUrl(candidate: RawAudioTranscriptionCandidate): string | null {

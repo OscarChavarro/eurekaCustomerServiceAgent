@@ -24,7 +24,7 @@ export class ConversationMediaNormalizationService {
   ) {}
 
   public async normalizeConversation(
-    filePattern: string | null,
+    conversationId: string,
     rawMessages: RawConversationStageMessage[]
   ): Promise<NormalizeConversationResult> {
     const normalizedMessages: RawConversationStageMessage[] = [];
@@ -32,7 +32,7 @@ export class ConversationMediaNormalizationService {
     let missingCount = 0;
 
     for (const rawMessage of rawMessages) {
-      const normalized = await this.normalizeMessage(filePattern, rawMessage);
+      const normalized = await this.normalizeMessage(conversationId, rawMessage);
       if (normalized.wasNormalized) {
         normalizedCount += 1;
       }
@@ -50,7 +50,7 @@ export class ConversationMediaNormalizationService {
   }
 
   private async normalizeMessage(
-    filePattern: string | null,
+    conversationId: string,
     rawMessage: RawConversationStageMessage
   ): Promise<{ message: RawConversationStageMessage; wasNormalized: boolean; wasMissing: boolean }> {
     const normalizedFields = {
@@ -72,7 +72,7 @@ export class ConversationMediaNormalizationService {
       };
     }
 
-    const baseAssetUrl = this.buildAssetUrl(filePattern, messageDate, sentAt, attachment);
+    const baseAssetUrl = this.buildAssetUrl(conversationId, messageDate, sentAt, attachment);
     if (baseAssetUrl) {
       normalizedFields.assetUrl = baseAssetUrl;
     }
@@ -146,39 +146,52 @@ export class ConversationMediaNormalizationService {
   }
 
   private buildAssetUrl(
-    filePattern: string | null,
+    conversationId: string,
     messageDate: string | null,
     sentAt: string | null,
     attachment: string
   ): string | null {
     const formattedDate = this.formatAssetDate(messageDate, sentAt);
-    if (!formattedDate || !filePattern) {
+    const attachmentParts = this.resolveAudioAttachmentParts(attachment);
+    if (!formattedDate || !attachmentParts) {
       return null;
     }
 
-    const assetConversation = this.resolveAssetConversationFromPattern(filePattern);
-    const relativePath = `${assetConversation.folderName}/${formattedDate} - ${attachment}`;
+    const normalizedConversationId = conversationId.trim();
+    if (!normalizedConversationId) {
+      return null;
+    }
 
+    const relativePath = `${normalizedConversationId}/${formattedDate} - ${attachmentParts.id}.${attachmentParts.extension}`;
     const normalizedBase = this.staticAssetsBaseUrlPort.getBaseUrl().trim().replace(/\/+$/, '');
-    const normalizedPath = relativePath
-      .normalize('NFC')
-      .split('/')
-      .map((segment) => encodeURIComponent(segment))
-      .join('/');
 
-    return `${normalizedBase}/${normalizedPath}`;
+    return `${normalizedBase}/${relativePath.normalize('NFC')}`;
   }
 
-  private resolveAssetConversationFromPattern(filePattern: string): {
-    folderName: string;
-  } {
-    const folderName = this.extractConversationLabelFromPattern(filePattern);
-    return { folderName };
-  }
+  private resolveAudioAttachmentParts(
+    attachment: string
+  ): { id: string; extension: string } | null {
+    const trimmed = attachment.trim();
+    if (!trimmed) {
+      return null;
+    }
 
-  private extractConversationLabelFromPattern(pattern: string): string {
-    const label = pattern.replace(/^whatsapp\s*-\s*/i, '').trim();
-    return label.length > 0 ? label : pattern.trim();
+    const uuidWithExt = trimmed.match(
+      /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.(opus|mp3|m2a|m4a)$/i
+    );
+    if (uuidWithExt) {
+      const [, attachmentId, extension] = uuidWithExt;
+      if (!attachmentId || !extension) {
+        return null;
+      }
+
+      return {
+        id: attachmentId,
+        extension: extension.toLowerCase()
+      };
+    }
+
+    return null;
   }
 
   private formatAssetDate(messageDate: string | null, sentAt: string | null): string | null {

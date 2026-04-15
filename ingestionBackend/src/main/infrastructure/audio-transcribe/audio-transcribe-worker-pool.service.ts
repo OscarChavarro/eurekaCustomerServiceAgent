@@ -241,7 +241,7 @@ implements AudioTranscribeWorkerPoolPort, OnModuleInit, OnModuleDestroy {
 
         this.inFlightByWorkerIndex.set(workerIndex, nextJob);
         this.logger.log(
-          `[AudioTranscribeWorker-${workerIndex + 1}] Processing URL: ${this.toDecodedUrl(nextJob.url)}`
+          `[AudioTranscribeWorker-${workerIndex + 1}] Queing: "${this.toDecodedUrl(nextJob.url)}"`
         );
 
         const requestMessage: WorkerRequestMessage = {

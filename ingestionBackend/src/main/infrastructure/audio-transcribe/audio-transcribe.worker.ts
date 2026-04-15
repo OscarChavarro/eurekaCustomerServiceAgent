@@ -3,6 +3,7 @@ import { dirname, extname, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { parentPort, workerData } from 'node:worker_threads';
 import type { AudioTranscribeResult } from '../../application/use-cases/audio-transcribe/audio-transcribe.result';
+import { ImazingMediaUrlCandidateService } from '../../application/use-cases/kwoledge-ingestion/imazing-media-url-candidate.service';
 import { WavefileAudioWaveformBarsAdapter } from './wavefile-audio-waveform-bars.adapter';
 
 type WorkerRequestMessage = {
@@ -46,6 +47,7 @@ type SupportedAudioExtension = (typeof SUPPORTED_AUDIO_EXTENSIONS)[number];
 
 const context = createWorkerContext();
 const waveformBarsAdapter = new WavefileAudioWaveformBarsAdapter();
+const mediaUrlCandidateService = new ImazingMediaUrlCandidateService();
 
 if (!parentPort) {
   process.exit(1);
@@ -92,15 +94,14 @@ async function transcribeUrlToPayload(
   let bars: number[] = [];
   let hasError = false;
   const decodedUrl = decodeUrlSafely(url);
-  console.log(
-    `[AudioTranscribeWorker ${staticContext.workerIndex}] Starting job for URL: ${decodedUrl}`
-  );
+  console.log(`[AudioTranscribeWorker-${staticContext.workerIndex}] Starting: "${decodedUrl}"`);
 
   try {
-    const extension = resolveAudioExtensionFromUrl(url);
+    const resolvedAudioUrl = await resolveDownloadableAudioUrl(url);
+    const extension = resolveAudioExtensionFromUrl(resolvedAudioUrl);
     tempAudioFilePath = `${staticContext.tempBaseFilePath}.${extension}`;
     attemptedTempAudioFilePaths.add(tempAudioFilePath);
-    await downloadAudioFile(url, tempAudioFilePath);
+    await downloadAudioFile(resolvedAudioUrl, tempAudioFilePath);
     convertAudioToWav(tempAudioFilePath, staticContext.tempWavFilePath);
     bars = waveformBarsAdapter.buildFromWavFile(staticContext.tempWavFilePath, 100);
     const whisperRun = runWhisper(tempAudioFilePath);
@@ -128,6 +129,7 @@ async function transcribeUrlToPayload(
     );
     await cleanupTempFile(staticContext.tempWavFilePath);
     await cleanupTempFile(tempJsonFilePath);
+    console.log(`[AudioTranscribeWorker-${staticContext.workerIndex}] Ended: "${decodedUrl}"`);
   }
 
   if (hasError) {
@@ -165,6 +167,63 @@ async function downloadAudioFile(url: string, targetPath: string): Promise<void>
 
   const arrayBuffer = await response.arrayBuffer();
   await fs.writeFile(targetPath, Buffer.from(arrayBuffer));
+}
+
+async function resolveDownloadableAudioUrl(url: string): Promise<string> {
+  const candidateUrls = mediaUrlCandidateService.isSupportedAudioResourceUrl(url)
+    ? mediaUrlCandidateService.getCandidateAudioUrls(url)
+    : [url];
+
+  const probeFailures: string[] = [];
+
+  for (const candidateUrl of candidateUrls) {
+    const probe = await probeHead(candidateUrl);
+    if (!probe.ok) {
+      const failureDetail =
+        probe.error ??
+        `Status ${probe.status ?? 'unknown'} ${probe.statusText ?? 'unknown error'}`;
+      probeFailures.push(`${candidateUrl} -> ${failureDetail}`);
+      continue;
+    }
+
+    if (candidateUrl !== url) {
+      console.log(
+        `[AudioTranscribeWorker-${context.workerIndex}] Resolved audio URL variant: ${decodeUrlSafely(url)} -> ${decodeUrlSafely(candidateUrl)}`
+      );
+    }
+
+    return candidateUrl;
+  }
+
+  const failuresSummary = probeFailures.join(' | ');
+  throw new Error(
+    `Could not download audio file from ${url}. HEAD probe failed for all candidate URLs. ${failuresSummary}`
+  );
+}
+
+async function probeHead(
+  url: string
+): Promise<{ ok: boolean; status: number | null; statusText: string | null; error: string | null }> {
+  try {
+    const response = await fetch(url, {
+      method: 'HEAD',
+      signal: AbortSignal.timeout(15_000)
+    });
+
+    return {
+      ok: response.ok,
+      status: response.status,
+      statusText: response.statusText,
+      error: null
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      status: null,
+      statusText: null,
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
 }
 
 function runWhisper(audioFilePath: string): { success: true } | { success: false; message: string } {

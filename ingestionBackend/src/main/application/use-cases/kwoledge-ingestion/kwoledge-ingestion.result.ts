@@ -15,6 +15,13 @@ export class KwoledgeIngestionLimits {
   ) {}
 }
 
+export class KwoledgeIngestionAudio {
+  constructor(
+    public readonly importedSuccessfully: number,
+    public readonly noise: number
+  ) {}
+}
+
 export class KwoledgeIngestionResult {
   constructor(
     public readonly folderPath: string,
@@ -22,6 +29,7 @@ export class KwoledgeIngestionResult {
     public readonly indexedChunks: number,
     public readonly skippedMessages: number,
     public readonly messagesBreakdown: KwoledgeIngestionMessagesBreakdown,
-    public readonly limits: KwoledgeIngestionLimits
+    public readonly limits: KwoledgeIngestionLimits,
+    public readonly audio: KwoledgeIngestionAudio
   ) {}
 }
