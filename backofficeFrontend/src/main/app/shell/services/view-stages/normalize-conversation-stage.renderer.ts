@@ -5,6 +5,10 @@ import type {
   BackendConversationRawMessage
 } from '../../../core/api/services/conversations-api.service';
 import { FrontendSecretsService } from '../../../core/api/services/frontend-secrets.service';
+import {
+  canonicalizePhoneNumber,
+  normalizeConversationSourceId
+} from '../../../core/phone/phone-normalization.utils';
 import type { ConversationStageRenderer } from './conversation-stage-renderer.interface';
 import type { ChatMessage } from './conversation-view.types';
 import { MessageBubbleFactory } from './message-bubble.factory';
@@ -16,11 +20,10 @@ export class NormalizeConversationStageRenderer implements ConversationStageRend
   private readonly frontendSecretsService = inject(FrontendSecretsService);
   private readonly imageExtensions = new Set(['jpg', 'jpeg', 'gif', 'webp', 'png']);
   private readonly audioExtensions = new Set(['opus', 'mp3', 'm2a', 'm4a']);
-  private static readonly WHATSAPP_PREFIX = /^whatsapp\s*-\s*/i;
 
   render(document: BackendConversationDocument): ChatMessage[] {
     const normalizedByExternalId = new Map<string, BackendConversationRawMessage>();
-    const conversationFilePattern = this.resolveConversationFilePattern(document.filePattern);
+    const assetFolderName = this.resolveAssetFolderNameFromConversationId(document._id);
 
     (document.normalizedMessages ?? []).forEach((normalizedMessage) => {
       normalizedByExternalId.set(normalizedMessage.externalId, normalizedMessage);
@@ -31,9 +34,9 @@ export class NormalizeConversationStageRenderer implements ConversationStageRend
 
       return this.messageBubbleFactory.createFromRaw(normalizedMessage, {
         text: normalizedMessage.text,
-        mediaUrl: this.resolveMediaUrl(normalizedMessage, conversationFilePattern),
+        mediaUrl: this.resolveMediaUrl(normalizedMessage, assetFolderName),
         audioFileName: this.resolveAudioAttachmentName(normalizedMessage.normalizedFields?.attachment),
-        audioResourceUrl: this.resolveAudioResourceUrl(normalizedMessage, conversationFilePattern),
+        audioResourceUrl: this.resolveAudioResourceUrl(normalizedMessage, assetFolderName),
         audioTranscription: this.resolveAudioTranscription(normalizedMessage.audioDetails),
         audioWaveBars: this.resolveAudioWaveBars(normalizedMessage.audioDetails),
         stageLabel: 'normalize',
@@ -45,10 +48,10 @@ export class NormalizeConversationStageRenderer implements ConversationStageRend
 
   private resolveMediaUrl(
     rawMessage: BackendConversationRawMessage,
-    conversationFilePattern: string | null
+    assetFolderName: string | null
   ): string | undefined {
     const directCandidate = this.toOptionalString(rawMessage.normalizedFields?.['assetUrl']);
-    if (this.isLikelyResourceUrl(directCandidate)) {
+    if (directCandidate && this.isLikelyResourceUrl(directCandidate) && this.isImageAttachment(directCandidate)) {
       return directCandidate;
     }
 
@@ -57,7 +60,7 @@ export class NormalizeConversationStageRenderer implements ConversationStageRend
       return undefined;
     }
 
-    if (this.isLikelyResourceUrl(attachmentCandidate)) {
+    if (this.isLikelyResourceUrl(attachmentCandidate) && this.isImageAttachment(attachmentCandidate)) {
       return attachmentCandidate;
     }
 
@@ -66,8 +69,7 @@ export class NormalizeConversationStageRenderer implements ConversationStageRend
       return undefined;
     }
 
-    const effectivePattern = conversationFilePattern ?? this.resolveConversationFilePattern(rawMessage.filePattern);
-    if (!effectivePattern) {
+    if (!assetFolderName) {
       return undefined;
     }
 
@@ -76,8 +78,7 @@ export class NormalizeConversationStageRenderer implements ConversationStageRend
       return undefined;
     }
 
-    const assetConversation = this.resolveAssetConversationFromPattern(effectivePattern);
-    const relativePath = `${assetConversation.folderName}/${formattedDate} - ${attachmentFileName}`;
+    const relativePath = `${assetFolderName}/${formattedDate} - ${attachmentFileName}`;
     return this.toNormalizedHttpUrl(this.frontendSecretsService.staticAssetsBaseUrl, relativePath);
   }
 
@@ -107,7 +108,7 @@ export class NormalizeConversationStageRenderer implements ConversationStageRend
 
   private resolveAudioResourceUrl(
     rawMessage: BackendConversationRawMessage,
-    conversationFilePattern: string | null
+    assetFolderName: string | null
   ): string | undefined {
     const directCandidate = this.toOptionalString(rawMessage.filePattern)
       ?? this.toOptionalString(rawMessage.normalizedFields?.['filePattern'])
@@ -131,8 +132,7 @@ export class NormalizeConversationStageRenderer implements ConversationStageRend
       return undefined;
     }
 
-    const effectivePattern = conversationFilePattern ?? this.resolveConversationFilePattern(rawMessage.filePattern);
-    if (!effectivePattern) {
+    if (!assetFolderName) {
       return undefined;
     }
 
@@ -141,8 +141,7 @@ export class NormalizeConversationStageRenderer implements ConversationStageRend
       return undefined;
     }
 
-    const assetConversation = this.resolveAssetConversationFromPattern(effectivePattern);
-    const relativePath = `${assetConversation.folderName}/${formattedDate} - ${attachmentFileName}`;
+    const relativePath = `${assetFolderName}/${formattedDate} - ${attachmentFileName}`;
     return this.toNormalizedHttpUrl(this.frontendSecretsService.staticAssetsBaseUrl, relativePath);
   }
 
@@ -199,30 +198,23 @@ export class NormalizeConversationStageRenderer implements ConversationStageRend
     return !!extension && this.imageExtensions.has(extension);
   }
 
-  private resolveConversationFilePattern(value: unknown): string | null {
-    if (typeof value !== 'string') {
+  private resolveAssetFolderNameFromConversationId(conversationId: unknown): string | null {
+    if (typeof conversationId !== 'string') {
       return null;
     }
 
-    const trimmed = value.trim();
-    if (!trimmed || this.isLikelyResourceUrl(trimmed)) {
+    const normalizedConversationId = normalizeConversationSourceId(conversationId);
+    if (!normalizedConversationId) {
       return null;
     }
 
-    const label = trimmed.replace(NormalizeConversationStageRenderer.WHATSAPP_PREFIX, '').trim();
-    return label.length > 0 ? label : null;
-  }
+    const canonicalPhone = canonicalizePhoneNumber(normalizedConversationId);
+    if (canonicalPhone?.digitsOnly) {
+      return canonicalPhone.digitsOnly;
+    }
 
-  private resolveAssetConversationFromPattern(filePattern: string): {
-    folderName: string;
-  } {
-    const folderName = this.extractConversationLabelFromPattern(filePattern);
-    return { folderName };
-  }
-
-  private extractConversationLabelFromPattern(pattern: string): string {
-    const label = pattern.replace(NormalizeConversationStageRenderer.WHATSAPP_PREFIX, '').trim();
-    return label.length > 0 ? label : pattern.trim();
+    const digitsOnly = normalizedConversationId.replace(/\D+/g, '');
+    return digitsOnly.length > 0 ? digitsOnly : null;
   }
 
   private formatAssetDate(

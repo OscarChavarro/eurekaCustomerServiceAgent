@@ -3,6 +3,7 @@ export type AssetResourceHeadProbeResult = {
   status: number | null;
   statusText: string | null;
   error: string | null;
+  responseUrl: string | null;
 };
 
 export interface AssetResourceProbePort {

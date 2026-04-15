@@ -209,6 +209,32 @@ Also install `ffmpeg`, required to decode and process `.opus` audio files before
 This project uses Whisper to transcribe audio attachments from conversations.
 The generated transcription text is integrated back into the conversation as if it had been written as a normal message.
 
+## Audios
+
+### Debugging
+
+To inspect in MongoDB audio messages that already have `audioDetails` and are marked as `noise`:
+
+```javascript
+db.conversations.aggregate([
+  { $unwind: "$rawMessages" },
+  {
+    $match: {
+      "rawMessages.audioDetails": { $exists: true, $ne: null },
+      "rawMessages.audioDetails.type": "noise"
+    }
+  },
+  {
+    $project: {
+      _id: 1,
+      "rawMessages.externalId": 1,
+      "rawMessages.sentAt": 1,
+      "rawMessages.audioDetails": 1
+    }
+  }
+]);
+```
+
 ### Contact-aware CSV resolution
 
 Before reading CSV files, ingestion loads `GET /contacts` from `contactsBackend` into an in-memory map.

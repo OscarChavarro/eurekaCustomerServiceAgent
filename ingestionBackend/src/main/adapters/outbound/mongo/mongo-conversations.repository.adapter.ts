@@ -6,6 +6,7 @@ import type {
   ConversationsRepositoryPort,
   NormalizedConversationStageMessage,
   RawConversationAudioDetails,
+  RawMessageAudioNormalizedFieldsPatch,
   RawConversationAudioMessage,
   RawConversationStageMessage,
   StructuredConversationStageMessage
@@ -263,6 +264,50 @@ export class MongoConversationsRepositoryAdapter implements ConversationsReposit
     );
   }
 
+  public async updateRawMessageAudioNormalizedFields(
+    conversationId: string,
+    rawMessageExternalId: string,
+    patch: RawMessageAudioNormalizedFieldsPatch
+  ): Promise<void> {
+    const setPatchEntries = Object.entries(patch).filter(
+      (entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1].trim().length > 0
+    );
+    if (setPatchEntries.length === 0) {
+      return;
+    }
+
+    const rawMessageSetPayload: Record<string, string> = {};
+    const normalizedMessageSetPayload: Record<string, string> = {};
+
+    for (const [fieldName, fieldValue] of setPatchEntries) {
+      rawMessageSetPayload[`rawMessages.$.normalizedFields.${fieldName}`] = fieldValue;
+      normalizedMessageSetPayload[`normalizedMessages.$.normalizedFields.${fieldName}`] = fieldValue;
+    }
+
+    const collection =
+      await this.mongoClientProvider.getConversationsCollection<MongoConversationDocument>();
+
+    await collection.updateOne(
+      {
+        _id: conversationId,
+        'rawMessages.externalId': rawMessageExternalId
+      },
+      {
+        $set: rawMessageSetPayload
+      }
+    );
+
+    await collection.updateOne(
+      {
+        _id: conversationId,
+        'normalizedMessages.externalId': rawMessageExternalId
+      },
+      {
+        $set: normalizedMessageSetPayload
+      }
+    );
+  }
+
   public async findRawMessagesWithAudioAttachment(): Promise<RawConversationAudioMessage[]> {
     const collection =
       await this.mongoClientProvider.getConversationsCollection<MongoConversationDocument>();
@@ -321,6 +366,88 @@ export class MongoConversationsRepositoryAdapter implements ConversationsReposit
             rawMessageSentAt: '$audioSourceMessages.sentAt',
             normalizedFields: '$audioSourceMessages.normalizedFields',
             audioDetails: '$audioSourceMessages.audioDetails'
+          }
+        }
+      ])
+      .toArray();
+
+    return rawAudioMessages.map((message) => ({
+      conversationId: message.conversationId,
+      conversationFilePattern:
+        typeof message.conversationFilePattern === 'string'
+          ? message.conversationFilePattern
+          : null,
+      conversationContactName:
+        typeof message.conversationContactName === 'string'
+          ? message.conversationContactName
+          : null,
+      rawMessageExternalId: message.rawMessageExternalId,
+      rawMessageSentAt: message.rawMessageSentAt,
+      normalizedFields: message.normalizedFields,
+      audioDetails: message.audioDetails
+    }));
+  }
+
+  public async findRawMessagesWithAudioAttachmentFromConversationsWithAudioDetails(): Promise<
+    RawConversationAudioMessage[]
+  > {
+    const collection =
+      await this.mongoClientProvider.getConversationsCollection<MongoConversationDocument>();
+
+    const audioAttachmentRegex = /\.(opus|mp3|m2a|m4a)$/i;
+
+    const rawAudioMessages = await collection
+      .aggregate<RawAudioMessageProjection>([
+        {
+          $match: {
+            rawMessages: {
+              $elemMatch: {
+                audioDetails: {
+                  $exists: true,
+                  $ne: null
+                }
+              }
+            }
+          }
+        },
+        {
+          $addFields: {
+            rawMessages: { $ifNull: ['$rawMessages', []] }
+          }
+        },
+        {
+          $match: {
+            rawMessages: {
+              $elemMatch: {
+                'normalizedFields.attachment': {
+                  $type: 'string',
+                  $regex: audioAttachmentRegex
+                }
+              }
+            }
+          }
+        },
+        {
+          $unwind: '$rawMessages'
+        },
+        {
+          $match: {
+            'rawMessages.normalizedFields.attachment': {
+              $type: 'string',
+              $regex: audioAttachmentRegex
+            }
+          }
+        },
+        {
+          $project: {
+            _id: 0,
+            conversationId: '$_id',
+            conversationFilePattern: '$filePattern',
+            conversationContactName: '$contactName',
+            rawMessageExternalId: '$rawMessages.externalId',
+            rawMessageSentAt: '$rawMessages.sentAt',
+            normalizedFields: '$rawMessages.normalizedFields',
+            audioDetails: '$rawMessages.audioDetails'
           }
         }
       ])

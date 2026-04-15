@@ -101,7 +101,10 @@ export class ConversationMediaNormalizationService {
       normalizedFields.audioResourceUrl = candidateUrl;
       normalizedFields.assetUrl = candidateUrl;
 
-      const resolvedAttachment = this.extractAttachmentFromUrl(candidateUrl);
+      const resolvedAttachment = this.resolveAttachmentWithUpdatedAudioExtension(
+        attachment,
+        candidateUrl
+      );
       if (resolvedAttachment && resolvedAttachment !== attachment) {
         normalizedFields.attachment = resolvedAttachment;
       }
@@ -236,11 +239,49 @@ export class ConversationMediaNormalizationService {
     return `${match[1]} ${match[2]} ${match[3]} ${match[4]}`;
   }
 
-  private extractAttachmentFromUrl(url: string): string | null {
+  private resolveAttachmentWithUpdatedAudioExtension(
+    currentAttachment: string,
+    resolvedAudioUrl: string
+  ): string | null {
+    const normalizedAttachment = currentAttachment.trim();
+    if (!normalizedAttachment) {
+      return null;
+    }
+
+    const attachmentMatch = normalizedAttachment.match(/^(.*)\.([a-z0-9]+)$/i);
+    if (!attachmentMatch) {
+      return null;
+    }
+
+    const attachmentBaseName = attachmentMatch[1] ?? '';
+    const attachmentExtension = (attachmentMatch[2] ?? '').toLowerCase();
+    if (!attachmentBaseName || !this.audioExtensions.has(attachmentExtension)) {
+      return null;
+    }
+
+    const resolvedExtension = this.extractAudioExtensionFromUrl(resolvedAudioUrl);
+    if (!resolvedExtension || !this.audioExtensions.has(resolvedExtension)) {
+      return null;
+    }
+
+    if (resolvedExtension === attachmentExtension) {
+      return normalizedAttachment;
+    }
+
+    return `${attachmentBaseName}.${resolvedExtension}`;
+  }
+
+  private extractAudioExtensionFromUrl(url: string): string | null {
     try {
       const pathname = new URL(url).pathname;
       const lastSegment = pathname.split('/').pop();
-      return lastSegment ? decodeURIComponent(lastSegment) : null;
+      if (!lastSegment) {
+        return null;
+      }
+
+      const decodedSegment = decodeURIComponent(lastSegment);
+      const extensionMatch = decodedSegment.match(/\.([a-z0-9]+)$/i);
+      return extensionMatch?.[1]?.toLowerCase() ?? null;
     } catch {
       return null;
     }

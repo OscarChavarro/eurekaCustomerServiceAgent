@@ -17,14 +17,16 @@ export class FetchAssetResourceProbeAdapter implements AssetResourceProbePort {
         ok: response.ok,
         status: response.status,
         statusText: response.statusText,
-        error: null
+        error: null,
+        responseUrl: response.url || null
       };
     } catch (error) {
       return {
         ok: false,
         status: null,
         statusText: null,
-        error: error instanceof Error ? error.message : String(error)
+        error: error instanceof Error ? error.message : String(error),
+        responseUrl: null
       };
     }
   }
