@@ -352,7 +352,7 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
   }
 
   protected shouldRenderContactNameAsLink(): boolean {
-    return this.activeWorkbookTabState() !== 'conversationsWithoutContacts';
+    return true;
   }
 
   protected selectRow(contact: ContactRow): void {

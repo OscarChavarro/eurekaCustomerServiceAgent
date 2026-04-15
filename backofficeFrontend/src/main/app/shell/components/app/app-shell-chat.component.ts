@@ -479,15 +479,22 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
   }
 
   protected canOpenConversationContact(conversation: ChatConversation): boolean {
-    if (!conversation.linkedContactName) {
-      return false;
-    }
-
     if (conversation.id === 'local-simulation') {
       return false;
     }
 
-    return this.toPhoneSlug(conversation.phoneNumber) !== null;
+    const phoneSlug = this.toPhoneSlug(conversation.phoneNumber);
+    if (!phoneSlug) {
+      return false;
+    }
+
+    const hasLinkedContactName =
+      typeof conversation.linkedContactName === 'string' && conversation.linkedContactName.trim().length > 0;
+    if (hasLinkedContactName) {
+      return true;
+    }
+
+    return this.looksLikePhoneNumber(conversation.contactName);
   }
 
   protected openConversationContact(event: MouseEvent, conversation: ChatConversation): void {
@@ -1275,6 +1282,12 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
   }
 
   private resolveContactsPageSlugForConversation(conversation: ChatConversation): ContactsPageSlug {
+    const hasLinkedContactName =
+      typeof conversation.linkedContactName === 'string' && conversation.linkedContactName.trim().length > 0;
+    if (!hasLinkedContactName) {
+      return 'conversations-without-contacts';
+    }
+
     const candidateName = conversation.linkedContactName ?? conversation.contactName;
     const normalizedName = typeof candidateName === 'string' ? candidateName.trim() : '';
 
@@ -1283,6 +1296,14 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
     }
 
     return 'contacts-with-conversations';
+  }
+
+  private looksLikePhoneNumber(value: string | null | undefined): boolean {
+    if (typeof value !== 'string') {
+      return false;
+    }
+
+    return /\d/.test(value);
   }
 
   protected t(key: (typeof I18N_KEYS)['shell'][keyof (typeof I18N_KEYS)['shell']]): string {
