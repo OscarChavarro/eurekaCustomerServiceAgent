@@ -14,7 +14,7 @@ The tool:
 1. Creates auxiliary folders at root: `csv_groups`, `csv_disabled`, and `csv_unsupported`.
 2. Scans `csv` and moves group-conversation files to `csv_groups`.
 3. Moves matching media conversation folders to `media/_groups`.
-4. Group detection looks for messages like `<user> created community '<groupName>'` and matches `<groupName>` against the CSV conversation name pattern; it also supports `<user> created this community`.
+4. Group detection looks for messages like `<user> created community '<groupName>'` or `<user> created group '<groupName>'` and matches `<groupName>` against the CSV conversation name pattern; it also supports `<user> created this community`.
 5. Moves to `csv_disabled` CSV files whose conversation name matches any pattern in `etc/disabledContacts.json`.
 6. Moves to `csv_unsupported` CSV files containing messages like `<digits> es tu código de confirmación de Facebook` (for example OTP conversations).
 7. Removes the `WhatsApp - ` prefix from filenames and folder names.

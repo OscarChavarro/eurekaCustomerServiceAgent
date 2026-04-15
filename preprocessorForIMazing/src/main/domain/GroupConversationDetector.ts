@@ -14,13 +14,16 @@ export class GroupConversationDetector {
       }
 
       const extractedGroupName = this.extractGroupNameFromCreatedCommunityMessage(value);
+      if (extractedGroupName !== null) {
+        return true;
+      }
+
       const extractedSubjectName = this.extractGroupNameFromSubjectChangeMessage(value);
-      const resolvedGroupName = extractedGroupName ?? extractedSubjectName;
-      if (resolvedGroupName === null) {
+      if (extractedSubjectName === null) {
         continue;
       }
 
-      if (this.isMatchingGroupName(resolvedGroupName, conversationName, normalizedConversationName)) {
+      if (this.isMatchingGroupName(extractedSubjectName, conversationName, normalizedConversationName)) {
         return true;
       }
     }
@@ -49,12 +52,12 @@ export class GroupConversationDetector {
   }
 
   private extractGroupNameFromCreatedCommunityMessage(value: string): string | null {
-    const singleQuotedMatch = /created community\s+'([^']+)'/i.exec(value);
+    const singleQuotedMatch = /created (?:community|group)\s+'([^']+)'/i.exec(value);
     if (singleQuotedMatch !== null) {
       return singleQuotedMatch[1];
     }
 
-    const doubleQuotedMatch = /created community\s+"([^"]+)"/i.exec(value);
+    const doubleQuotedMatch = /created (?:community|group)\s+"([^"]+)"/i.exec(value);
     if (doubleQuotedMatch !== null) {
       return doubleQuotedMatch[1];
     }
