@@ -1213,24 +1213,26 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
     for (const contact of contacts) {
       const contactPhoneDigits = this.contactPhoneDigits(contact);
       let firstMatchedConversationId: string | null = null;
-      const hasConversation = conversations.some((conversation) => {
-        if (!conversation.phoneDigits) {
-          return false;
+      let hasConversation = false;
+
+      for (const conversation of conversations) {
+        const conversationPhoneDigits = conversation.phoneDigits;
+        if (!conversationPhoneDigits) {
+          continue;
         }
 
         const matched = contactPhoneDigits.some((digits) =>
-          phonesMatchDigits(digits, conversation.phoneDigits!)
+          this.phonesMatchForClassification(digits, conversationPhoneDigits)
         );
 
         if (matched) {
+          hasConversation = true;
           matchedConversationIds.add(conversation.id);
           if (!firstMatchedConversationId) {
             firstMatchedConversationId = conversation.id;
           }
         }
-
-        return matched;
-      });
+      }
 
       if (hasConversation) {
         const contactWithConversation: ContactRow = {
@@ -1249,7 +1251,9 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
 
     const conversationsWithoutContacts = conversations
       .filter((conversation) => !matchedConversationIds.has(conversation.id))
-      .map((conversation, index) => this.toConversationOnlyRow(conversation, index));
+      .map((conversation, index) => {
+        return this.toConversationOnlyRow(conversation, index);
+      });
 
     return this.markRepeatedContactNames({
       contactsWithConversations,
@@ -1318,7 +1322,7 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
     const values = new Set<string>();
 
     for (const phone of contact.phoneNumbers) {
-      const digits = phone.replace(/\D+/g, '');
+      const digits = this.toClassifierPhoneDigits(phone);
       if (!digits) {
         continue;
       }
@@ -1327,6 +1331,56 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
     }
 
     return Array.from(values);
+  }
+
+  private toClassifierPhoneDigits(phone: string): string {
+    return phone.trim().replace(/^\+/, '').replace(/\D+/g, '');
+  }
+
+  private phonesMatchForClassification(left: string, right: string): boolean {
+    if (phonesMatchDigits(left, right)) {
+      return true;
+    }
+
+    const leftVariants = this.expandClassifierPhoneDigitsVariants(left);
+    const rightVariants = this.expandClassifierPhoneDigitsVariants(right);
+
+    for (const leftVariant of leftVariants) {
+      for (const rightVariant of rightVariants) {
+        if (phonesMatchDigits(leftVariant, rightVariant)) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  private expandClassifierPhoneDigitsVariants(phoneDigits: string): string[] {
+    const trimmed = phoneDigits.trim();
+    if (!trimmed) {
+      return [];
+    }
+
+    const variants = new Set<string>([trimmed]);
+
+    // Mexico mobile numbers are commonly represented as +52 1 NNN... and +52 NNN...
+    // depending on source/system; treat both as equivalent for classification.
+    if (/^521\d{10}$/.test(trimmed)) {
+      variants.add(`52${trimmed.slice(3)}`);
+    } else if (/^52\d{10}$/.test(trimmed)) {
+      variants.add(`521${trimmed.slice(2)}`);
+    }
+
+    // Brazil mobile numbers may include an extra 9 after country code + area code.
+    // Example equivalence: 55 AA 9 XXXXXXXX <-> 55 AA XXXXXXXX
+    if (/^55\d{10}$/.test(trimmed)) {
+      variants.add(`${trimmed.slice(0, 4)}9${trimmed.slice(4)}`);
+    } else if (/^55\d{11}$/.test(trimmed) && trimmed.charAt(4) === '9') {
+      variants.add(`${trimmed.slice(0, 4)}${trimmed.slice(5)}`);
+    }
+
+    return Array.from(variants);
   }
 
   private mapContactRows(contacts: BackendContact[]): ContactRow[] {
