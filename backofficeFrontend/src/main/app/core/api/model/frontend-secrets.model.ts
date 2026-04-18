@@ -8,6 +8,9 @@ export interface FrontendSecrets {
   retrievalBackend: {
     baseUrl: string;
   };
+  whatsappConnectorBackend: {
+    baseUrl: string;
+  };
   staticAssets: {
     baseUrl: string;
   };

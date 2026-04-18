@@ -168,6 +168,25 @@
       }
     </div>
   }
+  @if (profileImageZoomPopup(); as profileImageZoom) {
+    <div
+      class="profile-image-zoom-popup"
+      [class.is-expanded]="profileImageZoom.expanded"
+      [style.left.px]="profileImageZoom.expanded ? profileImageZoom.endLeft : profileImageZoom.startLeft"
+      [style.top.px]="profileImageZoom.expanded ? profileImageZoom.endTop : profileImageZoom.startTop"
+      [style.width.px]="profileImageZoom.expanded ? profileImageZoom.endWidth : profileImageZoom.startWidth"
+      [style.height.px]="profileImageZoom.expanded ? profileImageZoom.endHeight : profileImageZoom.startHeight"
+      (mouseenter)="onProfileImageZoomPopupMouseEnter()"
+      (mouseleave)="onProfileImageZoomPopupMouseLeave()"
+      (click)="onProfileImageZoomPopupClick($event)"
+    >
+      <img
+        class="profile-image-zoom-popup-image"
+        [src]="profileImageZoom.imageUrl"
+        alt="profile image zoom"
+      />
+    </div>
+  }
 
   <app-time-range-selector
     [open]="isTimeRangeSelectorOpen()"
@@ -214,7 +233,20 @@
           (mouseleave)="onConversationMouseLeave(conversation.id)"
           (click)="selectConversation(conversation.id)"
         >
-          <span class="avatar">{{ conversation.contactAvatar }}</span>
+          <span class="avatar">
+            @if (conversationAvatarImageUrl(conversation); as profileImageUrl) {
+              <img
+                class="avatar-image"
+                [src]="profileImageUrl"
+                [alt]="conversation.contactName"
+                loading="lazy"
+                (load)="onConversationAvatarImageLoad(conversation.id)"
+                (error)="onConversationAvatarImageError(conversation.id)"
+              />
+            } @else {
+              {{ conversation.contactAvatar }}
+            }
+          </span>
           <span class="conversation-main">
             <span class="conversation-top-row">
               <span class="contact-name">
@@ -297,7 +329,25 @@
     @if (activeConversation(); as currentConversation) {
       <header class="panel-header conversation-header">
         <div class="profile-pill">
-          <span class="avatar">{{ currentConversation.contactAvatar }}</span>
+          <span
+            class="avatar"
+            [class.is-zoomable]="!!conversationAvatarImageUrl(currentConversation)"
+            (mouseenter)="onHeaderAvatarMouseEnter(currentConversation)"
+            (click)="onHeaderAvatarClick($event, currentConversation)"
+          >
+            @if (conversationAvatarImageUrl(currentConversation); as profileImageUrl) {
+              <img
+                class="avatar-image"
+                [src]="profileImageUrl"
+                [alt]="currentConversation.contactName"
+                loading="lazy"
+                (load)="onConversationAvatarImageLoad(currentConversation.id)"
+                (error)="onConversationAvatarImageError(currentConversation.id)"
+              />
+            } @else {
+              {{ currentConversation.contactAvatar }}
+            }
+          </span>
           <div>
             @if (canOpenConversationContact(currentConversation)) {
               <strong>

@@ -10,10 +10,12 @@ export class ProfileImageController {
   public async getProfileImage(
     @Query('phoneNumber') phoneNumber: string | undefined,
     @Query('size') sizeRaw: string | undefined,
+    @Query('cached-only') cachedOnlyRaw: string | undefined,
     @Res() response: Response
   ): Promise<void> {
     const size: ProfileImageSize = sizeRaw?.toLowerCase() === 'small' ? 'small' : 'original';
-    const result = await this.getProfileImageUseCase.execute(phoneNumber, size);
+    const cachedOnly = cachedOnlyRaw?.toLowerCase() === 'true';
+    const result = await this.getProfileImageUseCase.execute(phoneNumber, size, cachedOnly);
 
     if (result.status === 'connection_error') {
       response.sendStatus(404);
@@ -24,6 +26,10 @@ export class ProfileImageController {
       return;
     }
     if (result.status === 'not_found') {
+      if (cachedOnly) {
+        response.sendStatus(404);
+        return;
+      }
       response.sendStatus(204);
       return;
     }

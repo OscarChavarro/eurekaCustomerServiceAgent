@@ -83,6 +83,36 @@
   font-size: 0.78rem
   font-weight: 600
   flex-shrink: 0
+  overflow: hidden
+
+.avatar.is-zoomable
+  cursor: zoom-in
+
+.avatar-image
+  width: 100%
+  height: 100%
+  display: block
+  object-fit: cover
+
+.profile-image-zoom-popup
+  position: fixed
+  z-index: 1200
+  border-radius: 50%
+  overflow: hidden
+  box-shadow: 0 12px 34px rgb(0 0 0 / 26%)
+  background: #dfe5ea
+  transition: left 0.22s ease, top 0.22s ease, width 0.22s ease, height 0.22s ease, border-radius 0.22s ease
+  pointer-events: auto
+
+.profile-image-zoom-popup.is-expanded
+  border-radius: 0.85rem
+
+.profile-image-zoom-popup-image
+  width: 100%
+  height: 100%
+  display: block
+  object-fit: contain
+  background: #000
 
 .conversation-main
   min-width: 0

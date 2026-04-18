@@ -52,6 +52,7 @@ import {
   normalizeConversationSourceId,
   phonesMatchDigits
 } from '../../../core/phone/phone-normalization.utils';
+import { FrontendSecretsService } from '../../../core/api/services/frontend-secrets.service';
 
 @Component({
   selector: 'app-shell-chat',
@@ -78,12 +79,21 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
   private readonly phoneCountryI18nService = inject(PhoneCountryI18nService);
   private readonly chatConversationCyclerService = inject(ChatConversationCyclerService);
   private readonly chatMessageSegmentationService = inject(ChatMessageSegmentationService);
+  private readonly frontendSecretsService = inject(FrontendSecretsService);
   private readonly router = inject(Router);
   private readonly activatedRoute = inject(ActivatedRoute);
   private readonly searchTermState = signal<string>('');
   private readonly composerMessageState = signal<string>('');
   private readonly languageDropdownOpenState = signal<boolean>(false);
   private readonly phoneLookupCache = new Map<string, PhonePrefixLookupResponse | null>();
+  private readonly avatarLoadErrorConversationIdsState = signal<Set<string>>(new Set());
+  private readonly avatarLoadedConversationIdsState = signal<Set<string>>(new Set());
+  private readonly profileImageZoomPopupState = signal<ProfileImageZoomPopupState | null>(null);
+  private isProfileImageZoomPopupHovered = false;
+  private profileImageZoomRequestSequence = 0;
+  private profileImageZoomCloseTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  private readonly profileImageZoomMetadataCache = new Map<string, ProfileImageZoomMetadata>();
+  private readonly profileImageZoomMetadataPending = new Map<string, Promise<ProfileImageZoomMetadata | null>>();
   private hoverIntentTimeoutId: ReturnType<typeof setTimeout> | null = null;
   private activeHoveredPhone: string | null = null;
   private readonly hoveredMessageKeyState = signal<string | null>(null);
@@ -124,6 +134,7 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
     this.languageToCountryCode(this.selectedLanguage())
   );
   protected readonly phoneTooltip = signal<PhoneTooltipState | null>(null);
+  protected readonly profileImageZoomPopup = this.profileImageZoomPopupState.asReadonly();
   protected readonly composerMessage = this.composerMessageState.asReadonly();
   protected readonly agentTyping = this.chatConversationService.agentTyping;
   protected readonly hoveredMessageKey = this.hoveredMessageKeyState.asReadonly();
@@ -191,6 +202,141 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
       return searchableText.includes(normalizedSearchTerm);
     });
   });
+  protected readonly whatsappConnectorBackendBaseUrl = computed(
+    () => this.frontendSecretsService.whatsappConnectorBackendBaseUrl
+  );
+
+  protected conversationAvatarImageUrl(conversation: ChatConversation): string | null {
+    if (this.avatarLoadErrorConversationIdsState().has(conversation.id)) {
+      return null;
+    }
+
+    const phoneNumberDigits = this.toPhoneDigits(conversation.phoneNumber);
+    if (!phoneNumberDigits) {
+      return null;
+    }
+
+    const baseUrl = this.whatsappConnectorBackendBaseUrl();
+    const params = new URLSearchParams({
+      phoneNumber: phoneNumberDigits,
+      size: 'small',
+      'cached-only': 'true'
+    });
+
+    return `${baseUrl}/profileImage?${params.toString()}`;
+  }
+
+  protected conversationAvatarZoomImageUrl(conversation: ChatConversation): string | null {
+    const phoneNumberDigits = this.toPhoneDigits(conversation.phoneNumber);
+    if (!phoneNumberDigits) {
+      return null;
+    }
+
+    const baseUrl = this.whatsappConnectorBackendBaseUrl();
+    const params = new URLSearchParams({
+      phoneNumber: phoneNumberDigits,
+      size: 'normal',
+      'cached-only': 'true'
+    });
+
+    return `${baseUrl}/profileImage?${params.toString()}`;
+  }
+
+  protected onConversationAvatarImageLoad(conversationId: string): void {
+    this.avatarLoadErrorConversationIdsState.update((current) => {
+      if (!current.has(conversationId)) {
+        return current;
+      }
+
+      const next = new Set(current);
+      next.delete(conversationId);
+      return next;
+    });
+    this.avatarLoadedConversationIdsState.update((current) => {
+      if (current.has(conversationId)) {
+        return current;
+      }
+
+      const next = new Set(current);
+      next.add(conversationId);
+      return next;
+    });
+  }
+
+  protected onConversationAvatarImageError(conversationId: string): void {
+    this.avatarLoadErrorConversationIdsState.update((current) => {
+      if (current.has(conversationId)) {
+        return current;
+      }
+
+      const next = new Set(current);
+      next.add(conversationId);
+      return next;
+    });
+    this.avatarLoadedConversationIdsState.update((current) => {
+      if (!current.has(conversationId)) {
+        return current;
+      }
+
+      const next = new Set(current);
+      next.delete(conversationId);
+      return next;
+    });
+  }
+
+  protected onHeaderAvatarMouseEnter(conversation: ChatConversation): void {
+    if (!this.avatarLoadedConversationIdsState().has(conversation.id)) {
+      return;
+    }
+
+    void this.prefetchProfileImageZoomMetadata(conversation);
+  }
+
+  protected onHeaderAvatarClick(event: MouseEvent, conversation: ChatConversation): void {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const popup = this.profileImageZoomPopupState();
+    if (popup) {
+      this.closeProfileImageZoomPopup();
+      return;
+    }
+
+    if (!this.avatarLoadedConversationIdsState().has(conversation.id)) {
+      return;
+    }
+
+    const zoomImageUrl = this.conversationAvatarZoomImageUrl(conversation);
+    const anchorElement = event.currentTarget as HTMLElement | null;
+
+    if (!zoomImageUrl || !anchorElement) {
+      return;
+    }
+
+    this.clearProfileImageZoomCloseTimer();
+    this.isProfileImageZoomPopupHovered = false;
+    const startRect = anchorElement.getBoundingClientRect();
+    void this.openProfileImageZoomPopup(conversation, startRect);
+  }
+
+  protected onProfileImageZoomPopupMouseEnter(): void {
+    const popup = this.profileImageZoomPopupState();
+    if (!popup || popup.closing) {
+      return;
+    }
+
+    this.isProfileImageZoomPopupHovered = true;
+  }
+
+  protected onProfileImageZoomPopupMouseLeave(): void {
+    this.isProfileImageZoomPopupHovered = false;
+  }
+
+  protected onProfileImageZoomPopupClick(event: MouseEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.closeProfileImageZoomPopup();
+  }
 
   private readonly autoScrollEffectRef = effect(() => {
     const activeConversation = this.activeConversation();
@@ -242,6 +388,13 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
       this.embedSelectedBlockState.set(null);
       this.embedNearestBlocksState.set([]);
       this.embedNearestLoadingState.set(false);
+    }
+  );
+
+  private readonly closeProfileImageZoomOnConversationChangeEffectRef = effect(
+    () => {
+      this.activeConversationId();
+      this.dismissProfileImageZoomPopupImmediately();
     }
   );
 
@@ -663,6 +816,7 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
     this.removeTimeSplitDragListeners();
     this.routeSyncSubscription?.unsubscribe();
     this.routeSyncSubscription = null;
+    this.dismissProfileImageZoomPopupImmediately();
   }
 
   @HostListener('window:keydown', ['$event'])
@@ -674,6 +828,7 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
     if (event.key === 'Escape') {
       this.openUsedContextMessageKeyState.set(null);
       this.usedContextPopupState.set(null);
+      this.closeProfileImageZoomPopup();
       return;
     }
 
@@ -707,6 +862,15 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
       event.preventDefault();
       this.selectNextConversation();
     }
+  }
+
+  @HostListener('document:click', ['$event'])
+  protected onDocumentClick(_: MouseEvent): void {
+    if (!this.profileImageZoomPopupState()) {
+      return;
+    }
+
+    this.closeProfileImageZoomPopup();
   }
 
   protected selectViewMode(viewMode: ConversationViewMode): void {
@@ -1379,6 +1543,136 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
     }
   }
 
+  private async openProfileImageZoomPopup(
+    conversation: ChatConversation,
+    startRect: DOMRect
+  ): Promise<void> {
+    const currentRequestId = ++this.profileImageZoomRequestSequence;
+    const metadata = await this.prefetchProfileImageZoomMetadata(conversation);
+
+    if (currentRequestId !== this.profileImageZoomRequestSequence || !metadata) {
+      return;
+    }
+
+    this.profileImageZoomPopupState.set({
+      imageUrl: metadata.url,
+      startLeft: startRect.left,
+      startTop: startRect.top,
+      startWidth: startRect.width,
+      startHeight: startRect.height,
+      endLeft: startRect.left,
+      endTop: startRect.top,
+      endWidth: metadata.width,
+      endHeight: metadata.height,
+      expanded: false,
+      closing: false
+    });
+
+    requestAnimationFrame(() => {
+      const popup = this.profileImageZoomPopupState();
+      if (!popup || popup.imageUrl !== metadata.url) {
+        return;
+      }
+
+      this.profileImageZoomPopupState.set({
+        ...popup,
+        expanded: true
+      });
+    });
+  }
+
+  private async prefetchProfileImageZoomMetadata(
+    conversation: ChatConversation
+  ): Promise<ProfileImageZoomMetadata | null> {
+    const zoomImageUrl = this.conversationAvatarZoomImageUrl(conversation);
+    if (!zoomImageUrl) {
+      return null;
+    }
+
+    const cached = this.profileImageZoomMetadataCache.get(zoomImageUrl);
+    if (cached) {
+      return cached;
+    }
+
+    const pending = this.profileImageZoomMetadataPending.get(zoomImageUrl);
+    if (pending) {
+      return pending;
+    }
+
+    const loadPromise = new Promise<ProfileImageZoomMetadata | null>((resolve) => {
+      const image = new Image();
+      image.decoding = 'async';
+      image.onload = () => {
+        const width = image.naturalWidth;
+        const height = image.naturalHeight;
+        if (width <= 0 || height <= 0) {
+          resolve(null);
+          return;
+        }
+
+        const metadata: ProfileImageZoomMetadata = {
+          url: zoomImageUrl,
+          width,
+          height
+        };
+        this.profileImageZoomMetadataCache.set(zoomImageUrl, metadata);
+        resolve(metadata);
+      };
+      image.onerror = () => {
+        resolve(null);
+      };
+      image.src = zoomImageUrl;
+    }).finally(() => {
+      this.profileImageZoomMetadataPending.delete(zoomImageUrl);
+    });
+
+    this.profileImageZoomMetadataPending.set(zoomImageUrl, loadPromise);
+    return loadPromise;
+  }
+
+  private closeProfileImageZoomPopup(): void {
+    const popup = this.profileImageZoomPopupState();
+    if (!popup || popup.closing) {
+      return;
+    }
+
+    this.profileImageZoomPopupState.set({
+      ...popup,
+      expanded: false,
+      closing: true
+    });
+    this.clearProfileImageZoomCloseTimer();
+    this.profileImageZoomCloseTimeoutId = setTimeout(() => {
+      this.profileImageZoomPopupState.set(null);
+      this.profileImageZoomCloseTimeoutId = null;
+    }, PROFILE_IMAGE_ZOOM_TRANSITION_MS);
+  }
+
+  private dismissProfileImageZoomPopupImmediately(): void {
+    this.clearProfileImageZoomCloseTimer();
+    this.isProfileImageZoomPopupHovered = false;
+    this.profileImageZoomPopupState.set(null);
+    this.profileImageZoomRequestSequence += 1;
+  }
+
+  private scheduleProfileImageZoomClose(): void {
+    this.clearProfileImageZoomCloseTimer();
+    this.profileImageZoomCloseTimeoutId = setTimeout(() => {
+      if (this.isProfileImageZoomPopupHovered) {
+        return;
+      }
+
+      this.closeProfileImageZoomPopup();
+    }, 70);
+  }
+
+  private clearProfileImageZoomCloseTimer(): void {
+    if (this.profileImageZoomCloseTimeoutId !== null) {
+      clearTimeout(this.profileImageZoomCloseTimeoutId);
+      this.profileImageZoomCloseTimeoutId = null;
+    }
+  }
+
   private formatPhoneTooltip(
     lookup: PhonePrefixLookupResponse | null
   ): { countryCode: string | null; text: string } | null {
@@ -1509,6 +1803,14 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
       this.selectConversation(nextConversationId);
     }
   }
+
+  private toPhoneDigits(phoneNumber: string | null | undefined): string {
+    if (typeof phoneNumber !== 'string') {
+      return '';
+    }
+
+    return phoneNumber.replace(/\D+/g, '');
+  }
 }
 
 type OperationMode = 'chat' | 'time' | 'contacts';
@@ -1533,3 +1835,25 @@ type UsedContextPopupState = {
   left: number;
   top: number;
 };
+
+type ProfileImageZoomPopupState = {
+  imageUrl: string;
+  startLeft: number;
+  startTop: number;
+  startWidth: number;
+  startHeight: number;
+  endLeft: number;
+  endTop: number;
+  endWidth: number;
+  endHeight: number;
+  expanded: boolean;
+  closing: boolean;
+};
+
+type ProfileImageZoomMetadata = {
+  url: string;
+  width: number;
+  height: number;
+};
+
+const PROFILE_IMAGE_ZOOM_TRANSITION_MS = 220;

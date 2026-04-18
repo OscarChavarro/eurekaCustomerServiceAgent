@@ -27,7 +27,8 @@ export class GetProfileImageUseCase {
 
   async execute(
     phoneNumberRaw: string | null | undefined,
-    size: ProfileImageSize = 'original'
+    size: ProfileImageSize = 'original',
+    cachedOnly = false
   ): Promise<GetProfileImageUseCaseResult> {
     const normalizedPhone = this.normalizePhoneNumber(phoneNumberRaw);
     if (!normalizedPhone) {
@@ -53,6 +54,10 @@ export class GetProfileImageUseCase {
         await this.saveSmallImageForToday(phoneFolderPath, smallFromCached);
         return { status: 'ok', image: smallFromCached };
       }
+    }
+
+    if (cachedOnly) {
+      return { status: 'not_found' };
     }
 
     const profileImageResult = await this.whatsappProfilePort.fetchProfileImage(normalizedPhone);

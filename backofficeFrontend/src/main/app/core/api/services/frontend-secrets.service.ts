@@ -23,6 +23,9 @@ export class FrontendSecretsService {
     if (!loadedSecrets.retrievalBackend?.baseUrl?.trim()) {
       throw new Error('Missing retrievalBackend.baseUrl in secrets.json');
     }
+    if (!loadedSecrets.whatsappConnectorBackend?.baseUrl?.trim()) {
+      throw new Error('Missing whatsappConnectorBackend.baseUrl in secrets.json');
+    }
     if (!loadedSecrets.staticAssets?.baseUrl?.trim()) {
       throw new Error('Missing staticAssets.baseUrl in secrets.json');
     }
@@ -41,6 +44,12 @@ export class FrontendSecretsService {
         baseUrl: this.normalizeHttpBaseUrl(
           loadedSecrets.retrievalBackend.baseUrl,
           'retrievalBackend.baseUrl'
+        )
+      },
+      whatsappConnectorBackend: {
+        baseUrl: this.normalizeHttpBaseUrl(
+          loadedSecrets.whatsappConnectorBackend.baseUrl,
+          'whatsappConnectorBackend.baseUrl'
         )
       },
       staticAssets: {
@@ -82,6 +91,14 @@ export class FrontendSecretsService {
     }
 
     return this.secrets.retrievalBackend.baseUrl;
+  }
+
+  public get whatsappConnectorBackendBaseUrl(): string {
+    if (!this.secrets) {
+      throw new Error('Frontend secrets not loaded yet.');
+    }
+
+    return this.secrets.whatsappConnectorBackend.baseUrl;
   }
 
   private normalizeHttpBaseUrl(urlValue: string, key: string): string {
