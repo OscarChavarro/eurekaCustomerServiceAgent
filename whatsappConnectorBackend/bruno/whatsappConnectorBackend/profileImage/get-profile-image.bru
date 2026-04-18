@@ -5,9 +5,14 @@ meta {
 }
 
 get {
-  url: {{baseUrl}}/profileImage?phoneNumber={{phoneNumber}}
+  url: {{baseUrl}}/profileImage?phoneNumber={{phoneNumber}}&size=normal
   body: none
   auth: none
+}
+
+params:query {
+  phoneNumber: {{phoneNumber}}
+  size: normal
 }
 
 headers {

@@ -1,6 +1,6 @@
 import { Controller, Get, Query, Res } from '@nestjs/common';
 import { Response } from 'express';
-import { GetProfileImageUseCase } from 'src/application/usecases/get-profile-image.usecase';
+import { GetProfileImageUseCase, ProfileImageSize } from 'src/application/usecases/get-profile-image.usecase';
 
 @Controller()
 export class ProfileImageController {
@@ -9,10 +9,26 @@ export class ProfileImageController {
   @Get('profileImage')
   public async getProfileImage(
     @Query('phoneNumber') phoneNumber: string | undefined,
+    @Query('size') sizeRaw: string | undefined,
     @Res() response: Response
   ): Promise<void> {
-    const image = await this.getProfileImageUseCase.execute(phoneNumber);
-    response.setHeader('Content-Type', image.mimeType);
-    response.status(200).send(image.bytes);
+    const size: ProfileImageSize = sizeRaw?.toLowerCase() === 'small' ? 'small' : 'original';
+    const result = await this.getProfileImageUseCase.execute(phoneNumber, size);
+
+    if (result.status === 'connection_error') {
+      response.sendStatus(404);
+      return;
+    }
+    if (result.status === 'invalid_phone') {
+      response.sendStatus(400);
+      return;
+    }
+    if (result.status === 'not_found') {
+      response.sendStatus(204);
+      return;
+    }
+
+    response.setHeader('Content-Type', result.image.mimeType);
+    response.status(200).send(result.image.bytes);
   }
 }

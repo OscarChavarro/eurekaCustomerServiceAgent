@@ -21,6 +21,9 @@ type Environment = {
 };
 
 type Secrets = {
+  profileImages?: {
+    baseFolderPath?: string;
+  };
   contactsBackend?: {
     host?: string;
     port?: number;
@@ -128,6 +131,11 @@ export class Configuration {
 
   get retrievalBackendBaseUrl(): string {
     return this.secrets.retrievalBackend?.baseUrl?.trim().replace(/\/+$/g, '') ?? '';
+  }
+
+  get profileImagesBaseFolderPath(): string {
+    const configured = this.secrets.profileImages?.baseFolderPath?.trim();
+    return configured && configured.length > 0 ? configured : './output/images';
   }
 
   get whatsappMessageReceiveMode(): 'WHATSAPP_ID' | 'JSON' | 'SILENT' {

@@ -5,7 +5,11 @@ import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { Configuration } from 'src/config/configuration';
 import { WhatsappMessagingPort } from 'src/ports/outbound/whatsapp-messaging.port';
-import { BinaryImage, WhatsappProfilePort } from 'src/ports/outbound/whatsapp-profile.port';
+import {
+  BinaryImage,
+  FetchProfileImageResult,
+  WhatsappProfilePort
+} from 'src/ports/outbound/whatsapp-profile.port';
 
 type ConnectionUpdate = {
   connection?: string;
@@ -99,41 +103,42 @@ export class WhatsappWhiskeySocketsService
     await this.socket.sendMessage(destinationJid, { text });
   }
 
-  async fetchProfileImage(phoneNumberWithCountryCode: string): Promise<BinaryImage | null> {
+  async fetchProfileImage(phoneNumberWithCountryCode: string): Promise<FetchProfileImageResult> {
     const jid = this.toUserJid(phoneNumberWithCountryCode);
     if (!jid) {
-      return null;
+      return { status: 'not_found' };
     }
 
     try {
       await this.initialize();
       if (!this.socket || !this.isConnected) {
-        return null;
+        return { status: 'connection_error' };
       }
 
       const profileUrl = await this.socket.profilePictureUrl(jid, 'image');
       if (!profileUrl) {
-        return null;
+        return { status: 'not_found' };
       }
 
       const response = await fetch(profileUrl);
       if (!response.ok) {
-        return null;
+        return { status: 'not_found' };
       }
 
       const bytes = Buffer.from(await response.arrayBuffer());
       if (bytes.length === 0) {
-        return null;
+        return { status: 'not_found' };
       }
 
       const contentTypeHeader = response.headers.get('content-type');
       const mimeType = this.normalizeMimeType(contentTypeHeader, profileUrl);
 
-      return { bytes, mimeType };
+      const image: BinaryImage = { bytes, mimeType };
+      return { status: 'ok', image };
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.warn(`Unable to fetch profile image for ${jid}: ${message}`);
-      return null;
+      return { status: 'connection_error' };
     }
   }
 
