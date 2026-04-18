@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ProcessIncomingWhatsappMessageUseCase } from 'src/application/usecases/process-incoming-whatsapp-message.usecase';
 import { Configuration } from 'src/config/configuration';
 import { CONTACTS_BACKEND_PORT, ContactEntry, ContactsBackendPort } from 'src/ports/outbound/contacts-backend.port';
+import { RETRIEVAL_BACKEND_PORT, RetrievalBackendPort } from 'src/ports/outbound/retrieval-backend.port';
 import { WhatsappWhiskeySocketsService } from 'src/services/whatsapp/whatsapp-whiskey-sockets.service';
 
 type MessageUpsertPayload = {
@@ -11,6 +12,7 @@ type MessageUpsertPayload = {
       participant?: string;
       fromMe?: boolean;
     };
+    message?: unknown;
   }>;
 };
 
@@ -24,14 +26,19 @@ export class WhatsappWhiskeySocketsListenerService implements OnModuleInit {
     private readonly whatsappWhiskeySocketsService: WhatsappWhiskeySocketsService,
     private readonly processIncomingWhatsappMessageUseCase: ProcessIncomingWhatsappMessageUseCase,
     @Inject(CONTACTS_BACKEND_PORT)
-    private readonly contactsBackend: ContactsBackendPort
+    private readonly contactsBackend: ContactsBackendPort,
+    @Inject(RETRIEVAL_BACKEND_PORT)
+    private readonly retrievalBackend: RetrievalBackendPort
   ) {
-    this.whatsappWhiskeySocketsService.onIncomingMessage((payload) => {
-      this.handleIncomingMessage(payload);
+    this.whatsappWhiskeySocketsService.onIncomingMessage(async (payload) => {
+      await this.handleIncomingMessage(payload);
     });
   }
 
   async onModuleInit(): Promise<void> {
+    await this.retrievalBackend.assertHealth();
+    this.logger.log('retrievalBackend connectivity confirmed.');
+
     await this.contactsBackend.assertHealth();
     this.contacts = await this.contactsBackend.listContacts();
     this.logger.log(
@@ -41,7 +48,7 @@ export class WhatsappWhiskeySocketsListenerService implements OnModuleInit {
     await this.whatsappWhiskeySocketsService.initialize();
   }
 
-  private handleIncomingMessage(payload: unknown): void {
+  private async handleIncomingMessage(payload: unknown): Promise<void> {
     const messages = this.extractMessages(payload);
     for (const message of messages) {
       const key = message.key;
@@ -55,9 +62,12 @@ export class WhatsappWhiskeySocketsListenerService implements OnModuleInit {
       }
 
       const senderWhatsapp = this.toWhatsappIdentifier(senderJid);
-      this.processIncomingWhatsappMessageUseCase.execute({
+      const incomingTexts = this.extractTextFragments(message.message);
+      await this.processIncomingWhatsappMessageUseCase.execute({
         agentPhoneNumber: this.configuration.whiskeySocketsWhatsappAccountPhoneNumber,
         senderPhoneNumber: senderWhatsapp,
+        conversationJid: key.remoteJid?.trim() ?? null,
+        incomingTexts,
         contacts: this.contacts,
         messageReceiveMode: this.configuration.whatsappMessageReceiveMode,
         rawPayload: payload
@@ -99,5 +109,32 @@ export class WhatsappWhiskeySocketsListenerService implements OnModuleInit {
     }
 
     return cleaned;
+  }
+
+  private extractTextFragments(value: unknown): string[] {
+    const found = new Set<string>();
+    const stack: unknown[] = [value];
+
+    while (stack.length > 0) {
+      const current = stack.pop();
+
+      if (typeof current === 'string') {
+        const normalized = current.trim();
+        if (normalized.length > 0) {
+          found.add(normalized);
+        }
+        continue;
+      }
+
+      if (!current || typeof current !== 'object') {
+        continue;
+      }
+
+      for (const nestedValue of Object.values(current as Record<string, unknown>)) {
+        stack.push(nestedValue);
+      }
+    }
+
+    return Array.from(found);
   }
 }

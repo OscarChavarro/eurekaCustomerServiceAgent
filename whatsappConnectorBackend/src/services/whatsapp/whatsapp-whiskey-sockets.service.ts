@@ -4,6 +4,7 @@ import pino from 'pino';
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { Configuration } from 'src/config/configuration';
+import { WhatsappMessagingPort } from 'src/ports/outbound/whatsapp-messaging.port';
 
 type ConnectionUpdate = {
   connection?: string;
@@ -16,6 +17,7 @@ type ConnectionUpdate = {
 type IncomingMessageListener = (payload: unknown) => void | Promise<void>;
 
 type BaileysSocket = {
+  sendMessage(jid: string, payload: { text: string }): Promise<unknown>;
   end(code?: unknown): void;
   ev: {
     on(event: 'creds.update', listener: (...args: unknown[]) => void): void;
@@ -46,7 +48,7 @@ class WhatsappConnectionClosedError extends Error {
 }
 
 @Injectable()
-export class WhatsappWhiskeySocketsService implements OnModuleDestroy {
+export class WhatsappWhiskeySocketsService implements OnModuleDestroy, WhatsappMessagingPort {
   private readonly logger = new Logger(WhatsappWhiskeySocketsService.name);
   private socket: BaileysSocket | null = null;
   private isConnected = false;
@@ -78,6 +80,19 @@ export class WhatsappWhiskeySocketsService implements OnModuleDestroy {
 
   onIncomingMessage(listener: IncomingMessageListener): void {
     this.incomingMessageListeners.add(listener);
+  }
+
+  async sendTextMessage(destinationJid: string, text: string): Promise<void> {
+    if (!destinationJid.trim() || !text.trim()) {
+      return;
+    }
+
+    await this.initialize();
+    if (!this.socket || !this.isConnected) {
+      throw new Error('WhatsApp socket is not connected.');
+    }
+
+    await this.socket.sendMessage(destinationJid, { text });
   }
 
   async onModuleDestroy(): Promise<void> {

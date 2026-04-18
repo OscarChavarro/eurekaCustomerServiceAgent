@@ -26,6 +26,9 @@ type Secrets = {
     pageSize?: number;
     requestTimeoutMs?: number;
   };
+  retrievalBackend?: {
+    baseUrl?: string;
+  };
   whiskeysocketswhatsapp?: {
     accountPhoneNumber?: string;
     accountLabel?: string;
@@ -52,6 +55,7 @@ export class Configuration {
     const secretsRaw = readFileSync(secretsPath, 'utf-8');
     this.secrets = JSON.parse(secretsRaw) as Secrets;
     this.validateContactsBackendSecrets(secretsPath);
+    this.validateRetrievalBackendSecrets(secretsPath);
   }
 
   get serviceStartupLogPrefix(): string {
@@ -117,6 +121,10 @@ export class Configuration {
     return `http://${normalizedHost}:${port}`;
   }
 
+  get retrievalBackendBaseUrl(): string {
+    return this.secrets.retrievalBackend?.baseUrl?.trim().replace(/\/+$/g, '') ?? '';
+  }
+
   get whatsappMessageReceiveMode(): 'WHATSAPP_ID' | 'JSON' | 'SILENT' {
     const configuredMode = this.environment.whatsapp?.messageReceiveMode ?? 'WHATSAPP_ID';
     const normalizedMode = configuredMode.trim().toUpperCase();
@@ -171,6 +179,19 @@ export class Configuration {
     ) {
       throw new Error(
         `Invalid configuration in ${secretsPath}. "contactsBackend.requestTimeoutMs" must be a positive integer.`
+      );
+    }
+  }
+
+  private validateRetrievalBackendSecrets(secretsPath: string): void {
+    const retrievalBackend = this.secrets.retrievalBackend;
+    if (!retrievalBackend || typeof retrievalBackend !== 'object') {
+      throw new Error(`Invalid configuration in ${secretsPath}. "retrievalBackend" object is required.`);
+    }
+
+    if (typeof retrievalBackend.baseUrl !== 'string' || retrievalBackend.baseUrl.trim().length === 0) {
+      throw new Error(
+        `Invalid configuration in ${secretsPath}. "retrievalBackend.baseUrl" must be a non-empty string.`
       );
     }
   }
