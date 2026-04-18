@@ -188,10 +188,18 @@ digraph EurekaArchitecture {
     color="#0d6efd"
   ];
 
-  notification_message_sender [
-    label="notificationMessageSender",
+  whatsapp_connector_backend [
+    label=<
+      <TABLE BORDER="0" CELLBORDER="0" CELLPADDING="2" CELLSPACING="0">
+        <TR>
+          <TD><IMG SRC="doc/architecture/fizgon.png"/></TD>
+          <TD ALIGN="LEFT">whatsappConnectorBackend</TD>
+        </TR>
+      </TABLE>
+    >,
+    margin="0.08,0.05",
     style="rounded,filled",
-    fillcolor="#f3f4f6"
+    fillcolor="#e8f8ef"
   ];
 
   google_people_api [
@@ -233,7 +241,7 @@ digraph EurekaArchitecture {
 
   { rank=same; customer_service_agent; browser; }
   { rank=same; backoffice_frontend; nginx; }
-  { rank=same; backoffice_backend; notification_message_sender; }
+  { rank=same; backoffice_backend; whatsapp_connector_backend; }
   { rank=same; ingestion_backend; retrieval_backend; contacts_backend; catalog; }
   { rank=same; bge; qdrant; mongodb; llama_cpp; google_people_api; customer_service_contacts; }
   { rank=max; imazing; wix; }
@@ -253,8 +261,8 @@ digraph EurekaArchitecture {
   contacts_backend -> google_people_api [xlabel="OAuth2 + contacts ops"];
   google_people_api -> customer_service_contacts [xlabel="reads/writes contacts"];
 
-  backoffice_backend -> notification_message_sender [xlabel="enqueue notifications"];
-  notification_message_sender -> whatsapp [xlabel="send messages"];
+  backoffice_backend -> whatsapp_connector_backend [xlabel="enqueue notifications"];
+  whatsapp_connector_backend -> whatsapp [dir=both];
 
   backoffice_frontend -> retrieval_backend [xlabel="chat streaming API"];
   retrieval_backend -> qdrant [xlabel="retrieve chunks"];

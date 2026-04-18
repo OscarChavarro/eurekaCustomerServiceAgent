@@ -11,6 +11,7 @@
     "reconnectDelayOnStatusCode405Ms": 600000
   },
   "service": {
-    "startupLogPrefix": "whatsappConnectorBackend"
+    "startupLogPrefix": "whatsappConnectorBackend",
+    "httpPort": 3670
   }
 }

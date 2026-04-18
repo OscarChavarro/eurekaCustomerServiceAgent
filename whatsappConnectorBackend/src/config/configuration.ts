@@ -8,6 +8,7 @@ type Environment = {
   };
   service?: {
     startupLogPrefix?: string;
+    httpPort?: number;
   };
   whiskeysocketswhatsapp?: {
     authFolderPath?: string;
@@ -60,6 +61,10 @@ export class Configuration {
 
   get serviceStartupLogPrefix(): string {
     return this.environment.service?.startupLogPrefix?.trim() || 'whatsappConnectorBackend';
+  }
+
+  get serviceHttpPort(): number {
+    return Math.max(1, this.environment.service?.httpPort ?? 3670);
   }
 
   get whiskeySocketsWhatsappAuthFolderPath(): string {

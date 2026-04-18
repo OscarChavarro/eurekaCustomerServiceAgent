@@ -7,6 +7,11 @@ NestJS microservice to connect a WhatsApp account using `@whiskeysockets/baileys
 - QR-based connection (printed in terminal).
 - Session persistence in `output/whatsapp-auth`.
 - Continuous listening for incoming messages.
+- HTTP endpoint: `GET /profileImage?phoneNumber=<digits_with_country_code>`
+  - Example input: `41767876763`
+  - Internally normalized to `+41767876763`
+  - Returns the WhatsApp profile image with the corresponding image mime-type.
+  - On error or missing profile image, returns a fallback `64x64` `#ff8080` JPEG image.
 - Startup connectivity checks against `contactsBackend`:
   - `GET /health`
   - `GET /contacts`
@@ -32,6 +37,7 @@ Main fields:
 - `environment.whiskeysocketswhatsapp.authFolderPath`
 - `environment.whiskeysocketswhatsapp.printQrInTerminal`
 - `environment.whatsapp.messageReceiveMode`: `WHATSAPP_ID`, `JSON`, or `SILENT`
+- `environment.service.httpPort`
 
 ## Commands
 

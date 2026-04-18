@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ChatCompletionsController } from './adapters/inbound/http/chat-completions.controller';
+import { HealthController } from './adapters/inbound/http/health.controller';
 import { NearestEmbeddingsController } from './adapters/inbound/http/nearest-embeddings.controller';
 import { NaiveContextGenerator } from './adapters/outbound/context/naive-context-generator';
 import { VectorSearchContextGenerator } from './adapters/outbound/context/vector-search-context-generator';
@@ -20,7 +21,7 @@ import { SettingsConfig } from './infrastructure/config/settings/settings.config
 import { HeuristicContextBuilderService } from '../application/services/context-builder.service';
 
 @Module({
-  controllers: [ChatCompletionsController, NearestEmbeddingsController],
+  controllers: [ChatCompletionsController, NearestEmbeddingsController, HealthController],
   providers: [
     SettingsConfig,
     SecretsConfig,

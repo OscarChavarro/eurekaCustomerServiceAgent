@@ -5,6 +5,7 @@ import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { Configuration } from 'src/config/configuration';
 import { WhatsappMessagingPort } from 'src/ports/outbound/whatsapp-messaging.port';
+import { BinaryImage, WhatsappProfilePort } from 'src/ports/outbound/whatsapp-profile.port';
 
 type ConnectionUpdate = {
   connection?: string;
@@ -18,6 +19,7 @@ type IncomingMessageListener = (payload: unknown) => void | Promise<void>;
 
 type BaileysSocket = {
   sendMessage(jid: string, payload: { text: string }): Promise<unknown>;
+  profilePictureUrl(jid: string, type?: 'preview' | 'image'): Promise<string>;
   end(code?: unknown): void;
   ev: {
     on(event: 'creds.update', listener: (...args: unknown[]) => void): void;
@@ -48,7 +50,9 @@ class WhatsappConnectionClosedError extends Error {
 }
 
 @Injectable()
-export class WhatsappWhiskeySocketsService implements OnModuleDestroy, WhatsappMessagingPort {
+export class WhatsappWhiskeySocketsService
+  implements OnModuleDestroy, WhatsappMessagingPort, WhatsappProfilePort
+{
   private readonly logger = new Logger(WhatsappWhiskeySocketsService.name);
   private socket: BaileysSocket | null = null;
   private isConnected = false;
@@ -93,6 +97,44 @@ export class WhatsappWhiskeySocketsService implements OnModuleDestroy, WhatsappM
     }
 
     await this.socket.sendMessage(destinationJid, { text });
+  }
+
+  async fetchProfileImage(phoneNumberWithCountryCode: string): Promise<BinaryImage | null> {
+    const jid = this.toUserJid(phoneNumberWithCountryCode);
+    if (!jid) {
+      return null;
+    }
+
+    try {
+      await this.initialize();
+      if (!this.socket || !this.isConnected) {
+        return null;
+      }
+
+      const profileUrl = await this.socket.profilePictureUrl(jid, 'image');
+      if (!profileUrl) {
+        return null;
+      }
+
+      const response = await fetch(profileUrl);
+      if (!response.ok) {
+        return null;
+      }
+
+      const bytes = Buffer.from(await response.arrayBuffer());
+      if (bytes.length === 0) {
+        return null;
+      }
+
+      const contentTypeHeader = response.headers.get('content-type');
+      const mimeType = this.normalizeMimeType(contentTypeHeader, profileUrl);
+
+      return { bytes, mimeType };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Unable to fetch profile image for ${jid}: ${message}`);
+      return null;
+    }
   }
 
   async onModuleDestroy(): Promise<void> {
@@ -256,5 +298,34 @@ export class WhatsappWhiskeySocketsService implements OnModuleDestroy, WhatsappM
 
   private async sleep(ms: number): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private toUserJid(phoneNumberWithCountryCode: string): string | null {
+    const digits = phoneNumberWithCountryCode.replace(/\D+/g, '');
+    if (!digits) {
+      return null;
+    }
+
+    return `${digits}@s.whatsapp.net`;
+  }
+
+  private normalizeMimeType(contentTypeHeader: string | null, url: string): string {
+    const normalizedHeader = contentTypeHeader?.split(';')[0]?.trim().toLowerCase();
+    if (normalizedHeader?.startsWith('image/')) {
+      return normalizedHeader;
+    }
+
+    const lowerUrl = url.toLowerCase();
+    if (lowerUrl.includes('.png')) {
+      return 'image/png';
+    }
+    if (lowerUrl.includes('.gif')) {
+      return 'image/gif';
+    }
+    if (lowerUrl.includes('.webp')) {
+      return 'image/webp';
+    }
+
+    return 'image/jpeg';
   }
 }
