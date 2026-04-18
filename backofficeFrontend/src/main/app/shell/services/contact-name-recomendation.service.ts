@@ -3,13 +3,15 @@ import { firstValueFrom } from 'rxjs';
 
 import {
   ContactsApiService,
+  type BackendContact,
   type CreateContactResponse,
   type PatchContactResponse
 } from '../../core/api/services/contacts-api.service';
+import { ContactsDirectoryStore } from '../../core/state/contacts-directory.store';
 import {
-  canonicalizePhoneNumber,
-  normalizeConversationSourceId
-} from '../../core/phone/phone-normalization.utils';
+  normalizePhoneForContactCreate
+} from '../../core/phone/contact-create-phone.utils';
+import { normalizeConversationSourceId } from '../../core/phone/phone-normalization.utils';
 import {
   RecommendedNesContactNameService,
   type RecommendedNameConversationInput
@@ -47,6 +49,7 @@ export type BlueActionExecutionResult =
 @Injectable({ providedIn: 'root' })
 export class ContactNameRecomendationService {
   private readonly contactsApiService = inject(ContactsApiService);
+  private readonly contactsDirectoryStore = inject(ContactsDirectoryStore);
   private readonly recommendedNesContactNameService = inject(RecommendedNesContactNameService);
 
   private readonly recommendedNameByContactIdState = signal<Record<string, string>>({});
@@ -99,6 +102,18 @@ export class ContactNameRecomendationService {
     return this.finalizeRecommendedNameForTab(tab, recommendedName);
   }
 
+  public isBlueActionDisabled(tab: ContactsWorkbookTab, contact: BlueActionContactRow): boolean {
+    if (!this.shouldShowBlueActionButton(tab, contact)) {
+      return true;
+    }
+
+    if (!this.shouldShowRecommendedNameButton(tab, contact)) {
+      return false;
+    }
+
+    return this.resolvePhoneForContactCreate(contact) === null;
+  }
+
   public isInFlight(contactId: string): boolean {
     return this.inFlightByContactIdState()[contactId] === true;
   }
@@ -112,7 +127,7 @@ export class ContactNameRecomendationService {
       return;
     }
 
-    await this.ensureRecommendedName(contact, firstMessageDate);
+    await this.ensureRecommendedName(tab, contact, firstMessageDate);
   }
 
   public async execute(
@@ -132,7 +147,7 @@ export class ContactNameRecomendationService {
 
     try {
       if (this.shouldShowRecommendedNameButton(tab, contact)) {
-        await this.ensureRecommendedName(contact, firstMessageDate);
+        await this.ensureRecommendedName(tab, contact, firstMessageDate);
         const recommendedName = this.finalizeRecommendedNameForTab(
           tab,
           this.recommendedNameByContactIdState()[contact.id] ?? ''
@@ -154,7 +169,7 @@ export class ContactNameRecomendationService {
 
       if (this.shouldShowLlamadaRenameButton(tab, contact)) {
         const resourceName = this.normalizeResourceName(contact.resourceName);
-        await this.ensureRecommendedName(contact, firstMessageDate);
+        await this.ensureRecommendedName(tab, contact, firstMessageDate);
         const recommendedName = this.finalizeRecommendedNameForTab(
           tab,
           this.recommendedNameByContactIdState()[contact.id] ?? ''
@@ -180,6 +195,7 @@ export class ContactNameRecomendationService {
   }
 
   private async ensureRecommendedName(
+    tab: ContactsWorkbookTab,
     contact: BlueActionContactRow,
     firstMessageDate: string | null
   ): Promise<void> {
@@ -205,10 +221,13 @@ export class ContactNameRecomendationService {
         firstMessageDate
       };
       const recommendedName = await this.recommendedNesContactNameService.buildRecommendedName(request);
+      const uniqueRecommendedName = this.shouldShowRecommendedNameButton(tab, contact)
+        ? this.ensureUniqueRecommendedName(contact.id, recommendedName)
+        : recommendedName;
       const latestNames = this.recommendedNameByContactIdState();
       this.recommendedNameByContactIdState.set({
         ...latestNames,
-        [contact.id]: recommendedName
+        [contact.id]: uniqueRecommendedName
       });
     } finally {
       const latestLoadingByContactId = this.recommendationLoadingByContactIdState();
@@ -219,19 +238,19 @@ export class ContactNameRecomendationService {
 
   private resolvePhoneForContactCreate(contact: BlueActionContactRow): string | null {
     const firstPhone = contact.phoneNumbers.find((phone) => typeof phone === 'string' && phone.trim().length > 0);
-    if (firstPhone) {
-      return firstPhone.trim();
-    }
+    const sourcePhone = firstPhone?.trim() ?? this.resolveConversationPhone(contact.chatConversationId);
+    const normalized = normalizePhoneForContactCreate(sourcePhone);
 
-    const conversationId = contact.chatConversationId?.trim();
+    return normalized.isValid ? normalized.normalizedPhone : null;
+  }
+
+  private resolveConversationPhone(chatConversationId: string | null): string | null {
+    const conversationId = chatConversationId?.trim();
     if (!conversationId) {
       return null;
     }
 
-    const normalizedConversationId = normalizeConversationSourceId(conversationId);
-    const canonicalConversationPhone = canonicalizePhoneNumber(normalizedConversationId);
-
-    return canonicalConversationPhone?.normalizedValue ?? null;
+    return normalizeConversationSourceId(conversationId);
   }
 
   private normalizeResourceName(resourceName: string | undefined): string | null {
@@ -258,6 +277,144 @@ export class ContactNameRecomendationService {
     }
 
     return `${recommendedName} llamada`;
+  }
+
+  private ensureUniqueRecommendedName(contactId: string, candidateRawName: string): string {
+    const candidateName = candidateRawName.trim();
+    if (!candidateName) {
+      return '';
+    }
+
+    const usedNameKeys = this.collectUsedNameKeys(contactId);
+    const baseNameKey = this.toNameKey(candidateName);
+    if (!baseNameKey) {
+      return '';
+    }
+
+    const maxUsedSuffixIndex = this.findMaxUsedSuffixIndex(baseNameKey, usedNameKeys);
+    const hasUsedSuffixes = maxUsedSuffixIndex !== null;
+    const isBaseNameUsed = usedNameKeys.has(baseNameKey);
+
+    if (!isBaseNameUsed && !hasUsedSuffixes) {
+      return candidateName;
+    }
+
+    let suffixIndex = isBaseNameUsed ? 1 : (maxUsedSuffixIndex as number) + 1;
+    while (suffixIndex < 10_000) {
+      const suffix = this.buildAlphabeticalSuffix(suffixIndex);
+      const nextCandidate = `${candidateName} ${suffix}`;
+      const nextKey = this.toNameKey(nextCandidate);
+      if (nextKey && !usedNameKeys.has(nextKey)) {
+        return nextCandidate;
+      }
+
+      suffixIndex += 1;
+    }
+
+    return candidateName;
+  }
+
+  private collectUsedNameKeys(excludedContactId: string): Set<string> {
+    const usedNameKeys = new Set<string>();
+    const contacts = this.contactsDirectoryStore.contacts();
+
+    for (const contact of contacts) {
+      this.addBackendContactNameKeys(usedNameKeys, contact);
+    }
+
+    const suggestedNames = this.recommendedNameByContactIdState();
+    for (const [contactId, suggestedName] of Object.entries(suggestedNames)) {
+      if (contactId === excludedContactId) {
+        continue;
+      }
+
+      const suggestedNameKey = this.toNameKey(suggestedName);
+      if (!suggestedNameKey) {
+        continue;
+      }
+
+      usedNameKeys.add(suggestedNameKey);
+    }
+
+    return usedNameKeys;
+  }
+
+  private addBackendContactNameKeys(usedNameKeys: Set<string>, contact: BackendContact): void {
+    for (const name of contact.names) {
+      const nameKey = this.toNameKey(name);
+      if (!nameKey) {
+        continue;
+      }
+
+      usedNameKeys.add(nameKey);
+    }
+  }
+
+  private toNameKey(rawName: string | null | undefined): string | null {
+    if (typeof rawName !== 'string') {
+      return null;
+    }
+
+    const normalized = rawName.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+    return normalized.length > 0 ? normalized : null;
+  }
+
+  private buildAlphabeticalSuffix(suffixAttempt: number): string {
+    let value = suffixAttempt + 1;
+    let suffix = '';
+
+    while (value > 0) {
+      value -= 1;
+      suffix = String.fromCharCode(65 + (value % 26)) + suffix;
+      value = Math.floor(value / 26);
+    }
+
+    return suffix;
+  }
+
+  private findMaxUsedSuffixIndex(baseNameKey: string, usedNameKeys: Set<string>): number | null {
+    let maxSuffixIndex: number | null = null;
+    const expectedPrefix = `${baseNameKey} `;
+
+    for (const usedNameKey of usedNameKeys) {
+      if (!usedNameKey.startsWith(expectedPrefix)) {
+        continue;
+      }
+
+      const suffixRaw = usedNameKey.slice(expectedPrefix.length).trim();
+      if (!/^[a-z]+$/.test(suffixRaw)) {
+        continue;
+      }
+
+      const suffixIndex = this.parseAlphabeticalSuffixIndex(suffixRaw);
+      if (suffixIndex === null) {
+        continue;
+      }
+
+      if (maxSuffixIndex === null || suffixIndex > maxSuffixIndex) {
+        maxSuffixIndex = suffixIndex;
+      }
+    }
+
+    return maxSuffixIndex;
+  }
+
+  private parseAlphabeticalSuffixIndex(suffixRaw: string): number | null {
+    if (!suffixRaw) {
+      return null;
+    }
+
+    let numericValue = 0;
+    for (const character of suffixRaw.toUpperCase()) {
+      const code = character.charCodeAt(0);
+      if (code < 65 || code > 90) {
+        return null;
+      }
+
+      numericValue = numericValue * 26 + (code - 64);
+    }
+
+    return numericValue - 1;
   }
 }
 

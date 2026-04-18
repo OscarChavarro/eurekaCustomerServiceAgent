@@ -117,6 +117,10 @@ export const SHELL_TRANSLATIONS = {
     en: 'Warning: repeated!',
     es: 'Advertencia: repetido!'
   },
+  CONTACTS_BLUE_ACTION_INVALID_PHONE_FORMAT: {
+    en: 'Can not add, check phone number format',
+    es: 'No se puede agregar, revisa el formato del telefono'
+  },
   CONTACTS_SORT_ASC: {
     en: 'Sort ascending',
     es: 'Orden ascendente'

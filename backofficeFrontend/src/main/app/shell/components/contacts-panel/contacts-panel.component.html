@@ -110,7 +110,7 @@
                             type="button"
                             class="recommended-name-button"
                             aria-label="Mostrar nombre recomendado"
-                            [disabled]="isCreateRecommendedInFlight(contact)"
+                            [disabled]="isCreateRecommendedInFlight(contact) || isBlueActionDisabled(contact)"
                             (click)="onRecommendedNameButtonClick($event, contact)"
                           >
                             <span class="material-symbols-outlined">lightbulb</span>

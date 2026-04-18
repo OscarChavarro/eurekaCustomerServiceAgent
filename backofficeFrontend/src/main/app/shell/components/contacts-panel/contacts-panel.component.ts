@@ -42,6 +42,7 @@ import {
   normalizeConversationSourceId,
   phonesMatchDigits
 } from '../../../core/phone/phone-normalization.utils';
+import { normalizePhoneForContactCreate } from '../../../core/phone/contact-create-phone.utils';
 
 @Component({
   selector: 'app-contacts-panel',
@@ -307,7 +308,18 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
   }
 
   protected recommendedNameTooltipValue(contact: ContactRow): string | null {
+    if (this.isBlueActionDisabled(contact)) {
+      return this.t(I18N_KEYS.shell.CONTACTS_BLUE_ACTION_INVALID_PHONE_FORMAT);
+    }
+
     return this.contactNameRecomendationService.tooltipValue(
+      this.activeWorkbookTabState(),
+      this.toBlueActionContactRow(contact)
+    );
+  }
+
+  protected isBlueActionDisabled(contact: ContactRow): boolean {
+    return this.contactNameRecomendationService.isBlueActionDisabled(
       this.activeWorkbookTabState(),
       this.toBlueActionContactRow(contact)
     );
@@ -977,19 +989,19 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
     const firstPhone = contact.phoneNumbers.find(
       (phone) => typeof phone === 'string' && phone.trim().length > 0
     );
-    if (firstPhone) {
-      return firstPhone.trim();
-    }
+    const sourcePhone = firstPhone?.trim() ?? this.resolveConversationPhoneForContactCreate(contact);
+    const normalized = normalizePhoneForContactCreate(sourcePhone);
 
+    return normalized.isValid ? normalized.normalizedPhone : null;
+  }
+
+  private resolveConversationPhoneForContactCreate(contact: ContactRow): string | null {
     const conversationId = contact.chatConversationId?.trim();
     if (!conversationId) {
       return null;
     }
 
-    const normalizedConversationId = normalizeConversationSourceId(conversationId);
-    const canonicalConversationPhone = canonicalizePhoneNumber(normalizedConversationId);
-
-    return canonicalConversationPhone?.normalizedValue ?? null;
+    return normalizeConversationSourceId(conversationId);
   }
 
   private normalizeResourceName(resourceName: string | undefined): string | null {
