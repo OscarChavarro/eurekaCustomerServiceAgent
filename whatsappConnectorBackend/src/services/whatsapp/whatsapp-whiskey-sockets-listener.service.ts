@@ -42,7 +42,7 @@ export class WhatsappWhiskeySocketsListenerService implements OnModuleInit {
     await this.contactsBackend.assertHealth();
     this.contacts = await this.contactsBackend.listContacts();
     this.logger.log(
-      `contactsBackend connectivity confirmed. Loaded ${this.contacts.length} contacts before WhatsApp startup.`
+      `contactsBackend connectivity confirmed. Loaded ${this.contacts.length} contacts.`
     );
 
     await this.whatsappWhiskeySocketsService.initialize();

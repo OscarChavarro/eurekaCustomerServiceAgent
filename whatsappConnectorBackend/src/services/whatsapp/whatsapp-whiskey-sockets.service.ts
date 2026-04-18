@@ -181,7 +181,16 @@ export class WhatsappWhiskeySocketsService
     socket.ev.on('messages.upsert', (payload) => {
       for (const listener of this.incomingMessageListeners) {
         void Promise.resolve(listener(payload)).catch((error) => {
-          const message = error instanceof Error ? error.message : String(error);
+          if (this.isBadMacError(error)) {
+            this.logger.warn('Skipped a message due to bad mac');
+            return;
+          }
+          if (this.isKeyUsedOrNotFilledError(error)) {
+            this.logger.warn('Skipped message due to key used or not filled');
+            return;
+          }
+
+          const message = this.errorToMessage(error);
           this.logger.error(`Error handling incoming WhatsApp message: ${message}`);
         });
       }
@@ -332,5 +341,22 @@ export class WhatsappWhiskeySocketsService
     }
 
     return 'image/jpeg';
+  }
+
+  private isBadMacError(error: unknown): boolean {
+    const message = this.errorToMessage(error).toLowerCase();
+    return message.includes('bad mac');
+  }
+
+  private isKeyUsedOrNotFilledError(error: unknown): boolean {
+    const message = this.errorToMessage(error).toLowerCase();
+    return (
+      message.includes('messagecountererror') ||
+      message.includes('key used already or never filled')
+    );
+  }
+
+  private errorToMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
   }
 }
