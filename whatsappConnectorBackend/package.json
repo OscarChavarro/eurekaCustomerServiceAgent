@@ -1,0 +1,36 @@
+{
+  "name": "whatsapp-connector-backend",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && tsc-alias -p tsconfig.build.json",
+    "start": "node dist/main.js",
+    "start:dev": "ts-node --files -r tsconfig-paths/register src/main.ts",
+    "arch:check": "depcruise --config .dependency-cruiser.cjs src --output-type err-long",
+    "arch:graph": "mkdir -p doc/architecture && depcruise --config .dependency-cruiser.cjs src --output-type dot | dot -T svg > doc/architecture/dependency-graph.svg"
+  },
+  "dependencies": {
+    "@nestjs/common": "11.1.14",
+    "@nestjs/config": "4.0.3",
+    "@nestjs/core": "11.1.14",
+    "@nestjs/platform-express": "11.1.14",
+    "@whiskeysockets/baileys": "6.7.21",
+    "pino": "9.14.0",
+    "qrcode-terminal": "^0.12.0",
+    "reflect-metadata": "^0.2.2"
+  },
+  "overrides": {
+    "libsignal": {
+      "protobufjs": "6.11.4"
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/qrcode-terminal": "^0.12.2",
+    "dependency-cruiser": "^16.10.4",
+    "ts-node": "^10.9.2",
+    "tsc-alias": "^1.8.16",
+    "tsconfig-paths": "^4.2.0",
+    "typescript": "^5.7.2"
+  }
+}

@@ -1,0 +1,245 @@
+import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
+import * as qrcodeTerminal from 'qrcode-terminal';
+import pino from 'pino';
+import { mkdir } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { Configuration } from 'src/config/configuration';
+
+type ConnectionUpdate = {
+  connection?: string;
+  qr?: string;
+  lastDisconnect?: {
+    error?: unknown;
+  };
+};
+
+type IncomingMessageListener = (payload: unknown) => void | Promise<void>;
+
+type BaileysSocket = {
+  end(code?: unknown): void;
+  ev: {
+    on(event: 'creds.update', listener: (...args: unknown[]) => void): void;
+    on(event: 'connection.update', listener: (update: ConnectionUpdate) => void): void;
+    on(event: 'messages.upsert', listener: (payload: unknown) => void): void;
+  };
+};
+
+type BaileysModule = {
+  default: (params: Record<string, unknown>) => BaileysSocket;
+  useMultiFileAuthState(folderPath: string): Promise<{
+    state: unknown;
+    saveCreds: (...args: unknown[]) => Promise<void> | void;
+  }>;
+  fetchLatestBaileysVersion(): Promise<{ version: number[] }>;
+  DisconnectReason?: {
+    loggedOut?: number;
+  };
+};
+
+class WhatsappConnectionClosedError extends Error {
+  constructor(
+    message: string,
+    readonly statusCode?: number
+  ) {
+    super(message);
+  }
+}
+
+@Injectable()
+export class WhatsappWhiskeySocketsService implements OnModuleDestroy {
+  private readonly logger = new Logger(WhatsappWhiskeySocketsService.name);
+  private socket: BaileysSocket | null = null;
+  private isConnected = false;
+  private initializationPromise: Promise<void> | null = null;
+  private reconnectTimer: NodeJS.Timeout | null = null;
+  private shuttingDown = false;
+  private readonly incomingMessageListeners = new Set<IncomingMessageListener>();
+
+  constructor(private readonly configuration: Configuration) {}
+
+  async initialize(): Promise<void> {
+    if (this.shuttingDown) {
+      return;
+    }
+
+    if (this.socket && this.isConnected) {
+      return;
+    }
+
+    if (this.initializationPromise) {
+      return this.initializationPromise;
+    }
+
+    this.initializationPromise = this.initializeSocketWithRetry().finally(() => {
+      this.initializationPromise = null;
+    });
+    return this.initializationPromise;
+  }
+
+  onIncomingMessage(listener: IncomingMessageListener): void {
+    this.incomingMessageListeners.add(listener);
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    this.shuttingDown = true;
+
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+
+    if (this.socket) {
+      this.socket.end(undefined);
+      this.socket = null;
+    }
+
+    this.isConnected = false;
+  }
+
+  private async initializeSocket(): Promise<void> {
+    const baileys = await this.loadBaileysModule();
+    const authFolderPath = resolve(process.cwd(), this.configuration.whiskeySocketsWhatsappAuthFolderPath);
+    await mkdir(authFolderPath, { recursive: true });
+
+    const { state, saveCreds } = await baileys.useMultiFileAuthState(authFolderPath);
+    const { version } = await baileys.fetchLatestBaileysVersion();
+
+    const socket = baileys.default({
+      auth: state,
+      version,
+      printQRInTerminal: false,
+      markOnlineOnConnect: this.configuration.whiskeySocketsWhatsappMarkOnlineOnConnect,
+      connectTimeoutMs: this.configuration.whiskeySocketsWhatsappConnectTimeoutMs,
+      logger: pino({ level: 'silent' })
+    });
+
+    this.socket = socket;
+    this.isConnected = false;
+    socket.ev.on('creds.update', saveCreds);
+    socket.ev.on('messages.upsert', (payload) => {
+      for (const listener of this.incomingMessageListeners) {
+        void Promise.resolve(listener(payload)).catch((error) => {
+          const message = error instanceof Error ? error.message : String(error);
+          this.logger.error(`Error handling incoming WhatsApp message: ${message}`);
+        });
+      }
+    });
+
+    await new Promise<void>((resolvePromise, rejectPromise) => {
+      let wasOpened = false;
+      socket.ev.on('connection.update', (update) => {
+        const { connection, qr, lastDisconnect } = update;
+
+        if (qr && this.configuration.whiskeySocketsWhatsappPrintQrInTerminal) {
+          this.logger.warn('Scan this QR with WhatsApp to link the device.');
+          qrcodeTerminal.generate(qr, { small: true });
+        }
+
+        if (connection === 'open') {
+          if (this.socket !== socket) {
+            return;
+          }
+
+          this.isConnected = true;
+          wasOpened = true;
+          this.logger.log('WhatsApp is connected and ready.');
+          if (this.configuration.whiskeySocketsWhatsappAccountLabel) {
+            this.logger.log(
+              `Connected account label: ${this.configuration.whiskeySocketsWhatsappAccountLabel}.`
+            );
+          } else if (this.configuration.whiskeySocketsWhatsappAccountPhoneNumber) {
+            this.logger.log(
+              `Connected account phone (configured): ${this.configuration.whiskeySocketsWhatsappAccountPhoneNumber}.`
+            );
+          }
+          resolvePromise();
+          return;
+        }
+
+        if (connection === 'close') {
+          this.isConnected = false;
+          const statusCode = this.extractStatusCode(lastDisconnect?.error);
+          const message = statusCode
+            ? `WhatsApp connection closed with status code ${statusCode}.`
+            : 'WhatsApp connection closed before becoming ready.';
+
+          if (this.socket === socket) {
+            this.socket = null;
+          }
+
+          if (wasOpened) {
+            this.scheduleReconnect(this.resolveReconnectDelayMs(statusCode));
+            return;
+          }
+
+          this.logger.error(message);
+          rejectPromise(new WhatsappConnectionClosedError(message, statusCode));
+        }
+      });
+    });
+  }
+
+  private scheduleReconnect(delayMs: number): void {
+    if (this.shuttingDown || this.reconnectTimer) {
+      return;
+    }
+
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      if (this.shuttingDown) {
+        return;
+      }
+
+      void this.initialize().catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.error(`Failed to re-open WhatsApp connection: ${message}`);
+      });
+    }, delayMs);
+  }
+
+  private async initializeSocketWithRetry(): Promise<void> {
+    while (true) {
+      try {
+        await this.initializeSocket();
+        return;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        const retryDelayMs = this.resolveReconnectDelayMs(
+          error instanceof WhatsappConnectionClosedError ? error.statusCode : undefined
+        );
+        this.logger.warn(`WhatsApp initialization failed: ${message}. Retrying in ${retryDelayMs}ms.`);
+        await this.sleep(retryDelayMs);
+      }
+    }
+  }
+
+  private async loadBaileysModule(): Promise<BaileysModule> {
+    const dynamicImport = new Function('specifier', 'return import(specifier);') as (
+      specifier: string
+    ) => Promise<unknown>;
+    const module = await dynamicImport('@whiskeysockets/baileys');
+    return module as BaileysModule;
+  }
+
+  private extractStatusCode(error: unknown): number | undefined {
+    if (!error || typeof error !== 'object') {
+      return undefined;
+    }
+
+    const errorObject = error as { output?: { statusCode?: unknown } };
+    const statusCode = errorObject.output?.statusCode;
+    return typeof statusCode === 'number' ? statusCode : undefined;
+  }
+
+  private resolveReconnectDelayMs(statusCode?: number): number {
+    if (statusCode === 405) {
+      return this.configuration.whiskeySocketsWhatsappReconnectDelayOnStatusCode405Ms;
+    }
+
+    return this.configuration.whiskeySocketsWhatsappReconnectDelayMs;
+  }
+
+  private async sleep(ms: number): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, ms));
+  }
+}

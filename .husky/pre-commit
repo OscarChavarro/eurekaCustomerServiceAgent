@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-for backend in ingestionBackend backofficeBackend retrievalBackend contactsBackend preprocessorForIMazing; do
+for backend in ingestionBackend backofficeBackend retrievalBackend contactsBackend preprocessorForIMazing whatsappConnectorBackend; do
   echo "Running arch:check in ${backend}"
   (cd "$backend" && npm run arch:check)
 done
