@@ -42,6 +42,7 @@ export interface ChatConversation {
   contactAvatar: string;
   containsAudio: boolean;
   containsPhoto: boolean;
+  containsProfileImage: boolean;
   lastMessagePreview: string;
   lastMessageAt: string;
   unreadCount: number;
@@ -107,6 +108,7 @@ export class ChatConversationService {
       contactAvatar: 'AR',
       containsAudio: false,
       containsPhoto: false,
+      containsProfileImage: false,
       lastMessagePreview: 'Perfecto, hoy a las 17:00 te envio los documentos.',
       lastMessageAt: formatSentAt('2026-04-05T17:02:00', this.i18nStateService.selectedLanguage()),
       unreadCount: 2,
@@ -386,7 +388,8 @@ export class ChatConversationService {
           originalPhoneNumber: ChatConversationService.SIMULATION_CONVERSATION_ID,
           phoneNumber: ChatConversationService.SIMULATION_CONVERSATION_ID,
           containsAudio: false,
-          containsPhoto: false
+          containsPhoto: false,
+          containsProfileImage: false
         };
 
         return [
@@ -405,6 +408,7 @@ export class ChatConversationService {
         contactAvatar: 'LL',
         containsAudio: false,
         containsPhoto: false,
+        containsProfileImage: false,
         lastMessagePreview: '',
         lastMessageAt: formatSentAt(new Date().toISOString(), language),
         unreadCount: 0,
@@ -435,6 +439,20 @@ export class ChatConversationService {
     );
 
     return this.resolveConversationDisplayName(linkedContactName, phoneNumber);
+  }
+
+  markConversationContainsProfileImage(conversationId: string): void {
+    if (this.isSimulationConversationId(conversationId)) {
+      return;
+    }
+
+    this.conversationState.update((conversations) =>
+      conversations.map((conversation) =>
+        conversation.id === conversationId && !conversation.containsProfileImage
+          ? { ...conversation, containsProfileImage: true }
+          : conversation
+      )
+    );
   }
 
   private async loadConversationIds(): Promise<void> {
@@ -513,6 +531,7 @@ export class ChatConversationService {
       contactAvatar: avatar,
       containsAudio: summary.containsAudio === true,
       containsPhoto: false,
+      containsProfileImage: false,
       lastMessagePreview:
         summary.msg ?? this.getConversationSyncedPlaceholder(this.i18nStateService.selectedLanguage()),
       lastMessageAt: formatDateLabel(summary.lastMessageDate, this.i18nStateService.selectedLanguage()),
@@ -653,6 +672,7 @@ export class ChatConversationService {
           contactAvatar: this.buildAvatarFromLabel(displayName),
           containsAudio: summary?.containsAudio === true || conversation.containsAudio,
           containsPhoto,
+          containsProfileImage: conversation.containsProfileImage,
           messages: fallbackMessages,
           lastMessagePreview:
             lastLocalRawMessage?.text ||
@@ -718,6 +738,7 @@ export class ChatConversationService {
           contactAvatar: this.buildAvatarFromLabel(displayName),
           containsAudio: summary?.containsAudio === true || conversation.containsAudio,
           containsPhoto,
+          containsProfileImage: conversation.containsProfileImage,
           messages: mergedMessages.length > 0 ? mergedMessages : this.defaultMockMessages
         };
       }))
@@ -758,6 +779,7 @@ export class ChatConversationService {
           contactAvatar: this.buildAvatarFromLabel(displayName),
           containsAudio: summary.containsAudio === true,
           containsPhoto: conversation.containsPhoto,
+          containsProfileImage: conversation.containsProfileImage,
           lastMessagePreview:
             lastLocalRawMessage?.text || summary.msg || conversation.lastMessagePreview,
           lastMessageAt:
@@ -1103,7 +1125,8 @@ export class ChatConversationService {
           originalPhoneNumber: ChatConversationService.SIMULATION_CONVERSATION_ID,
           phoneNumber: ChatConversationService.SIMULATION_CONVERSATION_ID,
           containsAudio: false,
-          containsPhoto: false
+          containsPhoto: false,
+          containsProfileImage: false
         };
       })
     );

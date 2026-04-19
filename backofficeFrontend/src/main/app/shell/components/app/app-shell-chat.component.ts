@@ -298,7 +298,7 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
         return false;
       }
 
-      if (filters.onlyPhotoMessages && !conversation.containsPhoto) {
+      if (filters.onlyPhotoMessages && !conversation.containsProfileImage) {
         return false;
       }
 
@@ -375,6 +375,7 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
   }
 
   protected onConversationAvatarImageLoad(conversationId: string): void {
+    this.chatConversationService.markConversationContainsProfileImage(conversationId);
     this.avatarLoadErrorConversationIdsState.update((current) => {
       if (!current.has(conversationId)) {
         return current;
