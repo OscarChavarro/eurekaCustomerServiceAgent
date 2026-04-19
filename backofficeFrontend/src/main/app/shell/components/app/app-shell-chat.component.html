@@ -211,16 +211,36 @@
       </button>
     </header>
 
-    <label class="search-box" [attr.aria-label]="searchConversationAriaLabel()">
-      <span aria-hidden="true">&#128269;</span>
-      <input
-        type="text"
-        [placeholder]="searchOrNewChatPlaceholder()"
-        (input)="setSearchTerm($any($event.target).value)"
-      />
-    </label>
+    <div class="search-box-toolbar">
+      <label class="search-box" [attr.aria-label]="searchConversationAriaLabel()">
+        <span aria-hidden="true">&#128269;</span>
+        <input
+          type="text"
+          [placeholder]="searchOrNewChatPlaceholder()"
+          (input)="setSearchTerm($any($event.target).value)"
+        />
+      </label>
+      @if (operationMode() === 'chat') {
+        <button
+          type="button"
+          class="search-filter-button"
+          [attr.aria-label]="openConversationFilterAriaLabel()"
+          (click)="toggleConversationSearchFilter($event)"
+        >
+          <span class="material-symbols-outlined" aria-hidden="true">filter_alt</span>
+        </button>
+      }
+      @if (operationMode() === 'chat' && isConversationSearchFilterOpen()) {
+        <app-conversation-search-filter
+          [filters]="conversationSearchFilters()"
+          [countryOptions]="availableConversationFilterCountries()"
+          (closed)="closeConversationSearchFilter()"
+          (filtersChanged)="onConversationSearchFiltersChanged($event)"
+        ></app-conversation-search-filter>
+      }
+    </div>
 
-    <div class="conversation-items">
+    <div class="conversation-items" #conversationItems>
       @for (
         conversation of filteredConversations();
         track trackByConversation($index, conversation)
@@ -228,6 +248,7 @@
         <button
           class="conversation-item"
           type="button"
+          [attr.data-conversation-id]="conversation.id"
           [class.is-active]="conversation.id === activeConversationId()"
           (mouseenter)="onConversationMouseEnter(conversation.id)"
           (mouseleave)="onConversationMouseLeave(conversation.id)"

@@ -181,9 +181,57 @@ export const SHELL_TRANSLATIONS = {
     en: 'Search conversation',
     es: 'Buscar conversacion'
   },
+  OPEN_CONVERSATION_FILTER_ARIA: {
+    en: 'Open conversation filters',
+    es: 'Abrir filtros de conversaciones'
+  },
   CONVERSATION_MESSAGES_ARIA: {
     en: 'Conversation messages',
     es: 'Mensajes de la conversacion'
+  },
+  CONVERSATION_FILTER_DIALOG_ARIA: {
+    en: 'Conversation search filters',
+    es: 'Filtros de busqueda de conversaciones'
+  },
+  CONVERSATION_FILTER_TITLE: {
+    en: 'Filters',
+    es: 'Filtros'
+  },
+  CONVERSATION_FILTER_CLOSE_ARIA: {
+    en: 'Close filters',
+    es: 'Cerrar filtros'
+  },
+  CONVERSATION_FILTER_CONTACT_GROUP: {
+    en: 'Filter by contact name',
+    es: 'Filtro por nombre contacto'
+  },
+  CONVERSATION_FILTER_SHOW_PROSPECT: {
+    en: 'Show prospect',
+    es: 'Mostrar prospecto'
+  },
+  CONVERSATION_FILTER_SHOW_CLIENT: {
+    en: 'Show client',
+    es: 'Mostrar cliente'
+  },
+  CONVERSATION_FILTER_COUNTRY_GROUP: {
+    en: 'Filter by countries',
+    es: 'Filtro por paises'
+  },
+  CONVERSATION_FILTER_MEDIA_GROUP: {
+    en: 'Filter by media',
+    es: 'Filtro por media'
+  },
+  CONVERSATION_FILTER_ONLY_AUDIO: {
+    en: 'Show only messages with audio',
+    es: 'Mostrar solo mensajes con audio'
+  },
+  CONVERSATION_FILTER_RESET: {
+    en: 'Reset',
+    es: 'Re-establecer'
+  },
+  CONVERSATION_FILTER_EMPTY_COUNTRIES: {
+    en: 'No countries available',
+    es: 'No hay paises disponibles'
   },
   REACTIONS_ARIA: {
     en: 'Reactions',

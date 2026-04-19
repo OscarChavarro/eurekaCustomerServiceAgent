@@ -48,11 +48,19 @@ import {
 } from '../../services/chat-message-segmentation.service';
 import { ContactsPanelComponent } from '../contacts-panel/contacts-panel.component';
 import {
+  ConversationSearchFilterComponent,
+  type ConversationSearchFilterCountryOption,
+  type ConversationSearchFilterState,
+  defaultConversationSearchFilterState
+} from '../conversation-search-filter/conversation-search-filter.component';
+import {
   canonicalizePhoneNumber,
   normalizeConversationSourceId,
   phonesMatchDigits
 } from '../../../core/phone/phone-normalization.utils';
 import { FrontendSecretsService } from '../../../core/api/services/frontend-secrets.service';
+import { ContactsDirectoryStore } from '../../../core/state/contacts-directory.store';
+import { PhonePrefixCacheService } from '../../../core/api/services/phone-prefix-cache.service';
 
 @Component({
   selector: 'app-shell-chat',
@@ -61,6 +69,7 @@ import { FrontendSecretsService } from '../../../core/api/services/frontend-secr
     TimePanelComponent,
     TimeRangeSelectorComponent,
     ContactsPanelComponent,
+    ConversationSearchFilterComponent,
     AudioComponent,
     ImageComponent
   ],
@@ -72,6 +81,7 @@ import { FrontendSecretsService } from '../../../core/api/services/frontend-secr
   ],
 })
 export class AppShellChatComponent implements OnInit, OnDestroy {
+  private static readonly CONVERSATION_FILTERS_SESSION_STORAGE_KEY = 'app-shell-chat.conversation-search-filters';
   private readonly chatConversationService = inject(ChatConversationService);
   private readonly conversationsApiService = inject(ConversationsApiService);
   private readonly i18nService = inject(I18nService);
@@ -80,11 +90,17 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
   private readonly chatConversationCyclerService = inject(ChatConversationCyclerService);
   private readonly chatMessageSegmentationService = inject(ChatMessageSegmentationService);
   private readonly frontendSecretsService = inject(FrontendSecretsService);
+  private readonly contactsDirectoryStore = inject(ContactsDirectoryStore);
+  private readonly phonePrefixCacheService = inject(PhonePrefixCacheService);
   private readonly router = inject(Router);
   private readonly activatedRoute = inject(ActivatedRoute);
   private readonly searchTermState = signal<string>('');
   private readonly composerMessageState = signal<string>('');
   private readonly languageDropdownOpenState = signal<boolean>(false);
+  private readonly conversationSearchFilterOpenState = signal<boolean>(false);
+  private readonly conversationSearchFilterState = signal<ConversationSearchFilterState>(
+    defaultConversationSearchFilterState()
+  );
   private readonly phoneLookupCache = new Map<string, PhonePrefixLookupResponse | null>();
   private readonly avatarLoadErrorConversationIdsState = signal<Set<string>>(new Set());
   private readonly avatarLoadedConversationIdsState = signal<Set<string>>(new Set());
@@ -111,6 +127,7 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
   private readonly selectedContactPhoneSlugState = signal<string | null>(null);
   private readonly selectedContactsPageSlugState = signal<ContactsPageSlug>(DEFAULT_CONTACTS_PAGE_SLUG);
   private readonly pendingChatPhoneNumberFromRouteState = signal<string | null>(null);
+  private readonly pendingConversationListScrollIdState = signal<string | null>(null);
   private readonly chatHiddenInTimeModeState = signal<boolean>(false);
   private readonly timeRangeSelectorOpenState = signal<boolean>(false);
   private readonly selectedTimeRangeState = signal<TimeRangeSelection | null>(null);
@@ -119,6 +136,7 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
   private isDraggingTimeSplit = false;
   private routeSyncSubscription: Subscription | null = null;
   @ViewChild('messagesArea') private messagesAreaRef?: ElementRef<HTMLDivElement>;
+  @ViewChild('conversationItems') private conversationItemsRef?: ElementRef<HTMLDivElement>;
   @ViewChild('composerInput') private composerInputRef?: ElementRef<HTMLInputElement>;
   @ViewChild('timeModeLayout') private timeModeLayoutRef?: ElementRef<HTMLDivElement>;
   @ViewChildren(AudioComponent) private audioComponents?: QueryList<AudioComponent>;
@@ -145,6 +163,8 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
   protected readonly hoveredConversationId = this.hoveredConversationIdState.asReadonly();
   protected readonly openConversationDeleteMenuId = this.openConversationDeleteMenuIdState.asReadonly();
   protected readonly languageDropdownOpen = this.languageDropdownOpenState.asReadonly();
+  protected readonly isConversationSearchFilterOpen = this.conversationSearchFilterOpenState.asReadonly();
+  protected readonly conversationSearchFilters = this.conversationSearchFilterState.asReadonly();
   protected readonly operationMode = this.operationModeState.asReadonly();
   protected readonly selectedContactPhoneSlug = this.selectedContactPhoneSlugState.asReadonly();
   protected readonly selectedContactsPageSlug = this.selectedContactsPageSlugState.asReadonly();
@@ -184,12 +204,82 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
     'chunk',
     'embed',
   ];
+  protected readonly availableConversationFilterCountries = computed<ConversationSearchFilterCountryOption[]>(() => {
+    const contacts = this.contactsDirectoryStore.contacts();
+    const optionsByCountryCode = new Map<string, ConversationSearchFilterCountryOption>();
+
+    for (const contact of contacts) {
+      for (const phone of contact.phoneNumbers) {
+        const countryCode = this.phonePrefixCacheService.resolveCountryCodeFromCache(phone);
+        if (!countryCode || optionsByCountryCode.has(countryCode)) {
+          continue;
+        }
+
+        const countryName = this.phoneCountryI18nService.getCountryName(countryCode, this.selectedLanguage());
+        optionsByCountryCode.set(countryCode, {
+          countryCode,
+          label: countryName ?? countryCode
+        });
+      }
+    }
+
+    return Array.from(optionsByCountryCode.values()).sort((left, right) => left.label.localeCompare(right.label));
+  });
+  private readonly contactFilterMetadataLookup = computed(() => {
+    const contacts = this.contactsDirectoryStore.contacts();
+    const metadataByDigits = new Map<string, ConversationFilterContactMetadata>();
+
+    for (const contact of contacts) {
+      const contactName = this.normalizeContactName(contact);
+      const isProspect = this.isProspectContactName(contactName);
+      const isClient = !isProspect;
+      const countryCodes = Array.from(
+        new Set(
+          contact.phoneNumbers
+            .map((phone) => this.phonePrefixCacheService.resolveCountryCodeFromCache(phone))
+            .filter((countryCode): countryCode is string => typeof countryCode === 'string' && countryCode.length > 0)
+        )
+      ).sort((left, right) => left.localeCompare(right));
+
+      for (const phoneNumber of contact.phoneNumbers) {
+        const phoneDigits = this.toPhoneDigits(phoneNumber);
+        if (!phoneDigits) {
+          continue;
+        }
+
+        const current = metadataByDigits.get(phoneDigits);
+        if (!current) {
+          metadataByDigits.set(phoneDigits, {
+            phoneDigits,
+            isProspect,
+            isClient,
+            countryCodes
+          });
+          continue;
+        }
+
+        metadataByDigits.set(phoneDigits, {
+          phoneDigits,
+          isProspect: current.isProspect || isProspect,
+          isClient: current.isClient || isClient,
+          countryCodes: Array.from(new Set([...current.countryCodes, ...countryCodes])).sort((left, right) =>
+            left.localeCompare(right)
+          )
+        });
+      }
+    }
+
+    return {
+      byDigits: metadataByDigits,
+      entries: Array.from(metadataByDigits.values())
+    };
+  });
   protected readonly filteredConversations = computed(() => {
     const normalizedSearchTerm = this.searchTermState().trim().toLowerCase();
-
-    if (!normalizedSearchTerm) {
-      return this.conversations();
-    }
+    const filters = this.conversationSearchFilterState();
+    const selectedCountryCodes = new Set(filters.selectedCountryCodes);
+    const isContactTypeFilterActive = !filters.showProspects || !filters.showClients;
+    const isCountryFilterActive = selectedCountryCodes.size > 0;
 
     return this.conversations().filter((conversation) => {
       const searchableText = [
@@ -200,7 +290,42 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
         .join(' ')
         .toLowerCase();
 
-      return searchableText.includes(normalizedSearchTerm);
+      if (normalizedSearchTerm && !searchableText.includes(normalizedSearchTerm)) {
+        return false;
+      }
+
+      if (filters.onlyAudioMessages && !conversation.containsAudio) {
+        return false;
+      }
+
+      if (!isContactTypeFilterActive && !isCountryFilterActive) {
+        return true;
+      }
+
+      const contactMetadata = this.resolveConversationFilterContactMetadata(conversation);
+      if (!contactMetadata) {
+        return false;
+      }
+
+      if (isContactTypeFilterActive) {
+        const matchesContactType =
+          (filters.showProspects && contactMetadata.isProspect) ||
+          (filters.showClients && contactMetadata.isClient);
+        if (!matchesContactType) {
+          return false;
+        }
+      }
+
+      if (isCountryFilterActive) {
+        const matchesCountry = contactMetadata.countryCodes.some((countryCode) =>
+          selectedCountryCodes.has(countryCode)
+        );
+        if (!matchesCountry) {
+          return false;
+        }
+      }
+
+      return true;
     });
   });
   protected readonly whatsappConnectorBackendBaseUrl = computed(
@@ -443,12 +568,52 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
         this.chatConversationService.setActiveConversation(targetConversationId);
       }
 
+      this.pendingConversationListScrollIdState.set(targetConversationId);
       this.chatConversationService.setViewMode('raw');
       this.pendingChatPhoneNumberFromRouteState.set(null);
     }
   );
 
+  private readonly keepPendingConversationListScrollVisibleEffectRef = effect(
+    () => {
+      if (this.operationModeState() === 'contacts') {
+        return;
+      }
+
+      const pendingConversationId = this.pendingConversationListScrollIdState();
+      if (!pendingConversationId) {
+        return;
+      }
+
+      const conversations = this.filteredConversations();
+      const targetConversationExists = conversations.some(
+        (conversation) => conversation.id === pendingConversationId
+      );
+      if (!targetConversationExists) {
+        return;
+      }
+
+      this.scheduleConversationListScroll(pendingConversationId);
+    }
+  );
+  private readonly persistConversationSearchFiltersEffectRef = effect(() => {
+    const storage = this.getSessionStorage();
+    if (!storage) {
+      return;
+    }
+
+    storage.setItem(
+      AppShellChatComponent.CONVERSATION_FILTERS_SESSION_STORAGE_KEY,
+      JSON.stringify(this.conversationSearchFilterState())
+    );
+  });
+
   ngOnInit(): void {
+    const persistedConversationFilters = this.readPersistedConversationSearchFilters();
+    if (persistedConversationFilters) {
+      this.conversationSearchFilterState.set(persistedConversationFilters);
+    }
+
     this.routeSyncSubscription = this.router.events
       .pipe(
         filter((event): event is NavigationEnd => event instanceof NavigationEnd),
@@ -606,6 +771,10 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
 
   protected searchOrNewChatPlaceholder(): string {
     return this.t(I18N_KEYS.shell.SEARCH_OR_NEW_CHAT_PLACEHOLDER);
+  }
+
+  protected openConversationFilterAriaLabel(): string {
+    return this.t(I18N_KEYS.shell.OPEN_CONVERSATION_FILTER_ARIA);
   }
 
   protected writeMessagePlaceholder(): string {
@@ -772,6 +941,25 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
     void this.router.navigate([`/${mode}`]);
   }
 
+  protected toggleConversationSearchFilter(event: MouseEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.conversationSearchFilterOpenState.update((isOpen) => !isOpen);
+  }
+
+  protected closeConversationSearchFilter(): void {
+    this.conversationSearchFilterOpenState.set(false);
+  }
+
+  protected onConversationSearchFiltersChanged(filters: ConversationSearchFilterState): void {
+    this.conversationSearchFilterState.set({
+      showProspects: filters.showProspects,
+      showClients: filters.showClients,
+      selectedCountryCodes: [...filters.selectedCountryCodes],
+      onlyAudioMessages: filters.onlyAudioMessages
+    });
+  }
+
   protected onTimeSplitDragStart(event: MouseEvent): void {
     event.preventDefault();
     this.isDraggingTimeSplit = true;
@@ -850,6 +1038,12 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
       return;
     }
 
+    if (event.key === 'Escape' && this.conversationSearchFilterOpenState()) {
+      event.preventDefault();
+      this.closeConversationSearchFilter();
+      return;
+    }
+
     if (event.key === 'Escape') {
       this.openUsedContextMessageKeyState.set(null);
       this.usedContextPopupState.set(null);
@@ -862,6 +1056,24 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
     }
 
     if (this.hasEditableKeyboardFocus()) {
+      return;
+    }
+
+    if (event.key === '1') {
+      event.preventDefault();
+      void this.router.navigate(['/chat']);
+      return;
+    }
+
+    if (event.key === '2') {
+      event.preventDefault();
+      void this.router.navigate(['/time']);
+      return;
+    }
+
+    if (event.key === '3') {
+      event.preventDefault();
+      void this.router.navigate(['/contacts']);
       return;
     }
 
@@ -1347,6 +1559,59 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
     return normalizedRouteValue.startsWith('+') ? normalizedRouteValue : `+${normalizedRouteValue}`;
   }
 
+  private readPersistedConversationSearchFilters(): ConversationSearchFilterState | null {
+    const storage = this.getSessionStorage();
+    if (!storage) {
+      return null;
+    }
+
+    const rawValue = storage.getItem(AppShellChatComponent.CONVERSATION_FILTERS_SESSION_STORAGE_KEY);
+    if (!rawValue) {
+      return null;
+    }
+
+    try {
+      const parsed = JSON.parse(rawValue) as unknown;
+      if (!parsed || typeof parsed !== 'object') {
+        return null;
+      }
+
+      const payload = parsed as Partial<ConversationSearchFilterState>;
+      if (
+        typeof payload.showProspects !== 'boolean' ||
+        typeof payload.showClients !== 'boolean' ||
+        typeof payload.onlyAudioMessages !== 'boolean' ||
+        !Array.isArray(payload.selectedCountryCodes)
+      ) {
+        return null;
+      }
+
+      const selectedCountryCodes = payload.selectedCountryCodes
+        .filter((countryCode): countryCode is string => typeof countryCode === 'string' && countryCode.length > 0)
+        .map((countryCode) => countryCode.trim().toUpperCase())
+        .filter((countryCode) => countryCode.length > 0);
+
+      return {
+        showProspects: payload.showProspects,
+        showClients: payload.showClients,
+        selectedCountryCodes: Array.from(new Set(selectedCountryCodes)).sort((left, right) =>
+          left.localeCompare(right)
+        ),
+        onlyAudioMessages: payload.onlyAudioMessages
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  private getSessionStorage(): Storage | null {
+    if (typeof window === 'undefined' || typeof window.sessionStorage === 'undefined') {
+      return null;
+    }
+
+    return window.sessionStorage;
+  }
+
   private resolveConversationIdFromRoutePhoneNumber(phoneNumber: string): string | null {
     const normalizedRouteValue = normalizeConversationSourceId(phoneNumber);
     const canonicalRoutePhone = canonicalizePhoneNumber(normalizedRouteValue);
@@ -1740,6 +2005,52 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
     container.scrollTop = container.scrollHeight;
   }
 
+  private scheduleConversationListScroll(conversationId: string, attemptsLeft = 4): void {
+    queueMicrotask(() => {
+      requestAnimationFrame(() => {
+        const didScroll = this.scrollConversationIntoView(conversationId);
+        if (didScroll) {
+          if (this.pendingConversationListScrollIdState() === conversationId) {
+            this.pendingConversationListScrollIdState.set(null);
+          }
+
+          return;
+        }
+
+        if (attemptsLeft <= 1) {
+          return;
+        }
+
+        this.scheduleConversationListScroll(conversationId, attemptsLeft - 1);
+      });
+    });
+  }
+
+  private scrollConversationIntoView(conversationId: string): boolean {
+    const container = this.conversationItemsRef?.nativeElement;
+    if (!container) {
+      return false;
+    }
+
+    const item = Array.from(container.querySelectorAll<HTMLElement>('[data-conversation-id]')).find(
+      (element) => element.dataset['conversationId'] === conversationId
+    );
+    if (!item) {
+      return false;
+    }
+
+    const containerRect = container.getBoundingClientRect();
+    const itemRect = item.getBoundingClientRect();
+    const nextScrollTop = Math.max(0, container.scrollTop + itemRect.top - containerRect.top);
+
+    container.scrollTo({
+      top: nextScrollTop,
+      behavior: 'auto'
+    });
+
+    return true;
+  }
+
   private scheduleFocusComposerInput(): void {
     queueMicrotask(() => {
       requestAnimationFrame(() => {
@@ -1836,6 +2147,67 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
 
     return phoneNumber.replace(/\D+/g, '');
   }
+
+  private normalizeContactName(contact: { names?: string[] }): string | null {
+    const firstName = Array.isArray(contact.names) ? contact.names[0] : null;
+    if (typeof firstName !== 'string') {
+      return null;
+    }
+
+    const normalized = firstName.trim();
+    return normalized.length > 0 ? normalized : null;
+  }
+
+  private isProspectContactName(contactName: string | null): boolean {
+    if (!contactName) {
+      return false;
+    }
+
+    return contactName.trim().startsWith('Prospecto');
+  }
+
+  private resolveConversationFilterContactMetadata(
+    conversation: ChatConversation
+  ): ConversationFilterContactMetadata | null {
+    const conversationDigits = this.toPhoneDigits(conversation.phoneNumber || conversation.id);
+    if (!conversationDigits) {
+      return null;
+    }
+
+    const metadataLookup = this.contactFilterMetadataLookup();
+    const exactMatch = metadataLookup.byDigits.get(conversationDigits);
+    if (exactMatch) {
+      return exactMatch;
+    }
+
+    let mergedMatch: ConversationFilterContactMetadata | null = null;
+    for (const candidate of metadataLookup.entries) {
+      if (!phonesMatchDigits(candidate.phoneDigits, conversationDigits)) {
+        continue;
+      }
+
+      if (!mergedMatch) {
+        mergedMatch = {
+          phoneDigits: candidate.phoneDigits,
+          isProspect: candidate.isProspect,
+          isClient: candidate.isClient,
+          countryCodes: [...candidate.countryCodes]
+        };
+        continue;
+      }
+
+      mergedMatch = {
+        phoneDigits: mergedMatch.phoneDigits,
+        isProspect: mergedMatch.isProspect || candidate.isProspect,
+        isClient: mergedMatch.isClient || candidate.isClient,
+        countryCodes: Array.from(new Set([...mergedMatch.countryCodes, ...candidate.countryCodes])).sort(
+          (left, right) => left.localeCompare(right)
+        )
+      };
+    }
+
+    return mergedMatch;
+  }
 }
 
 type OperationMode = 'chat' | 'time' | 'contacts';
@@ -1879,6 +2251,13 @@ type ProfileImageZoomMetadata = {
   url: string;
   width: number;
   height: number;
+};
+
+type ConversationFilterContactMetadata = {
+  phoneDigits: string;
+  isProspect: boolean;
+  isClient: boolean;
+  countryCodes: string[];
 };
 
 const PROFILE_IMAGE_ZOOM_TRANSITION_MS = 220;

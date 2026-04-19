@@ -1,0 +1,76 @@
+.conversation-search-filter
+  position: absolute
+  top: calc(100% + 0.45rem)
+  right: 0
+  width: min(22rem, calc(100vw - 2rem))
+  max-height: min(32rem, 70vh)
+  overflow: auto
+  border: 1px solid var(--border-color)
+  border-radius: 0.85rem
+  background: #fff
+  box-shadow: 0 14px 38px rgb(0 0 0 / 18%)
+  z-index: 20
+  outline: none
+
+.conversation-search-filter-header,
+.conversation-search-filter-footer
+  display: flex
+  align-items: center
+  justify-content: space-between
+  padding: 0.9rem 1rem
+
+.conversation-search-filter-header
+  position: sticky
+  top: 0
+  background: #fff
+  z-index: 1
+
+.conversation-search-filter-close,
+.conversation-search-filter-reset
+  border: 0
+  border-radius: 0.6rem
+  cursor: pointer
+
+.conversation-search-filter-close
+  width: 2rem
+  height: 2rem
+  display: inline-flex
+  align-items: center
+  justify-content: center
+  background: var(--surface-muted)
+  color: var(--text-secondary)
+
+.conversation-search-filter-section
+  padding: 0.85rem 1rem
+  border-top: 1px solid var(--border-color)
+
+.conversation-search-filter-section-title
+  margin: 0 0 0.7rem
+  font-size: 0.86rem
+  font-weight: 600
+  color: var(--text-secondary)
+
+.conversation-search-filter-option
+  display: flex
+  align-items: center
+  gap: 0.6rem
+  padding: 0.34rem 0
+  font-size: 0.93rem
+  color: var(--text-primary)
+  cursor: pointer
+
+.conversation-search-filter-option input
+  margin: 0
+
+.conversation-search-filter-empty
+  margin: 0
+  font-size: 0.9rem
+  color: var(--text-secondary)
+
+.conversation-search-filter-footer
+  border-top: 1px solid var(--border-color)
+
+.conversation-search-filter-reset
+  padding: 0.55rem 0.85rem
+  background: var(--surface-muted)
+  color: var(--text-primary)

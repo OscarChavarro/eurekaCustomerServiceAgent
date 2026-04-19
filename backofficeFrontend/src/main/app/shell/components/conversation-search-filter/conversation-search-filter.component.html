@@ -1,0 +1,76 @@
+<div
+  #panelRoot
+  class="conversation-search-filter"
+  tabindex="-1"
+  role="dialog"
+  [attr.aria-label]="i18n().ariaLabel"
+  (click)="onPanelClick($event)"
+>
+  <header class="conversation-search-filter-header">
+    <strong>{{ i18n().title }}</strong>
+    <button
+      type="button"
+      class="conversation-search-filter-close"
+      [attr.aria-label]="i18n().closeAriaLabel"
+      (click)="onCloseClick()"
+    >
+      <span class="material-symbols-outlined" aria-hidden="true">close</span>
+    </button>
+  </header>
+
+  <section class="conversation-search-filter-section">
+    <p class="conversation-search-filter-section-title">{{ i18n().contactGroupLabel }}</p>
+    <label class="conversation-search-filter-option">
+      <input
+        type="checkbox"
+        [checked]="filters().showProspects"
+        (change)="onProspectsToggle()"
+      />
+      <span>{{ i18n().showProspectLabel }}</span>
+    </label>
+    <label class="conversation-search-filter-option">
+      <input
+        type="checkbox"
+        [checked]="filters().showClients"
+        (change)="onClientsToggle()"
+      />
+      <span>{{ i18n().showClientLabel }}</span>
+    </label>
+  </section>
+
+  <section class="conversation-search-filter-section">
+    <p class="conversation-search-filter-section-title">{{ i18n().countryGroupLabel }}</p>
+    @if (countryOptions().length === 0) {
+      <p class="conversation-search-filter-empty">{{ i18n().emptyCountriesLabel }}</p>
+    } @else {
+      @for (country of countryOptions(); track country.countryCode) {
+        <label class="conversation-search-filter-option">
+          <input
+            type="checkbox"
+            [checked]="isCountrySelected(country.countryCode)"
+            (change)="onCountryToggle(country.countryCode)"
+          />
+          <span>{{ country.label }}</span>
+        </label>
+      }
+    }
+  </section>
+
+  <section class="conversation-search-filter-section">
+    <p class="conversation-search-filter-section-title">{{ i18n().mediaGroupLabel }}</p>
+    <label class="conversation-search-filter-option">
+      <input
+        type="checkbox"
+        [checked]="filters().onlyAudioMessages"
+        (change)="onOnlyAudioToggle()"
+      />
+      <span>{{ i18n().onlyAudioLabel }}</span>
+    </label>
+  </section>
+
+  <footer class="conversation-search-filter-footer">
+    <button type="button" class="conversation-search-filter-reset" (click)="onResetClick()">
+      {{ i18n().resetLabel }}
+    </button>
+  </footer>
+</div>

@@ -27,6 +27,20 @@ export class PhonePrefixCacheService {
     return areaInfo?.countryCode ?? null;
   }
 
+  public resolveCountryCodeFromCache(phone: string): string | null {
+    const areaInfo = this.resolveAreaInfoFromCache(phone);
+    return areaInfo?.countryCode ?? null;
+  }
+
+  public resolveAreaInfoFromCache(phone: string): PhonePrefixAreaCacheEntry | null {
+    const phoneDigits = this.normalizeDigits(phone);
+    if (!phoneDigits) {
+      return null;
+    }
+
+    return this.findByPhoneDigits(this.readStore(), phoneDigits);
+  }
+
   public async resolveAreaInfo(phone: string): Promise<PhonePrefixAreaCacheEntry | null> {
     const phoneDigits = this.normalizeDigits(phone);
     if (!phoneDigits) {
