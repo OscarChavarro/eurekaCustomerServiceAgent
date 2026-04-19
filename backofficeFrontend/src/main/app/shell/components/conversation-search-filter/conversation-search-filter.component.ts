@@ -20,6 +20,7 @@ export type ConversationSearchFilterState = {
   showClients: boolean;
   selectedCountryCodes: string[];
   onlyAudioMessages: boolean;
+  onlyPhotoMessages: boolean;
 };
 
 export type ConversationSearchFilterCountryOption = {
@@ -57,6 +58,7 @@ export class ConversationSearchFilterComponent implements AfterViewInit {
     countryGroupLabel: this.t(I18N_KEYS.shell.CONVERSATION_FILTER_COUNTRY_GROUP),
     mediaGroupLabel: this.t(I18N_KEYS.shell.CONVERSATION_FILTER_MEDIA_GROUP),
     onlyAudioLabel: this.t(I18N_KEYS.shell.CONVERSATION_FILTER_ONLY_AUDIO),
+    onlyPhotoLabel: this.t(I18N_KEYS.shell.CONVERSATION_FILTER_ONLY_PHOTO),
     resetLabel: this.t(I18N_KEYS.shell.CONVERSATION_FILTER_RESET),
     emptyCountriesLabel: this.t(I18N_KEYS.shell.CONVERSATION_FILTER_EMPTY_COUNTRIES)
   }));
@@ -132,6 +134,13 @@ export class ConversationSearchFilterComponent implements AfterViewInit {
     });
   }
 
+  protected onOnlyPhotoToggle(): void {
+    this.filtersChanged.emit({
+      ...this.filters(),
+      onlyPhotoMessages: !this.filters().onlyPhotoMessages
+    });
+  }
+
   protected onResetClick(): void {
     this.filtersChanged.emit(defaultConversationSearchFilterState());
   }
@@ -150,6 +159,7 @@ export function defaultConversationSearchFilterState(): ConversationSearchFilter
     showProspects: true,
     showClients: true,
     selectedCountryCodes: [],
-    onlyAudioMessages: false
+    onlyAudioMessages: false,
+    onlyPhotoMessages: false
   };
 }

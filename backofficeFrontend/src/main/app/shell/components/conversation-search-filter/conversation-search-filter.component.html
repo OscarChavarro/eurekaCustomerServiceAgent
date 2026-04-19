@@ -66,6 +66,14 @@
       />
       <span>{{ i18n().onlyAudioLabel }}</span>
     </label>
+    <label class="conversation-search-filter-option">
+      <input
+        type="checkbox"
+        [checked]="filters().onlyPhotoMessages"
+        (change)="onOnlyPhotoToggle()"
+      />
+      <span>{{ i18n().onlyPhotoLabel }}</span>
+    </label>
   </section>
 
   <footer class="conversation-search-filter-footer">

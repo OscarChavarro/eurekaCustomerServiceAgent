@@ -298,6 +298,10 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
         return false;
       }
 
+      if (filters.onlyPhotoMessages && !conversation.containsPhoto) {
+        return false;
+      }
+
       if (!isContactTypeFilterActive && !isCountryFilterActive) {
         return true;
       }
@@ -956,7 +960,8 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
       showProspects: filters.showProspects,
       showClients: filters.showClients,
       selectedCountryCodes: [...filters.selectedCountryCodes],
-      onlyAudioMessages: filters.onlyAudioMessages
+      onlyAudioMessages: filters.onlyAudioMessages,
+      onlyPhotoMessages: filters.onlyPhotoMessages
     });
   }
 
@@ -1581,6 +1586,7 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
         typeof payload.showProspects !== 'boolean' ||
         typeof payload.showClients !== 'boolean' ||
         typeof payload.onlyAudioMessages !== 'boolean' ||
+        typeof payload.onlyPhotoMessages !== 'boolean' ||
         !Array.isArray(payload.selectedCountryCodes)
       ) {
         return null;
@@ -1597,7 +1603,8 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
         selectedCountryCodes: Array.from(new Set(selectedCountryCodes)).sort((left, right) =>
           left.localeCompare(right)
         ),
-        onlyAudioMessages: payload.onlyAudioMessages
+        onlyAudioMessages: payload.onlyAudioMessages,
+        onlyPhotoMessages: payload.onlyPhotoMessages
       };
     } catch {
       return null;

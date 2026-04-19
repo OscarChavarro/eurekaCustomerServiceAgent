@@ -222,8 +222,12 @@ export const SHELL_TRANSLATIONS = {
     es: 'Filtro por media'
   },
   CONVERSATION_FILTER_ONLY_AUDIO: {
-    en: 'Show only messages with audio',
-    es: 'Mostrar solo mensajes con audio'
+    en: 'Conversations with audios',
+    es: 'Conversaciones con audios'
+  },
+  CONVERSATION_FILTER_ONLY_PHOTO: {
+    en: 'Conversations with photos',
+    es: 'Conversaciones con foto'
   },
   CONVERSATION_FILTER_RESET: {
     en: 'Reset',
