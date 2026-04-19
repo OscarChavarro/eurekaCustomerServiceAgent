@@ -246,6 +246,11 @@
             } @else {
               {{ conversation.contactAvatar }}
             }
+            @if (conversation.containsAudio) {
+              <span class="avatar-audio-indicator" aria-hidden="true">
+                <span class="material-symbols-outlined">volume_up</span>
+              </span>
+            }
           </span>
           <span class="conversation-main">
             <span class="conversation-top-row">

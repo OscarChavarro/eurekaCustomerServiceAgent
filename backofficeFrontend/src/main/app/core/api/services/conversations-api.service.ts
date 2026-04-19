@@ -50,6 +50,7 @@ export type BackendConversationSummary = {
   msg: string | null;
   firstMessageDate: string | null;
   lastMessageDate: string | null;
+  containsAudio: boolean;
 };
 
 export type BackendConversationDocument = {

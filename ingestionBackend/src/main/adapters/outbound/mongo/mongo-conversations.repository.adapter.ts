@@ -18,6 +18,7 @@ type MongoConversationDocument = {
   sourceFile: string;
   filePattern: string | null;
   contactName: string | null;
+  containsAudio?: boolean;
   firstMessageDate: string | null;
   lastMessageDate: string | null;
   lastMessageText: string | null;
@@ -245,6 +246,17 @@ export class MongoConversationsRepositoryAdapter implements ConversationsReposit
         }
       }
     );
+
+    if (audioDetails.type === 'voice') {
+      await collection.updateOne(
+        { _id: conversationId },
+        {
+          $set: {
+            containsAudio: true
+          }
+        }
+      );
+    }
   }
 
   public async updateConversationFilePattern(

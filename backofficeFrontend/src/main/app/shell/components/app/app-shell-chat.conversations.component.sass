@@ -74,6 +74,7 @@
 .avatar
   width: 2.45rem
   height: 2.45rem
+  position: relative
   border-radius: 50%
   background: #dfe5ea
   color: #30414f
@@ -83,7 +84,7 @@
   font-size: 0.78rem
   font-weight: 600
   flex-shrink: 0
-  overflow: hidden
+  overflow: visible
 
 .avatar.is-zoomable
   cursor: zoom-in
@@ -93,6 +94,26 @@
   height: 100%
   display: block
   object-fit: cover
+  border-radius: 50%
+
+.avatar-audio-indicator
+  position: absolute
+  right: -0.12rem
+  bottom: -0.08rem
+  width: 1rem
+  height: 1rem
+  border-radius: 50%
+  background: rgb(255 255 255 / 96%)
+  border: 1px solid rgb(189 198 206 / 92%)
+  color: #44515c
+  display: inline-flex
+  align-items: center
+  justify-content: center
+  box-shadow: 0 1px 4px rgb(0 0 0 / 14%)
+
+.avatar-audio-indicator .material-symbols-outlined
+  font-size: 0.72rem
+  line-height: 1
 
 .profile-image-zoom-popup
   position: fixed

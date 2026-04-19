@@ -40,6 +40,7 @@ export interface ChatConversation {
   originalPhoneNumber: string;
   phoneNumber: string;
   contactAvatar: string;
+  containsAudio: boolean;
   lastMessagePreview: string;
   lastMessageAt: string;
   unreadCount: number;
@@ -103,6 +104,7 @@ export class ChatConversationService {
       originalPhoneNumber: '+34600000000',
       phoneNumber: '+34600000000',
       contactAvatar: 'AR',
+      containsAudio: false,
       lastMessagePreview: 'Perfecto, hoy a las 17:00 te envio los documentos.',
       lastMessageAt: formatSentAt('2026-04-05T17:02:00', this.i18nStateService.selectedLanguage()),
       unreadCount: 2,
@@ -380,7 +382,8 @@ export class ChatConversationService {
           linkedContactName: null,
           filePattern: null,
           originalPhoneNumber: ChatConversationService.SIMULATION_CONVERSATION_ID,
-          phoneNumber: ChatConversationService.SIMULATION_CONVERSATION_ID
+          phoneNumber: ChatConversationService.SIMULATION_CONVERSATION_ID,
+          containsAudio: false
         };
 
         return [
@@ -397,6 +400,7 @@ export class ChatConversationService {
         originalPhoneNumber: simulationConversationId,
         phoneNumber: simulationConversationId,
         contactAvatar: 'LL',
+        containsAudio: false,
         lastMessagePreview: '',
         lastMessageAt: formatSentAt(new Date().toISOString(), language),
         unreadCount: 0,
@@ -473,7 +477,8 @@ export class ChatConversationService {
       firstMessageDate:
         typeof summary.firstMessageDate === 'string' ? summary.firstMessageDate : null,
       lastMessageDate:
-        typeof summary.lastMessageDate === 'string' ? summary.lastMessageDate : null
+        typeof summary.lastMessageDate === 'string' ? summary.lastMessageDate : null,
+      containsAudio: summary.containsAudio === true
     };
   }
 
@@ -502,6 +507,7 @@ export class ChatConversationService {
       originalPhoneNumber,
       phoneNumber,
       contactAvatar: avatar,
+      containsAudio: summary.containsAudio === true,
       lastMessagePreview:
         summary.msg ?? this.getConversationSyncedPlaceholder(this.i18nStateService.selectedLanguage()),
       lastMessageAt: formatDateLabel(summary.lastMessageDate, this.i18nStateService.selectedLanguage()),
@@ -639,6 +645,7 @@ export class ChatConversationService {
           originalPhoneNumber,
           phoneNumber,
           contactAvatar: this.buildAvatarFromLabel(displayName),
+          containsAudio: summary?.containsAudio === true || conversation.containsAudio,
           messages: fallbackMessages,
           lastMessagePreview:
             lastLocalRawMessage?.text ||
@@ -701,6 +708,7 @@ export class ChatConversationService {
           originalPhoneNumber,
           phoneNumber,
           contactAvatar: this.buildAvatarFromLabel(displayName),
+          containsAudio: summary?.containsAudio === true || conversation.containsAudio,
           messages: mergedMessages.length > 0 ? mergedMessages : this.defaultMockMessages
         };
       }))
@@ -739,6 +747,7 @@ export class ChatConversationService {
           originalPhoneNumber,
           phoneNumber,
           contactAvatar: this.buildAvatarFromLabel(displayName),
+          containsAudio: summary.containsAudio === true,
           lastMessagePreview:
             lastLocalRawMessage?.text || summary.msg || conversation.lastMessagePreview,
           lastMessageAt:
@@ -1082,7 +1091,8 @@ export class ChatConversationService {
           linkedContactName: null,
           filePattern: null,
           originalPhoneNumber: ChatConversationService.SIMULATION_CONVERSATION_ID,
-          phoneNumber: ChatConversationService.SIMULATION_CONVERSATION_ID
+          phoneNumber: ChatConversationService.SIMULATION_CONVERSATION_ID,
+          containsAudio: false
         };
       })
     );

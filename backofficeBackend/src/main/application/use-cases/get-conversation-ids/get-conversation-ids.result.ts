@@ -5,6 +5,7 @@ export type ConversationSummaryResult = {
   msg: string | null;
   firstMessageDate: string | null;
   lastMessageDate: string | null;
+  containsAudio: boolean;
 };
 
 export type GetConversationIdsResult = ConversationSummaryResult[];
