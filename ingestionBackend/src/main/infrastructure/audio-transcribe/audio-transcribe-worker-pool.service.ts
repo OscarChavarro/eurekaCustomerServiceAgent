@@ -1,5 +1,4 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import { cpus } from 'node:os';
 import { join } from 'node:path';
 import { Worker } from 'node:worker_threads';
 import type { AudioTranscribeWorkerPoolPort } from '../../application/ports/outbound/audio-transcribe-worker-pool.port';
@@ -33,6 +32,7 @@ type WorkerErrorMessage = {
 };
 
 type WorkerResponseMessage = WorkerResultMessage | WorkerErrorMessage;
+const FATAL_WHISPER_GPU_MEMORY_ERROR_PREFIX = 'FATAL_WHISPER_GPU_MEMORY_ERROR:';
 
 @Injectable()
 export class AudioTranscribeWorkerPoolService
@@ -99,7 +99,7 @@ implements AudioTranscribeWorkerPoolPort, OnModuleInit, OnModuleDestroy {
     const workerCount = this.resolveWorkerCount();
     if (workerCount <= 0) {
       this.logger.warn(
-        'transcriptionWorkersCapacity resolved to 0 worker threads. Jobs will run on main thread fallback.'
+        'whisper.workers resolved to 0 worker threads. Jobs will run on main thread fallback.'
       );
       return;
     }
@@ -112,14 +112,7 @@ implements AudioTranscribeWorkerPoolPort, OnModuleInit, OnModuleDestroy {
   }
 
   private resolveWorkerCount(): number {
-    const cpuCores = cpus().length;
-    const capacity = this.serviceConfig.transcriptionWorkersCapacity;
-
-    if (capacity === 100) {
-      return cpuCores;
-    }
-
-    return Math.floor((cpuCores * capacity) / 100);
+    return this.serviceConfig.whisperWorkers;
   }
 
   private createWorker(index: number): void {
@@ -127,7 +120,9 @@ implements AudioTranscribeWorkerPoolPort, OnModuleInit, OnModuleDestroy {
 
     const worker = new Worker(this.workerScriptPath, {
       workerData: {
-        workerIndex: index + 1
+        workerIndex: index + 1,
+        whisperDevice: this.serviceConfig.whisperDevice,
+        whisperModel: this.serviceConfig.whisperModel
       }
     });
     this.workers[index] = worker;
@@ -157,6 +152,10 @@ implements AudioTranscribeWorkerPoolPort, OnModuleInit, OnModuleDestroy {
     }
 
     if (message.type === 'error') {
+      if (this.isFatalWhisperGpuMemoryError(message.message)) {
+        this.handleFatalWhisperGpuMemoryError(message.message);
+      }
+
       this.failJob(currentJob, new Error(message.message));
       this.dispatchQueuedJobs();
       return;
@@ -260,8 +259,7 @@ implements AudioTranscribeWorkerPoolPort, OnModuleInit, OnModuleDestroy {
     void url;
     return {
       type: 'noise',
-      transcription:
-        'Transcription workers are disabled (transcriptionWorkersCapacity resolved to 0).',
+      transcription: 'Transcription workers are disabled (whisper.workers resolved to 0).',
       totalTimeInSeconds: 0,
       language: 'unknown',
       bars: []
@@ -322,5 +320,17 @@ implements AudioTranscribeWorkerPoolPort, OnModuleInit, OnModuleDestroy {
       language: 'unknown',
       bars: []
     };
+  }
+
+  private isFatalWhisperGpuMemoryError(message: string): boolean {
+    return message.startsWith(FATAL_WHISPER_GPU_MEMORY_ERROR_PREFIX);
+  }
+
+  private handleFatalWhisperGpuMemoryError(message: string): never {
+    const fatalMessage = message.replace(FATAL_WHISPER_GPU_MEMORY_ERROR_PREFIX, '').trim();
+    this.logger.error(
+      `Fatal Whisper GPU memory error detected. Configure secrets.json whisper.device to "cpu" or provide more GPU memory. ${fatalMessage}`
+    );
+    process.exit(1);
   }
 }

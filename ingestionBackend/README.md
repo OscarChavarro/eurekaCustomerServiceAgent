@@ -211,6 +211,30 @@ Also install `ffmpeg`, required to decode and process `.opus` audio files before
 This project uses Whisper to transcribe audio attachments from conversations.
 The generated transcription text is integrated back into the conversation as if it had been written as a normal message.
 
+Whisper runtime settings come from `secrets.json`:
+
+- `whisper.device`: `cpu` or `gpu`
+- `whisper.model`: `tiny`, `base`, `small`, `medium`, or `large`
+- `whisper.workers`: fixed number of transcription workers
+
+The worker process executes Whisper through `python3 -m whisper` so it uses the same Python
+environment where `torch` and `openai-whisper` are installed. If your runtime needs a different
+interpreter, set `WHISPER_PYTHON_BIN` before starting the service.
+
+Default recommendation for this environment is:
+
+```json
+{
+  "whisper": {
+    "device": "GPU",
+    "model": "large",
+    "workers": 1
+  }
+}
+```
+
+`whisper.workers` is intentionally fixed instead of derived from CPU cores, because larger Whisper models on GPU can exhaust VRAM if too many workers run in parallel.
+
 ## Audios
 
 ### Debugging

@@ -2,8 +2,7 @@
   "service": {
     "port": 3666,
     "qdrantConnectionFailurePauseMinutes": 15,
-    "processedConversationsFolderName": "processedConversations",
-    "transcriptionWorkersCapacity": 100
+    "processedConversationsFolderName": "processedConversations"
   },
   "qdrant": {
     "collectionName": "whatsapp_message_chunks"

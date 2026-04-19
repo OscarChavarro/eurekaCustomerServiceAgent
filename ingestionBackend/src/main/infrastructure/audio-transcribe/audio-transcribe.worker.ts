@@ -4,6 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { parentPort, workerData } from 'node:worker_threads';
 import type { AudioTranscribeResult } from '../../application/use-cases/audio-transcribe/audio-transcribe.result';
 import { ImazingMediaUrlCandidateService } from '../../application/use-cases/kwoledge-ingestion/imazing-media-url-candidate.service';
+import type { WhisperDevice, WhisperModel } from '../config/service.config';
 import { WavefileAudioWaveformBarsAdapter } from './wavefile-audio-waveform-bars.adapter';
 
 type WorkerRequestMessage = {
@@ -40,10 +41,14 @@ type WorkerStaticContext = {
   workerIndex: number;
   tempBaseFilePath: string;
   tempWavFilePath: string;
+  whisperDevice: WhisperDevice;
+  whisperModel: WhisperModel;
+  whisperPythonExecutable: string;
 };
 
 const SUPPORTED_AUDIO_EXTENSIONS = ['opus', 'mp3', 'm2a', 'm4a'] as const;
 type SupportedAudioExtension = (typeof SUPPORTED_AUDIO_EXTENSIONS)[number];
+const FATAL_WHISPER_GPU_MEMORY_ERROR_PREFIX = 'FATAL_WHISPER_GPU_MEMORY_ERROR:';
 
 const context = createWorkerContext();
 const waveformBarsAdapter = new WavefileAudioWaveformBarsAdapter();
@@ -104,9 +109,18 @@ async function transcribeUrlToPayload(
     await downloadAudioFile(resolvedAudioUrl, tempAudioFilePath);
     convertAudioToWav(tempAudioFilePath, staticContext.tempWavFilePath);
     bars = waveformBarsAdapter.buildFromWavFile(staticContext.tempWavFilePath, 100);
-    const whisperRun = runWhisper(tempAudioFilePath);
+    const whisperRun = runWhisper(
+      tempAudioFilePath,
+      staticContext.whisperDevice,
+      staticContext.whisperModel,
+      staticContext.whisperPythonExecutable,
+      staticContext.workerIndex
+    );
 
     if (!whisperRun.success) {
+      if (isFatalWhisperGpuMemoryErrorMessage(whisperRun.message)) {
+        throw new Error(whisperRun.message);
+      }
       hasError = true;
       transcriptionText = whisperRun.message;
     } else {
@@ -121,6 +135,9 @@ async function transcribeUrlToPayload(
       totalTimeInSeconds = resolveDurationFromSegments(whisperPayload.segments);
     }
   } catch (error) {
+    if (error instanceof Error && isFatalWhisperGpuMemoryErrorMessage(error.message)) {
+      throw error;
+    }
     hasError = true;
     transcriptionText = error instanceof Error ? error.message : String(error);
   } finally {
@@ -226,15 +243,24 @@ async function probeHead(
   }
 }
 
-function runWhisper(audioFilePath: string): { success: true } | { success: false; message: string } {
-  const whisperModel = process.env.WHISPER_MODEL?.trim() || 'base';
+function runWhisper(
+  audioFilePath: string,
+  whisperDevice: WhisperDevice,
+  whisperModel: WhisperModel,
+  whisperPythonExecutable: string,
+  workerIndex: number
+): { success: true } | { success: false; message: string } {
+  const whisperCliDevice = whisperDevice === 'gpu' ? 'cuda' : 'cpu';
   const outputDir = dirname(audioFilePath);
+  const command = whisperPythonExecutable;
   const args = [
+    '-m',
+    'whisper',
     audioFilePath,
     '--model',
     whisperModel,
     '--device',
-    'cpu',
+    whisperCliDevice,
     '--output_format',
     'json',
     '--output_dir',
@@ -245,20 +271,47 @@ function runWhisper(audioFilePath: string): { success: true } | { success: false
     'False'
   ];
 
-  const execution = spawnSync('whisper', args, {
+  console.log(
+    `[AudioTranscribeWorker-${workerIndex}] Running Whisper with ${command} ${args.join(' ')}`
+  );
+
+  const execution = spawnSync(command, args, {
     encoding: 'utf-8',
-    timeout: 300_000
+    timeout: 300_000,
+    env: {
+      ...process.env,
+      PYTHONUNBUFFERED: '1'
+    }
   });
 
   if (execution.error) {
     return {
       success: false,
-      message: `Unable to execute whisper: ${execution.error.message}`
+      message: `Unable to execute Whisper via ${command} -m whisper: ${execution.error.message}`
     };
   }
 
+  const stdout = execution.stdout?.trim() ?? '';
+  const stderr = execution.stderr?.trim() ?? '';
+
+  if (stdout.length > 0) {
+    console.log(`[AudioTranscribeWorker-${workerIndex}] Whisper stdout: ${stdout}`);
+  }
+
+  if (stderr.length > 0) {
+    console.log(`[AudioTranscribeWorker-${workerIndex}] Whisper stderr: ${stderr}`);
+  }
+
   if (execution.status !== 0) {
-    const details = execution.stderr?.trim() || execution.stdout?.trim() || 'unknown whisper error';
+    const details = stderr || stdout || 'unknown whisper error';
+
+    if (isFatalWhisperGpuMemoryError(details, whisperDevice)) {
+      return {
+        success: false,
+        message: `${FATAL_WHISPER_GPU_MEMORY_ERROR_PREFIX} Whisper failed for file ${audioFilePath}. ${details}`
+      };
+    }
+
     return {
       success: false,
       message: `Whisper failed for file ${audioFilePath}. ${details}`
@@ -266,6 +319,29 @@ function runWhisper(audioFilePath: string): { success: true } | { success: false
   }
 
   return { success: true };
+}
+
+function isFatalWhisperGpuMemoryError(details: string, whisperDevice: WhisperDevice): boolean {
+  if (whisperDevice !== 'gpu') {
+    return false;
+  }
+
+  const normalizedDetails = details.toLowerCase();
+  const mentionsGpuMode =
+    normalizedDetails.includes('cuda') ||
+    normalizedDetails.includes('gpu') ||
+    normalizedDetails.includes('nvidia');
+  const mentionsMemoryFailure =
+    normalizedDetails.includes('out of memory') ||
+    normalizedDetails.includes('insufficient memory') ||
+    normalizedDetails.includes('not enough memory') ||
+    normalizedDetails.includes('failed to allocate memory');
+
+  return mentionsGpuMode && mentionsMemoryFailure;
+}
+
+function isFatalWhisperGpuMemoryErrorMessage(message: string): boolean {
+  return message.startsWith(FATAL_WHISPER_GPU_MEMORY_ERROR_PREFIX);
 }
 
 function convertAudioToWav(audioFilePath: string, wavFilePath: string): void {
@@ -372,11 +448,30 @@ async function cleanupTempFile(filePath: string): Promise<void> {
 }
 
 function createWorkerContext(): WorkerStaticContext {
-  const rawWorkerIndex = (workerData as { workerIndex?: unknown } | undefined)?.workerIndex;
+  const rawWorkerData = workerData as
+    | {
+        workerIndex?: unknown;
+        whisperDevice?: unknown;
+        whisperModel?: unknown;
+      }
+    | undefined;
+  const rawWorkerIndex = rawWorkerData?.workerIndex;
+  const rawWhisperDevice = rawWorkerData?.whisperDevice;
+  const rawWhisperModel = rawWorkerData?.whisperModel;
   const workerIndex =
     typeof rawWorkerIndex === 'number' && Number.isInteger(rawWorkerIndex) && rawWorkerIndex > 0
       ? rawWorkerIndex
       : 1;
+  const whisperDevice: WhisperDevice = rawWhisperDevice === 'cpu' ? 'cpu' : 'gpu';
+  const whisperModel: WhisperModel =
+    rawWhisperModel === 'tiny' ||
+    rawWhisperModel === 'base' ||
+    rawWhisperModel === 'small' ||
+    rawWhisperModel === 'medium' ||
+    rawWhisperModel === 'large'
+      ? rawWhisperModel
+      : 'large';
+  const whisperPythonExecutable = process.env.WHISPER_PYTHON_BIN?.trim() || 'python3';
 
   const tmpDir = process.env.TMPDIR?.trim() || '/tmp';
   const tempBaseFilePath = join(tmpDir, `audio-transcribe-worker-${workerIndex}`);
@@ -385,6 +480,9 @@ function createWorkerContext(): WorkerStaticContext {
   return {
     workerIndex,
     tempBaseFilePath,
-    tempWavFilePath
+    tempWavFilePath,
+    whisperDevice,
+    whisperModel,
+    whisperPythonExecutable
   };
 }

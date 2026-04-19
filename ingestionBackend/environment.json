@@ -1,6 +1,5 @@
 {
   "service": {
-    "port": 3666,
-    "transcriptionWorkersCapacity": 10
+    "port": 3666
   }
 }
