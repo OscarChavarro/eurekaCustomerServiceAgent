@@ -298,7 +298,11 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
         return false;
       }
 
-      if (filters.onlyPhotoMessages && !conversation.containsProfileImage) {
+      if (filters.onlyProfilePhotoMessages && !conversation.containsProfileImage) {
+        return false;
+      }
+
+      if (filters.onlyPhotoMessages && !conversation.containsPhotos) {
         return false;
       }
 
@@ -962,6 +966,7 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
       showClients: filters.showClients,
       selectedCountryCodes: [...filters.selectedCountryCodes],
       onlyAudioMessages: filters.onlyAudioMessages,
+      onlyProfilePhotoMessages: filters.onlyProfilePhotoMessages,
       onlyPhotoMessages: filters.onlyPhotoMessages
     });
   }
@@ -1605,7 +1610,14 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
           left.localeCompare(right)
         ),
         onlyAudioMessages: payload.onlyAudioMessages,
-        onlyPhotoMessages: payload.onlyPhotoMessages
+        onlyProfilePhotoMessages:
+          typeof payload.onlyProfilePhotoMessages === 'boolean'
+            ? payload.onlyProfilePhotoMessages
+            : payload.onlyPhotoMessages,
+        onlyPhotoMessages:
+          typeof payload.onlyProfilePhotoMessages === 'boolean'
+            ? payload.onlyPhotoMessages
+            : false
       };
     } catch {
       return null;

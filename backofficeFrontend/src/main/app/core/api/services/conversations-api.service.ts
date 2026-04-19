@@ -51,6 +51,7 @@ export type BackendConversationSummary = {
   firstMessageDate: string | null;
   lastMessageDate: string | null;
   containsAudio: boolean;
+  containsPhotos: boolean;
 };
 
 export type BackendConversationDocument = {
@@ -58,6 +59,7 @@ export type BackendConversationDocument = {
   contactName?: string | null;
   filePattern?: string | null;
   sourceFile?: string | null;
+  containsPhotos?: boolean;
   rawMessages?: BackendConversationRawMessage[];
   normalizedMessages?: BackendConversationRawMessage[];
   cleanedMessages?: BackendConversationCleanMessage[];

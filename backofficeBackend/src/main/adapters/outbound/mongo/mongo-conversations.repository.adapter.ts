@@ -11,6 +11,7 @@ type MongoConversationDocument = {
   firstMessageDate?: unknown;
   lastMessageDate?: unknown;
   containsAudio?: unknown;
+  containsPhotos?: unknown;
 };
 
 @Injectable()
@@ -32,7 +33,8 @@ export class MongoConversationsRepositoryAdapter implements ConversationsReadRep
             lastMessageText: 1,
             firstMessageDate: 1,
             lastMessageDate: 1,
-            containsAudio: 1
+            containsAudio: 1,
+            containsPhotos: 1
           }
         }
       )
@@ -53,7 +55,8 @@ export class MongoConversationsRepositoryAdapter implements ConversationsReadRep
         typeof document.firstMessageDate === 'string' ? document.firstMessageDate : null,
       lastMessageDate:
         typeof document.lastMessageDate === 'string' ? document.lastMessageDate : null,
-      containsAudio: document.containsAudio === true
+      containsAudio: document.containsAudio === true,
+      containsPhotos: document.containsPhotos === true
     }));
   }
 

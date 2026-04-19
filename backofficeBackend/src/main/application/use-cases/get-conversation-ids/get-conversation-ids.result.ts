@@ -6,6 +6,7 @@ export type ConversationSummaryResult = {
   firstMessageDate: string | null;
   lastMessageDate: string | null;
   containsAudio: boolean;
+  containsPhotos: boolean;
 };
 
 export type GetConversationIdsResult = ConversationSummaryResult[];

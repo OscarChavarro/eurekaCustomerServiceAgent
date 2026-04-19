@@ -41,7 +41,7 @@ export interface ChatConversation {
   phoneNumber: string;
   contactAvatar: string;
   containsAudio: boolean;
-  containsPhoto: boolean;
+  containsPhotos: boolean;
   containsProfileImage: boolean;
   lastMessagePreview: string;
   lastMessageAt: string;
@@ -107,7 +107,7 @@ export class ChatConversationService {
       phoneNumber: '+34600000000',
       contactAvatar: 'AR',
       containsAudio: false,
-      containsPhoto: false,
+      containsPhotos: false,
       containsProfileImage: false,
       lastMessagePreview: 'Perfecto, hoy a las 17:00 te envio los documentos.',
       lastMessageAt: formatSentAt('2026-04-05T17:02:00', this.i18nStateService.selectedLanguage()),
@@ -388,7 +388,7 @@ export class ChatConversationService {
           originalPhoneNumber: ChatConversationService.SIMULATION_CONVERSATION_ID,
           phoneNumber: ChatConversationService.SIMULATION_CONVERSATION_ID,
           containsAudio: false,
-          containsPhoto: false,
+          containsPhotos: false,
           containsProfileImage: false
         };
 
@@ -407,7 +407,7 @@ export class ChatConversationService {
         phoneNumber: simulationConversationId,
         contactAvatar: 'LL',
         containsAudio: false,
-        containsPhoto: false,
+        containsPhotos: false,
         containsProfileImage: false,
         lastMessagePreview: '',
         lastMessageAt: formatSentAt(new Date().toISOString(), language),
@@ -500,7 +500,8 @@ export class ChatConversationService {
         typeof summary.firstMessageDate === 'string' ? summary.firstMessageDate : null,
       lastMessageDate:
         typeof summary.lastMessageDate === 'string' ? summary.lastMessageDate : null,
-      containsAudio: summary.containsAudio === true
+      containsAudio: summary.containsAudio === true,
+      containsPhotos: summary.containsPhotos === true
     };
   }
 
@@ -530,7 +531,7 @@ export class ChatConversationService {
       phoneNumber,
       contactAvatar: avatar,
       containsAudio: summary.containsAudio === true,
-      containsPhoto: false,
+      containsPhotos: summary.containsPhotos === true,
       containsProfileImage: false,
       lastMessagePreview:
         summary.msg ?? this.getConversationSyncedPlaceholder(this.i18nStateService.selectedLanguage()),
@@ -634,7 +635,6 @@ export class ChatConversationService {
       conversationId,
       renderer.render(effectiveDocument)
     );
-    const containsPhoto = this.conversationContainsPhoto(renderedMessages);
     const fallbackMessages = renderedMessages.length > 0 ? renderedMessages : this.defaultMockMessages;
     const localRawMessages = this.localRawMessagesState()[conversationId] ?? [];
     const lastLocalRawMessage = localRawMessages[localRawMessages.length - 1];
@@ -671,7 +671,7 @@ export class ChatConversationService {
           phoneNumber,
           contactAvatar: this.buildAvatarFromLabel(displayName),
           containsAudio: summary?.containsAudio === true || conversation.containsAudio,
-          containsPhoto,
+          containsPhotos: summary?.containsPhotos === true || conversation.containsPhotos,
           containsProfileImage: conversation.containsProfileImage,
           messages: fallbackMessages,
           lastMessagePreview:
@@ -711,7 +711,6 @@ export class ChatConversationService {
 
         const renderedMessages = renderer.render(effectiveDocument);
         const mergedMessages = this.mergeWithLocalRawMessages(conversation.id, renderedMessages);
-        const containsPhoto = this.conversationContainsPhoto(mergedMessages);
         const summary = this.conversationSummariesState()[conversation.id];
         const phoneNumber = this.normalizeConversationPhoneNumber(conversation.id);
         const originalPhoneNumber = this.extractOriginalConversationPhoneNumber(conversation.id);
@@ -737,7 +736,7 @@ export class ChatConversationService {
           phoneNumber,
           contactAvatar: this.buildAvatarFromLabel(displayName),
           containsAudio: summary?.containsAudio === true || conversation.containsAudio,
-          containsPhoto,
+          containsPhotos: summary?.containsPhotos === true || conversation.containsPhotos,
           containsProfileImage: conversation.containsProfileImage,
           messages: mergedMessages.length > 0 ? mergedMessages : this.defaultMockMessages
         };
@@ -778,7 +777,7 @@ export class ChatConversationService {
           phoneNumber,
           contactAvatar: this.buildAvatarFromLabel(displayName),
           containsAudio: summary.containsAudio === true,
-          containsPhoto: conversation.containsPhoto,
+          containsPhotos: summary.containsPhotos === true,
           containsProfileImage: conversation.containsProfileImage,
           lastMessagePreview:
             lastLocalRawMessage?.text || summary.msg || conversation.lastMessagePreview,
@@ -1125,15 +1124,11 @@ export class ChatConversationService {
           originalPhoneNumber: ChatConversationService.SIMULATION_CONVERSATION_ID,
           phoneNumber: ChatConversationService.SIMULATION_CONVERSATION_ID,
           containsAudio: false,
-          containsPhoto: false,
+          containsPhotos: false,
           containsProfileImage: false
         };
       })
     );
-  }
-
-  private conversationContainsPhoto(messages: ChatMessage[]): boolean {
-    return messages.some((message) => typeof message.mediaUrl === 'string' && message.mediaUrl.trim().length > 0);
   }
 
   private getSimulationConversationName(language: 'es' | 'en'): string {

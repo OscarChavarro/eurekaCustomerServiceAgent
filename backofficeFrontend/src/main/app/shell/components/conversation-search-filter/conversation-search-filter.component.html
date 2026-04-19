@@ -69,6 +69,14 @@
     <label class="conversation-search-filter-option">
       <input
         type="checkbox"
+        [checked]="filters().onlyProfilePhotoMessages"
+        (change)="onOnlyProfilePhotoToggle()"
+      />
+      <span>{{ i18n().onlyProfilePhotoLabel }}</span>
+    </label>
+    <label class="conversation-search-filter-option">
+      <input
+        type="checkbox"
         [checked]="filters().onlyPhotoMessages"
         (change)="onOnlyPhotoToggle()"
       />

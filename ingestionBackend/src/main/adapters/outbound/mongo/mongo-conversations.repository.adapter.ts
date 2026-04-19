@@ -19,6 +19,7 @@ type MongoConversationDocument = {
   filePattern: string | null;
   contactName: string | null;
   containsAudio?: boolean;
+  containsPhotos?: boolean;
   firstMessageDate: string | null;
   lastMessageDate: string | null;
   lastMessageText: string | null;
@@ -63,6 +64,7 @@ export class MongoConversationsRepositoryAdapter implements ConversationsReposit
           filePattern: metadata.filePattern,
           contactName: metadata.contactName,
           rawMessages,
+          containsPhotos: rawMessages.some((rawMessage) => this.rawMessageContainsPhoto(rawMessage)),
           firstMessageDate: metadata.firstMessageDate,
           lastMessageDate: metadata.lastMessageDate,
           lastMessageText: metadata.lastMessageText,
@@ -487,5 +489,36 @@ export class MongoConversationsRepositoryAdapter implements ConversationsReposit
       await this.mongoClientProvider.getConversationsCollection<MongoConversationDocument>();
     const result = await collection.deleteMany({});
     return result.deletedCount ?? 0;
+  }
+
+  private rawMessageContainsPhoto(rawMessage: RawConversationStageMessage): boolean {
+    const attachment = this.toNonEmptyString(rawMessage.normalizedFields.attachment);
+    if (attachment && this.isImageAttachment(attachment)) {
+      return true;
+    }
+
+    const attachmentType = this.toNonEmptyString(rawMessage.normalizedFields.attachmentType);
+    if (!attachmentType) {
+      return false;
+    }
+
+    const normalizedAttachmentType = attachmentType.trim().toLowerCase();
+    return normalizedAttachmentType.includes('image') ||
+      normalizedAttachmentType.includes('imagen') ||
+      normalizedAttachmentType.includes('photo') ||
+      normalizedAttachmentType.includes('foto');
+  }
+
+  private isImageAttachment(attachment: string): boolean {
+    return /\.(jpg|jpeg|png|gif|webp|bmp|heic|heif|tif|tiff)$/i.test(attachment.trim());
+  }
+
+  private toNonEmptyString(value: unknown): string | null {
+    if (typeof value !== 'string') {
+      return null;
+    }
+
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
   }
 }

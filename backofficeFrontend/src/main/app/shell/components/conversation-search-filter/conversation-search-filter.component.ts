@@ -20,6 +20,7 @@ export type ConversationSearchFilterState = {
   showClients: boolean;
   selectedCountryCodes: string[];
   onlyAudioMessages: boolean;
+  onlyProfilePhotoMessages: boolean;
   onlyPhotoMessages: boolean;
 };
 
@@ -58,7 +59,8 @@ export class ConversationSearchFilterComponent implements AfterViewInit {
     countryGroupLabel: this.t(I18N_KEYS.shell.CONVERSATION_FILTER_COUNTRY_GROUP),
     mediaGroupLabel: this.t(I18N_KEYS.shell.CONVERSATION_FILTER_MEDIA_GROUP),
     onlyAudioLabel: this.t(I18N_KEYS.shell.CONVERSATION_FILTER_ONLY_AUDIO),
-    onlyPhotoLabel: this.t(I18N_KEYS.shell.CONVERSATION_FILTER_ONLY_PHOTO),
+    onlyProfilePhotoLabel: this.t(I18N_KEYS.shell.CONVERSATION_FILTER_ONLY_PHOTO),
+    onlyPhotoLabel: this.t(I18N_KEYS.shell.CONVERSATION_FILTER_ONLY_PHOTOS),
     resetLabel: this.t(I18N_KEYS.shell.CONVERSATION_FILTER_RESET),
     emptyCountriesLabel: this.t(I18N_KEYS.shell.CONVERSATION_FILTER_EMPTY_COUNTRIES)
   }));
@@ -134,6 +136,13 @@ export class ConversationSearchFilterComponent implements AfterViewInit {
     });
   }
 
+  protected onOnlyProfilePhotoToggle(): void {
+    this.filtersChanged.emit({
+      ...this.filters(),
+      onlyProfilePhotoMessages: !this.filters().onlyProfilePhotoMessages
+    });
+  }
+
   protected onOnlyPhotoToggle(): void {
     this.filtersChanged.emit({
       ...this.filters(),
@@ -160,6 +169,7 @@ export function defaultConversationSearchFilterState(): ConversationSearchFilter
     showClients: true,
     selectedCountryCodes: [],
     onlyAudioMessages: false,
+    onlyProfilePhotoMessages: false,
     onlyPhotoMessages: false
   };
 }

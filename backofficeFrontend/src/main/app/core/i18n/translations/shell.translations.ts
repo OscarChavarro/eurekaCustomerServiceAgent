@@ -226,8 +226,12 @@ export const SHELL_TRANSLATIONS = {
     es: 'Conversaciones con audios'
   },
   CONVERSATION_FILTER_ONLY_PHOTO: {
+    en: 'Conversations with profile photo',
+    es: 'Conversaciones con foto de perfil'
+  },
+  CONVERSATION_FILTER_ONLY_PHOTOS: {
     en: 'Conversations with photos',
-    es: 'Conversaciones con foto'
+    es: 'Conversaciones con fotos'
   },
   CONVERSATION_FILTER_RESET: {
     en: 'Reset',
