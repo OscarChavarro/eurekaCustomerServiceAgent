@@ -12,11 +12,13 @@ iMazing is a commercial product that helps extract WhatsApp data from devices an
 
 Flow:
 
-`CSV -> parse -> clean -> structure -> chunk -> embed -> store`
+`CSV -> parse -> normalize(media) -> transcribe(audio, blocking) -> clean -> structure -> chunk -> embed -> store`
 
 Current stage implementation:
 
 - `parse`: reads iMazing CSV files and maps raw records into typed raw conversation messages.
+- `normalize(media)`: resolves attachment URLs and normalizes audio resource metadata.
+- `transcribe(audio, blocking)`: transcribes audio attachments before chunking and injects transcription into each message `text` when the original message had no text.
 - `clean`: normalizes message text and removes common noise/artifacts.
 - `structure`: groups cleaned messages into conversational turns (customer -> agent).
 - `chunk`: converts turns into semantic chunks ready for embedding.
@@ -213,7 +215,7 @@ The generated transcription text is integrated back into the conversation as if 
 
 ### Debugging
 
-To inspect in MongoDB audio messages that already have `audioDetails` and are marked as `noise`:
+To inspect in MongoDB audio messages that already have `audioDetails` and are marked as `voice` (or `noise` for errors):
 
 ```javascript
 db.conversations.aggregate([
@@ -221,7 +223,7 @@ db.conversations.aggregate([
   {
     $match: {
       "rawMessages.audioDetails": { $exists: true, $ne: null },
-      "rawMessages.audioDetails.type": "noise"
+      "rawMessages.audioDetails.type": "voice"
     }
   },
   {

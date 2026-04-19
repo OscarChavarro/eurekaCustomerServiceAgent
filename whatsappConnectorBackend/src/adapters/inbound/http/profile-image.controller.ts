@@ -35,6 +35,7 @@ export class ProfileImageController {
     }
 
     response.setHeader('Content-Type', result.image.mimeType);
+    response.setHeader('Cache-Control', 'public, max-age=300');
     response.status(200).send(result.image.bytes);
   }
 }

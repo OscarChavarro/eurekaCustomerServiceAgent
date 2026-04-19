@@ -26,6 +26,16 @@ export type RawAudioTranscriptionSummary = {
   noise: number;
 };
 
+export type RawAudioTranscriptionProcessed = {
+  conversationId: string;
+  rawMessageExternalId: string;
+  audioDetails: RawConversationAudioDetails;
+};
+
+export type RawAudioTranscriptionDetailedSummary = RawAudioTranscriptionSummary & {
+  processed: RawAudioTranscriptionProcessed[];
+};
+
 @Injectable()
 export class RawAudioTranscriptionOrchestratorService {
   private readonly logger = new Logger(RawAudioTranscriptionOrchestratorService.name);
@@ -67,6 +77,16 @@ export class RawAudioTranscriptionOrchestratorService {
   public async processManyBlocking(
     candidates: RawAudioTranscriptionCandidate[]
   ): Promise<RawAudioTranscriptionSummary> {
+    const detailedSummary = await this.processManyBlockingDetailed(candidates);
+    return {
+      importedSuccessfully: detailedSummary.importedSuccessfully,
+      noise: detailedSummary.noise
+    };
+  }
+
+  public async processManyBlockingDetailed(
+    candidates: RawAudioTranscriptionCandidate[]
+  ): Promise<RawAudioTranscriptionDetailedSummary> {
     const audioJobs = candidates
       .map((candidate) => {
         const audioResourceUrl = this.resolveAudioResourceUrl(candidate);
@@ -91,11 +111,12 @@ export class RawAudioTranscriptionOrchestratorService {
     if (audioJobs.length === 0) {
       return {
         importedSuccessfully: 0,
-        noise: 0
+        noise: 0,
+        processed: []
       };
     }
 
-    const payloads = await Promise.all(
+    const executedJobs = await Promise.all(
       audioJobs.map(async ({ candidate, audioResourceUrl }) => {
         const payload = await this.audioTranscribeUseCase
           .execute(new AudioTranscribeCommand(audioResourceUrl))
@@ -111,14 +132,20 @@ export class RawAudioTranscriptionOrchestratorService {
           rawMessageExternalId: candidate.rawMessageExternalId,
           originalAudioResourceUrl: audioResourceUrl
         });
-        return payload;
+        return { candidate, payload };
       })
     );
 
-    const noise = payloads.filter((payload) => payload.type === 'noise').length;
+    const noise = executedJobs.filter((executedJob) => executedJob.payload.type === 'noise').length;
+
     return {
-      importedSuccessfully: payloads.length - noise,
-      noise
+      importedSuccessfully: executedJobs.length - noise,
+      noise,
+      processed: executedJobs.map((executedJob) => ({
+        conversationId: executedJob.candidate.conversationId,
+        rawMessageExternalId: executedJob.candidate.rawMessageExternalId,
+        audioDetails: this.buildAudioDetails(executedJob.payload)
+      }))
     };
   }
 
@@ -139,13 +166,7 @@ export class RawAudioTranscriptionOrchestratorService {
       return;
     }
 
-    const audioDetails: RawConversationAudioDetails = {
-      type: payload.type,
-      transcription: payload.transcription,
-      totalTimeInSeconds: payload.totalTimeInSeconds,
-      language: payload.language,
-      bars: payload.bars
-    };
+    const audioDetails = this.buildAudioDetails(payload);
     const hasAudioDownloadFailure =
       !!originalAudioResourceUrl && this.isAudioResourceReadFailure(payload);
 
@@ -188,6 +209,16 @@ export class RawAudioTranscriptionOrchestratorService {
       totalTimeInSeconds: 0,
       language: 'unknown',
       bars: []
+    };
+  }
+
+  private buildAudioDetails(payload: AudioTranscribeResult): RawConversationAudioDetails {
+    return {
+      type: payload.type,
+      transcription: payload.transcription,
+      totalTimeInSeconds: payload.totalTimeInSeconds,
+      language: payload.language,
+      bars: payload.bars
     };
   }
 

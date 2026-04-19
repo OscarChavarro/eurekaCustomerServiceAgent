@@ -4,6 +4,7 @@ import type { ConversationCsvSourcePort } from '../../ports/inbound/conversation
 import type {
   ConversationsRepositoryPort,
   NormalizedConversationStageMessage,
+  RawConversationAudioDetails,
   RawConversationStageMessage
 } from '../../ports/outbound/conversations-repository.port';
 import type { EmbeddingPort } from '../../ports/outbound/embedding.port';
@@ -28,6 +29,7 @@ import type { KwoledgeIngestionCommand } from './kwoledge-ingestion.command';
 import {
   CleanedConversationMessage,
   MessageDirection,
+  NormalizedConversationCsvFields,
   RawConversationMessage,
   StructuredConversationTurn,
   SemanticConversationChunk
@@ -157,9 +159,10 @@ export class KwoledgeIngestionUseCase {
 
     const allCleanedMessages: CleanedConversationMessage[] = [];
     const allSemanticChunks: SemanticConversationChunk[] = [];
-    const allAudioTranscriptionCandidates: RawAudioTranscriptionCandidate[] = [];
     let totalIndexedChunks = 0;
     let skippedMessages = 0;
+    let importedAudioMessages = 0;
+    let noiseAudioMessages = 0;
 
     for (const [index, conversationId] of orderedConversationIds.entries()) {
       const currentPosition = index + 1;
@@ -176,7 +179,30 @@ export class KwoledgeIngestionUseCase {
       );
       this.logConversationPhase(currentPosition, totalConversations, conversationId, 'raw');
 
-      const conversationCleanedMessages = this.runCleaningStage(conversationRawMessages);
+      const normalizedStage = await this.runNormalizationStage(
+        conversationId,
+        rawStageMessages
+      );
+      const transcriptionStage =
+        await this.rawAudioTranscriptionOrchestratorService.processManyBlockingDetailed(
+          this.toRawAudioTranscriptionCandidates(
+            conversationId,
+            normalizedStage.messages,
+            conversationMetadata.filePattern
+          )
+        );
+      const normalizedMessagesWithAudioText = this.applyAudioTranscriptionsToNormalizedMessages(
+        normalizedStage.messages,
+        transcriptionStage.processed
+      );
+      importedAudioMessages += transcriptionStage.importedSuccessfully;
+      noiseAudioMessages += transcriptionStage.noise;
+      const normalizedPipelineMessages = this.toPipelineRawMessages(
+        conversationId,
+        conversationRawMessages,
+        normalizedMessagesWithAudioText
+      );
+      const conversationCleanedMessages = this.runCleaningStage(normalizedPipelineMessages);
       allCleanedMessages.push(...conversationCleanedMessages);
       skippedMessages += conversationCleanedMessages.filter(
         (message) => message.cleanedText.length === 0
@@ -187,19 +213,15 @@ export class KwoledgeIngestionUseCase {
       );
       this.logConversationPhase(currentPosition, totalConversations, conversationId, 'clean');
 
-      const normalizedStage = await this.runNormalizationStage(
-        conversationId,
-        rawStageMessages
-      );
       await this.conversationsRepositoryPort.upsertNormalizedMessages(
         conversationId,
-        normalizedStage.messages
+        normalizedMessagesWithAudioText
       );
       this.logConversationPhase(
         currentPosition,
         totalConversations,
         conversationId,
-        `normalize (${normalizedStage.normalizedCount} updated, ${normalizedStage.missingCount} missing)`
+        `normalize (${normalizedStage.normalizedCount} updated, ${normalizedStage.missingCount} missing, ${transcriptionStage.importedSuccessfully} audio ok, ${transcriptionStage.noise} audio noise)`
       );
 
       const conversationStructuredTurns = this.runStructuringStage(conversationCleanedMessages);
@@ -218,7 +240,7 @@ export class KwoledgeIngestionUseCase {
       this.logConversationPhase(currentPosition, totalConversations, conversationId, 'chunk');
 
       const conversationEmbeddedChunks = await this.runEmbeddingStage(
-        conversationRawMessages,
+        normalizedPipelineMessages,
         conversationSemanticChunks
       );
       await this.persistEmbeddings(conversationEmbeddedChunks);
@@ -236,19 +258,11 @@ export class KwoledgeIngestionUseCase {
       await this.persistProcessedConversation(
         conversationId,
         conversationRawMessages,
-        normalizedStage.messages,
+        normalizedMessagesWithAudioText,
         conversationCleanedMessages,
         conversationStructuredTurns,
         conversationSemanticChunks,
         conversationEmbeddedChunks
-      );
-
-      allAudioTranscriptionCandidates.push(
-        ...this.toRawAudioTranscriptionCandidates(
-          conversationId,
-          normalizedStage.messages,
-          conversationMetadata.filePattern
-        )
       );
     }
 
@@ -258,9 +272,6 @@ export class KwoledgeIngestionUseCase {
 
     const messagesBreakdown = this.buildMessagesBreakdown(allCleanedMessages);
     const limits = this.buildLimits(allCleanedMessages);
-    const audioSummary = await this.rawAudioTranscriptionOrchestratorService.processManyBlocking(
-      allAudioTranscriptionCandidates
-    );
     this.logger.log(KwoledgeIngestionUseCase.COMPLETION_BANNER);
 
     return new KwoledgeIngestionResult(
@@ -270,7 +281,7 @@ export class KwoledgeIngestionUseCase {
       skippedMessages,
       messagesBreakdown,
       limits,
-      new KwoledgeIngestionAudio(audioSummary.importedSuccessfully, audioSummary.noise)
+      new KwoledgeIngestionAudio(importedAudioMessages, noiseAudioMessages)
     );
   }
 
@@ -299,6 +310,101 @@ export class KwoledgeIngestionUseCase {
       conversationId,
       rawStageMessages
     );
+  }
+
+  private applyAudioTranscriptionsToNormalizedMessages(
+    normalizedMessages: NormalizedConversationStageMessage[],
+    processedAudioMessages: Array<{
+      rawMessageExternalId: string;
+      audioDetails: RawConversationAudioDetails;
+    }>
+  ): NormalizedConversationStageMessage[] {
+    const audioDetailsByMessageId = new Map(
+      processedAudioMessages.map((processedAudioMessage) => [
+        processedAudioMessage.rawMessageExternalId,
+        processedAudioMessage.audioDetails
+      ])
+    );
+
+    return normalizedMessages.map((normalizedMessage) => {
+      const audioDetails = audioDetailsByMessageId.get(normalizedMessage.externalId);
+      if (!audioDetails) {
+        return normalizedMessage;
+      }
+
+      const currentText = normalizedMessage.text.trim();
+      const transcriptionText =
+        audioDetails.type === 'noise' ? '' : audioDetails.transcription.trim();
+
+      return {
+        ...normalizedMessage,
+        text: currentText.length > 0 ? currentText : transcriptionText,
+        audioDetails
+      };
+    });
+  }
+
+  private toPipelineRawMessages(
+    conversationId: string,
+    sourceRawMessages: RawConversationMessage[],
+    normalizedMessages: NormalizedConversationStageMessage[]
+  ): RawConversationMessage[] {
+    const sourceRawMessagesByExternalId = new Map(
+      sourceRawMessages.map((sourceRawMessage) => [sourceRawMessage.externalId, sourceRawMessage])
+    );
+
+    return normalizedMessages.map((normalizedMessage) => {
+      const sourceRawMessage = sourceRawMessagesByExternalId.get(normalizedMessage.externalId);
+      const sentAt =
+        normalizedMessage.sentAt !== null
+          ? new Date(normalizedMessage.sentAt)
+          : sourceRawMessage?.sentAt ?? null;
+      const hasValidSentAt = sentAt !== null && !Number.isNaN(sentAt.getTime());
+
+      return new RawConversationMessage(
+        sourceRawMessage?.conversationId ?? conversationId,
+        sourceRawMessage?.contactName ?? null,
+        normalizedMessage.externalId,
+        hasValidSentAt ? sentAt : null,
+        normalizedMessage.sender,
+        normalizedMessage.text,
+        sourceRawMessage?.sourceFile ?? 'unknown',
+        sourceRawMessage?.filePattern ?? null,
+        normalizedMessage.rowNumber,
+        this.toMessageDirection(normalizedMessage.direction),
+        this.toNormalizedConversationCsvFields(normalizedMessage.normalizedFields)
+      );
+    });
+  }
+
+  private toNormalizedConversationCsvFields(
+    normalizedFields: Record<string, unknown>
+  ): NormalizedConversationCsvFields {
+    return new NormalizedConversationCsvFields(
+      this.toNullableFieldString(normalizedFields.chatSession),
+      this.toNullableFieldString(normalizedFields.messageDate),
+      this.toNullableFieldString(normalizedFields.sentDate),
+      this.toNullableFieldString(normalizedFields.messageType),
+      this.toNullableFieldString(normalizedFields.senderId),
+      this.toNullableFieldString(normalizedFields.senderName),
+      this.toNullableFieldString(normalizedFields.status),
+      this.toNullableFieldString(normalizedFields.forwarded),
+      this.toNullableFieldString(normalizedFields.replyTo),
+      this.toNullableFieldString(normalizedFields.text),
+      this.toNullableFieldString(normalizedFields.reactions),
+      this.toNullableFieldString(normalizedFields.attachment),
+      this.toNullableFieldString(normalizedFields.attachmentType),
+      this.toNullableFieldString(normalizedFields.attachmentInfo)
+    );
+  }
+
+  private toNullableFieldString(value: unknown): string | null {
+    if (typeof value !== 'string') {
+      return null;
+    }
+
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
   }
 
   private runStructuringStage(
@@ -789,6 +895,18 @@ export class KwoledgeIngestionUseCase {
     }
 
     return 'whatsapAuto';
+  }
+
+  private toMessageDirection(direction: RawStageDirection): MessageDirection {
+    if (direction === 'agent_to_customer') {
+      return MessageDirection.Outgoing;
+    }
+
+    if (direction === 'customer_to_agent') {
+      return MessageDirection.Incoming;
+    }
+
+    return MessageDirection.Unknown;
   }
 
   private buildMessagesBreakdown(

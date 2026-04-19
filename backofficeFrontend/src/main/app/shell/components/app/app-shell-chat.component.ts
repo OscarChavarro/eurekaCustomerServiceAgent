@@ -88,6 +88,7 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
   private readonly phoneLookupCache = new Map<string, PhonePrefixLookupResponse | null>();
   private readonly avatarLoadErrorConversationIdsState = signal<Set<string>>(new Set());
   private readonly avatarLoadedConversationIdsState = signal<Set<string>>(new Set());
+  private readonly avatarFetchAttemptConversationIdsState = signal<Set<string>>(new Set());
   private readonly profileImageZoomPopupState = signal<ProfileImageZoomPopupState | null>(null);
   private isProfileImageZoomPopupHovered = false;
   private profileImageZoomRequestSequence = 0;
@@ -216,11 +217,12 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
       return null;
     }
 
+    const allowBackendFetch = this.avatarFetchAttemptConversationIdsState().has(conversation.id);
     const baseUrl = this.whatsappConnectorBackendBaseUrl();
     const params = new URLSearchParams({
       phoneNumber: phoneNumberDigits,
       size: 'small',
-      'cached-only': 'true'
+      'cached-only': allowBackendFetch ? 'false' : 'true'
     });
 
     return `${baseUrl}/profileImage?${params.toString()}`;
@@ -232,11 +234,12 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
       return null;
     }
 
+    const allowBackendFetch = this.avatarFetchAttemptConversationIdsState().has(conversation.id);
     const baseUrl = this.whatsappConnectorBackendBaseUrl();
     const params = new URLSearchParams({
       phoneNumber: phoneNumberDigits,
-      size: 'normal',
-      'cached-only': 'true'
+      size: 'original',
+      'cached-only': allowBackendFetch ? 'false' : 'true'
     });
 
     return `${baseUrl}/profileImage?${params.toString()}`;
@@ -261,9 +264,31 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
       next.add(conversationId);
       return next;
     });
+    this.avatarFetchAttemptConversationIdsState.update((current) => {
+      if (!current.has(conversationId)) {
+        return current;
+      }
+
+      const next = new Set(current);
+      next.delete(conversationId);
+      return next;
+    });
   }
 
   protected onConversationAvatarImageError(conversationId: string): void {
+    if (!this.avatarFetchAttemptConversationIdsState().has(conversationId)) {
+      this.avatarFetchAttemptConversationIdsState.update((current) => {
+        if (current.has(conversationId)) {
+          return current;
+        }
+
+        const next = new Set(current);
+        next.add(conversationId);
+        return next;
+      });
+      return;
+    }
+
     this.avatarLoadErrorConversationIdsState.update((current) => {
       if (current.has(conversationId)) {
         return current;

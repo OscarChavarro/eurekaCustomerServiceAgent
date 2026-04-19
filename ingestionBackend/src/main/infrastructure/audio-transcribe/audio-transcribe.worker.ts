@@ -233,6 +233,8 @@ function runWhisper(audioFilePath: string): { success: true } | { success: false
     audioFilePath,
     '--model',
     whisperModel,
+    '--device',
+    'cpu',
     '--output_format',
     'json',
     '--output_dir',

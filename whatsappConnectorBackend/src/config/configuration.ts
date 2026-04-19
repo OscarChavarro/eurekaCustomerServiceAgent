@@ -21,6 +21,11 @@ type Environment = {
 };
 
 type Secrets = {
+  cors?: {
+    allowedOrigins?: string[];
+    allowedIps?: string[];
+    allowedIpRanges?: string[];
+  };
   profileImages?: {
     baseFolderPath?: string;
   };
@@ -58,6 +63,7 @@ export class Configuration {
 
     const secretsRaw = readFileSync(secretsPath, 'utf-8');
     this.secrets = JSON.parse(secretsRaw) as Secrets;
+    this.validateCorsSecrets(secretsPath);
     this.validateContactsBackendSecrets(secretsPath);
     this.validateRetrievalBackendSecrets(secretsPath);
   }
@@ -68,6 +74,18 @@ export class Configuration {
 
   get serviceHttpPort(): number {
     return Math.max(1, this.environment.service?.httpPort ?? 3670);
+  }
+
+  get corsAllowedOrigins(): string[] {
+    return this.normalizeStringArray(this.secrets.cors?.allowedOrigins);
+  }
+
+  get corsAllowedIps(): string[] {
+    return this.normalizeStringArray(this.secrets.cors?.allowedIps);
+  }
+
+  get corsAllowedIpRanges(): string[] {
+    return this.normalizeStringArray(this.secrets.cors?.allowedIpRanges);
   }
 
   get whiskeySocketsWhatsappAuthFolderPath(): string {
@@ -196,6 +214,21 @@ export class Configuration {
     }
   }
 
+  private validateCorsSecrets(secretsPath: string): void {
+    const cors = this.secrets.cors;
+    if (cors === undefined) {
+      return;
+    }
+
+    if (!cors || typeof cors !== 'object') {
+      throw new Error(`Invalid configuration in ${secretsPath}. "cors" must be an object.`);
+    }
+
+    this.validateStringArray(secretsPath, 'cors.allowedOrigins', cors.allowedOrigins);
+    this.validateIpv4Array(secretsPath, 'cors.allowedIps', cors.allowedIps);
+    this.validateCidrArray(secretsPath, 'cors.allowedIpRanges', cors.allowedIpRanges);
+  }
+
   private validateRetrievalBackendSecrets(secretsPath: string): void {
     const retrievalBackend = this.secrets.retrievalBackend;
     if (!retrievalBackend || typeof retrievalBackend !== 'object') {
@@ -207,5 +240,74 @@ export class Configuration {
         `Invalid configuration in ${secretsPath}. "retrievalBackend.baseUrl" must be a non-empty string.`
       );
     }
+  }
+
+  private normalizeStringArray(values?: string[]): string[] {
+    if (!Array.isArray(values)) {
+      return [];
+    }
+
+    return Array.from(
+      new Set(
+        values
+          .filter((value): value is string => typeof value === 'string')
+          .map((value) => value.trim())
+          .filter((value) => value.length > 0)
+      )
+    );
+  }
+
+  private validateStringArray(secretsPath: string, propertyName: string, values?: string[]): void {
+    if (values === undefined) {
+      return;
+    }
+
+    if (!Array.isArray(values) || values.some((value) => typeof value !== 'string')) {
+      throw new Error(`Invalid configuration in ${secretsPath}. "${propertyName}" must be an array of strings.`);
+    }
+  }
+
+  private validateIpv4Array(secretsPath: string, propertyName: string, values?: string[]): void {
+    this.validateStringArray(secretsPath, propertyName, values);
+    for (const value of this.normalizeStringArray(values)) {
+      if (!this.isValidIpv4(value)) {
+        throw new Error(`Invalid configuration in ${secretsPath}. "${propertyName}" contains invalid IPv4 "${value}".`);
+      }
+    }
+  }
+
+  private validateCidrArray(secretsPath: string, propertyName: string, values?: string[]): void {
+    this.validateStringArray(secretsPath, propertyName, values);
+    for (const value of this.normalizeStringArray(values)) {
+      if (!this.isValidIpv4Cidr(value)) {
+        throw new Error(`Invalid configuration in ${secretsPath}. "${propertyName}" contains invalid CIDR "${value}".`);
+      }
+    }
+  }
+
+  private isValidIpv4(value: string): boolean {
+    const parts = value.split('.');
+    if (parts.length !== 4) {
+      return false;
+    }
+
+    return parts.every((part) => {
+      if (!/^\d+$/.test(part)) {
+        return false;
+      }
+
+      const octet = Number(part);
+      return octet >= 0 && octet <= 255;
+    });
+  }
+
+  private isValidIpv4Cidr(value: string): boolean {
+    const [ip, prefix] = value.split('/');
+    if (!ip || !prefix || !/^\d+$/.test(prefix)) {
+      return false;
+    }
+
+    const prefixNumber = Number(prefix);
+    return this.isValidIpv4(ip) && prefixNumber >= 0 && prefixNumber <= 32;
   }
 }
