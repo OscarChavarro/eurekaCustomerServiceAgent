@@ -4,6 +4,7 @@ import type { ConversationCsvSourcePort } from '../../ports/inbound/conversation
 import type {
   ConversationsRepositoryPort,
   NormalizedConversationStageMessage,
+  RawMessageAudioNormalizedFieldsPatch,
   RawConversationAudioDetails,
   RawConversationStageMessage
 } from '../../ports/outbound/conversations-repository.port';
@@ -194,6 +195,11 @@ export class KwoledgeIngestionUseCase {
       const normalizedMessagesWithAudioText = this.applyAudioTranscriptionsToNormalizedMessages(
         normalizedStage.messages,
         transcriptionStage.processed
+      );
+      await this.persistNormalizedAudioFieldRepairsToRawMessages(
+        conversationId,
+        rawStageMessages,
+        normalizedMessagesWithAudioText
       );
       importedAudioMessages += transcriptionStage.importedSuccessfully;
       noiseAudioMessages += transcriptionStage.noise;
@@ -413,8 +419,69 @@ export class KwoledgeIngestionUseCase {
     return this.conversationStructuringService.buildTurns(cleanedMessages);
   }
 
+  private async persistNormalizedAudioFieldRepairsToRawMessages(
+    conversationId: string,
+    rawMessages: RawConversationStageMessage[],
+    normalizedMessages: NormalizedConversationStageMessage[]
+  ): Promise<void> {
+    const rawMessagesByExternalId = new Map(
+      rawMessages.map((rawMessage) => [rawMessage.externalId, rawMessage])
+    );
+
+    for (const normalizedMessage of normalizedMessages) {
+      const rawMessage = rawMessagesByExternalId.get(normalizedMessage.externalId);
+      if (!rawMessage) {
+        continue;
+      }
+
+      const originalAttachment =
+        this.toNullableFieldString(rawMessage.normalizedFields.attachment);
+      const normalizedAttachment =
+        this.toNullableFieldString(normalizedMessage.normalizedFields.attachment);
+      if (!normalizedAttachment || !this.isSupportedAudioAttachment(normalizedAttachment)) {
+        continue;
+      }
+
+      const patch: RawMessageAudioNormalizedFieldsPatch = {};
+      const originalAudioResourceUrl =
+        this.toNullableFieldString(rawMessage.normalizedFields.audioResourceUrl);
+      const normalizedAudioResourceUrl =
+        this.toNullableFieldString(normalizedMessage.normalizedFields.audioResourceUrl);
+      const originalAssetUrl = this.toNullableFieldString(rawMessage.normalizedFields.assetUrl);
+      const normalizedAssetUrl =
+        this.toNullableFieldString(normalizedMessage.normalizedFields.assetUrl);
+
+      if (normalizedAttachment !== originalAttachment) {
+        patch.attachment = normalizedAttachment;
+      }
+
+      if (normalizedAudioResourceUrl && normalizedAudioResourceUrl !== originalAudioResourceUrl) {
+        patch.audioResourceUrl = normalizedAudioResourceUrl;
+      }
+
+      if (normalizedAssetUrl && normalizedAssetUrl !== originalAssetUrl) {
+        patch.assetUrl = normalizedAssetUrl;
+      }
+
+      if (Object.keys(patch).length === 0) {
+        continue;
+      }
+
+      await this.conversationsRepositoryPort.updateRawMessageAudioNormalizedFields(
+        conversationId,
+        normalizedMessage.externalId,
+        patch
+      );
+    }
+  }
+
   private runChunkingStage(structuredTurns: StructuredConversationTurn[]): SemanticConversationChunk[] {
     return this.conversationChunkingService.buildSemanticChunks(structuredTurns);
+  }
+
+  private isSupportedAudioAttachment(attachment: string): boolean {
+    const extension = attachment.split('.').pop()?.toLowerCase();
+    return extension === 'opus' || extension === 'mp3' || extension === 'm2a' || extension === 'm4a';
   }
 
   private async runEmbeddingStage(

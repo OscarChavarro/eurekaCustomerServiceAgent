@@ -98,12 +98,14 @@ export class ConversationMediaNormalizationService {
         continue;
       }
 
-      normalizedFields.audioResourceUrl = candidateUrl;
-      normalizedFields.assetUrl = candidateUrl;
+      const resolvedUrl = probe.responseUrl?.trim() || candidateUrl;
+
+      normalizedFields.audioResourceUrl = resolvedUrl;
+      normalizedFields.assetUrl = resolvedUrl;
 
       const resolvedAttachment = this.resolveAttachmentWithUpdatedAudioExtension(
         attachment,
-        candidateUrl
+        resolvedUrl
       );
       if (resolvedAttachment && resolvedAttachment !== attachment) {
         normalizedFields.attachment = resolvedAttachment;
@@ -114,7 +116,10 @@ export class ConversationMediaNormalizationService {
           ...rawMessage,
           normalizedFields
         },
-        wasNormalized: candidateUrl !== baseAssetUrl,
+        wasNormalized:
+          candidateUrl !== baseAssetUrl ||
+          resolvedUrl !== baseAssetUrl ||
+          normalizedFields.attachment !== attachment,
         wasMissing: false
       };
     }

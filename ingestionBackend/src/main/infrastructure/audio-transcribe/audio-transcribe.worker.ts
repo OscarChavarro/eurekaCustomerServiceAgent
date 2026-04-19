@@ -209,7 +209,7 @@ async function resolveDownloadableAudioUrl(url: string): Promise<string> {
       );
     }
 
-    return candidateUrl;
+    return probe.responseUrl?.trim() || candidateUrl;
   }
 
   const failuresSummary = probeFailures.join(' | ');
@@ -220,7 +220,13 @@ async function resolveDownloadableAudioUrl(url: string): Promise<string> {
 
 async function probeHead(
   url: string
-): Promise<{ ok: boolean; status: number | null; statusText: string | null; error: string | null }> {
+): Promise<{
+  ok: boolean;
+  status: number | null;
+  statusText: string | null;
+  error: string | null;
+  responseUrl: string | null;
+}> {
   try {
     const response = await fetch(url, {
       method: 'HEAD',
@@ -231,14 +237,16 @@ async function probeHead(
       ok: response.ok,
       status: response.status,
       statusText: response.statusText,
-      error: null
+      error: null,
+      responseUrl: response.url || null
     };
   } catch (error) {
     return {
       ok: false,
       status: null,
       statusText: null,
-      error: error instanceof Error ? error.message : String(error)
+      error: error instanceof Error ? error.message : String(error),
+      responseUrl: null
     };
   }
 }
