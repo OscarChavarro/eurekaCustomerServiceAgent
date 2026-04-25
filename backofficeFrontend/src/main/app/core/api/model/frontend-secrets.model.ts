@@ -2,6 +2,9 @@ export interface FrontendSecrets {
   backend: {
     baseUrl: string;
   };
+  contacts: {
+    prospectPreffix: string;
+  };
   contactsBackend: {
     baseUrl: string;
   };

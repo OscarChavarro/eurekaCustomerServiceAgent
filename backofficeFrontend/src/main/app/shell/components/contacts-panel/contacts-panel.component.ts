@@ -25,6 +25,7 @@ import {
   type DeleteContactRequestItem,
   type PatchContactRequest
 } from '../../../core/api/services/contacts-api.service';
+import { FrontendSecretsService } from '../../../core/api/services/frontend-secrets.service';
 import { I18nService } from '../../../core/i18n/services/i18n.service';
 import { I18nStateService } from '../../../core/i18n/services/i18n-state.service';
 import { PhoneCountryI18nService } from '../../../core/i18n/services/phone-country-i18n.service';
@@ -59,6 +60,7 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
 
   private readonly contactsDirectoryStore = inject(ContactsDirectoryStore);
   private readonly contactsApiService = inject(ContactsApiService);
+  private readonly frontendSecretsService = inject(FrontendSecretsService);
   private readonly conversationsApiService = inject(ConversationsApiService);
   private readonly i18nService = inject(I18nService);
   private readonly i18nStateService = inject(I18nStateService);
@@ -1280,7 +1282,8 @@ export class ContactsPanelComponent implements OnInit, OnChanges {
       return false;
     }
 
-    return contactName.trim().startsWith('Prospecto');
+    const prospectPreffix = this.frontendSecretsService.contactsProspectPreffix;
+    return contactName.trim().startsWith(prospectPreffix);
   }
 
   private toConversationEntry(conversationId: string): ConversationComparisonEntry {

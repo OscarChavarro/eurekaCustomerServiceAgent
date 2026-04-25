@@ -4,6 +4,7 @@ import {
   PhonePrefixCacheService,
   type PhonePrefixAreaCacheEntry
 } from '../../core/api/services/phone-prefix-cache.service';
+import { FrontendSecretsService } from '../../core/api/services/frontend-secrets.service';
 import { PhoneCountryI18nService } from '../../core/i18n/services/phone-country-i18n.service';
 import {
   canonicalizePhoneNumber,
@@ -20,14 +21,16 @@ export type RecommendedNameConversationInput = {
 export class RecommendedNesContactNameService {
   private readonly phonePrefixCacheService = inject(PhonePrefixCacheService);
   private readonly phoneCountryI18nService = inject(PhoneCountryI18nService);
+  private readonly frontendSecretsService = inject(FrontendSecretsService);
 
   public async buildRecommendedName(conversation: RecommendedNameConversationInput): Promise<string> {
     const phone = this.resolvePhone(conversation);
     const countryName = await this.resolveCountryNameInSpanish(phone);
     const referenceDate = this.resolveReferenceDate(conversation.firstMessageDate);
     const formattedDate = this.buildFormattedDate(referenceDate);
+    const prospectPreffix = this.frontendSecretsService.contactsProspectPreffix;
 
-    return `Prospecto ${countryName} ${formattedDate}`;
+    return `${prospectPreffix}${countryName} ${formattedDate}`;
   }
 
   private resolvePhone(conversation: RecommendedNameConversationInput): string | null {

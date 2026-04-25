@@ -1764,8 +1764,9 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
 
     const candidateName = conversation.linkedContactName ?? conversation.contactName;
     const normalizedName = typeof candidateName === 'string' ? candidateName.trim() : '';
+    const prospectPreffix = this.frontendSecretsService.contactsProspectPreffix;
 
-    if (normalizedName.startsWith('Prospecto')) {
+    if (normalizedName.startsWith(prospectPreffix)) {
       return 'prospects';
     }
 
@@ -2183,7 +2184,8 @@ export class AppShellChatComponent implements OnInit, OnDestroy {
       return false;
     }
 
-    return contactName.trim().startsWith('Prospecto');
+    const prospectPreffix = this.frontendSecretsService.contactsProspectPreffix;
+    return contactName.trim().startsWith(prospectPreffix);
   }
 
   private resolveConversationFilterContactMetadata(

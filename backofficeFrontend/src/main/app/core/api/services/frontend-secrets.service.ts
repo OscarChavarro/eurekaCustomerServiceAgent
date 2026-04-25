@@ -17,6 +17,9 @@ export class FrontendSecretsService {
     if (!loadedSecrets.backend?.baseUrl?.trim()) {
       throw new Error('Missing backend.baseUrl in secrets.json');
     }
+    if (!loadedSecrets.contacts?.prospectPreffix?.trim()) {
+      throw new Error('Missing contacts.prospectPreffix in secrets.json');
+    }
     if (!loadedSecrets.contactsBackend?.baseUrl?.trim()) {
       throw new Error('Missing contactsBackend.baseUrl in secrets.json');
     }
@@ -33,6 +36,12 @@ export class FrontendSecretsService {
     this.secrets = {
       backend: {
         baseUrl: this.normalizeHttpBaseUrl(loadedSecrets.backend.baseUrl, 'backend.baseUrl')
+      },
+      contacts: {
+        prospectPreffix: this.normalizeProspectPreffix(
+          loadedSecrets.contacts.prospectPreffix,
+          'contacts.prospectPreffix'
+        )
       },
       contactsBackend: {
         baseUrl: this.normalizeHttpBaseUrl(
@@ -77,6 +86,14 @@ export class FrontendSecretsService {
     return this.secrets.contactsBackend.baseUrl;
   }
 
+  public get contactsProspectPreffix(): string {
+    if (!this.secrets) {
+      throw new Error('Frontend secrets not loaded yet.');
+    }
+
+    return this.secrets.contacts.prospectPreffix;
+  }
+
   public get staticAssetsBaseUrl(): string {
     if (!this.secrets) {
       throw new Error('Frontend secrets not loaded yet.');
@@ -110,5 +127,21 @@ export class FrontendSecretsService {
     }
 
     return parsed.toString().replace(/\/+$/, '');
+  }
+
+  private normalizeProspectPreffix(value: string, key: string): string {
+    if (typeof value !== 'string') {
+      throw new Error(`Invalid ${key} in secrets.json. It must be a non-empty string.`);
+    }
+
+    if (value.length === 0) {
+      throw new Error(`Invalid ${key} in secrets.json. It must be a non-empty string.`);
+    }
+
+    if (value.trim().length === 0) {
+      throw new Error(`Invalid ${key} in secrets.json. It must include at least one non-space character.`);
+    }
+
+    return value;
   }
 }
