@@ -16,8 +16,10 @@ export class AuthGoogleController {
     return {
       authorization_url: result.authorizationUrl,
       state: result.state,
+      callback_success_behavior:
+        'When /auth/google/callback succeeds, the backend stores tokenSet in output/google-auth-session.json and also updates secrets.json at googleAuthSession.tokenSet.',
       next_step:
-        'Open authorization_url in a browser, approve access, then Google will call /auth/google/callback. The token set will be stored at output/google-auth-session.json; copy tokenSet into secrets.json (googleAuthSession.tokenSet) for persistent local use.'
+        'Open authorization_url in a browser, approve access, then Google will call /auth/google/callback. On success, tokenSet is persisted to output/google-auth-session.json and automatically synced to secrets.json (googleAuthSession.tokenSet).'
     };
   }
 

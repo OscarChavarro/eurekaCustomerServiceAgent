@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AuthGoogleController } from './adapters/inbound/http/auth-google.controller';
+import { FileSystemGoogleAuthSessionSecretsStoreAdapter } from './adapters/outbound/auth/file-system-google-auth-session-secrets-store.adapter';
 import { ContactsController } from './adapters/inbound/http/contacts.controller';
 import { HealthController } from './adapters/inbound/http/health.controller';
 import { FileSystemGoogleAuthSessionStoreAdapter } from './adapters/outbound/auth/file-system-google-auth-session-store.adapter';
@@ -45,6 +46,10 @@ import { SettingsConfig } from './infrastructure/config/settings/settings.config
     {
       provide: TOKENS.GoogleAuthSessionStorePort,
       useClass: FileSystemGoogleAuthSessionStoreAdapter
+    },
+    {
+      provide: TOKENS.GoogleAuthSessionSecretsStorePort,
+      useClass: FileSystemGoogleAuthSessionSecretsStoreAdapter
     }
   ]
 })
