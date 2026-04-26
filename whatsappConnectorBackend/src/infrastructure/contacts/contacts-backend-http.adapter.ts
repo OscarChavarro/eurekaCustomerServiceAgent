@@ -14,7 +14,6 @@ export class ContactsBackendHttpAdapter implements ContactsBackendPort {
   private readonly baseUrl: string;
   private readonly pageSize: number;
   private readonly requestTimeoutMs: number;
-  private contactsPromise: Promise<ContactEntry[]> | null = null;
 
   constructor(configuration: Configuration) {
     this.baseUrl = configuration.contactsBackendBaseUrl;
@@ -35,11 +34,7 @@ export class ContactsBackendHttpAdapter implements ContactsBackendPort {
   }
 
   async listContacts(): Promise<ContactEntry[]> {
-    if (this.contactsPromise === null) {
-      this.contactsPromise = this.fetchContacts();
-    }
-
-    return this.contactsPromise;
+    return this.fetchContacts();
   }
 
   private async fetchContacts(): Promise<ContactEntry[]> {

@@ -18,6 +18,15 @@ NestJS microservice to connect a WhatsApp account using `@whiskeysockets/baileys
   - `size=small` always returns a JPEG where the max image dimension is 64 pixels.
   - Returns the WhatsApp profile image with the corresponding image mime-type.
   - On error or missing profile image, returns HTTP `404 Not Found`.
+- HTTP endpoint: `GET /updateAllProfileImages`
+  - No query parameters.
+  - Reads all contacts from `contactsBackend` and updates each unique phone profile image.
+  - Always forces remote download from WhatsApp (non-cached mode).
+  - If the fetched original image is byte-identical to the latest cached original image in the phone folder, no new files are written.
+  - If image changed (or no previous image exists), creates:
+    - `<date>.{ext}`
+    - `<date>_small.jpg`
+  - Returns a JSON summary with processed counters.
 - Startup connectivity checks against `contactsBackend`:
   - `GET /health`
   - `GET /contacts`

@@ -38,4 +38,10 @@ export class ProfileImageController {
     response.setHeader('Cache-Control', 'public, max-age=300');
     response.status(200).send(result.image.bytes);
   }
+
+  @Get('updateAllProfileImages')
+  public async updateAllProfileImages(@Res() response: Response): Promise<void> {
+    const result = await this.getProfileImageUseCase.updateAllProfileImages();
+    response.status(200).json(result);
+  }
 }

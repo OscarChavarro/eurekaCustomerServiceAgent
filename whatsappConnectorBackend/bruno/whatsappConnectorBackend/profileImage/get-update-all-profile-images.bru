@@ -1,0 +1,19 @@
+meta {
+  name: Get Update All Profile Images
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/updateAllProfileImages
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+}
+
+vars:pre-request {
+  baseUrl: http://localhost:3670
+}
