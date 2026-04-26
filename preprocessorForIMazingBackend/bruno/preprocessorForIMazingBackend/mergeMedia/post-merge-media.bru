@@ -1,0 +1,28 @@
+meta {
+  name: Merge Media
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/mergeMedia
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "sourceDiffPath": "{{sourceDiffPath}}",
+    "targetMergedPath": "{{targetMergedPath}}"
+  }
+}
+
+vars:pre-request {
+  baseUrl: http://localhost:3671
+  sourceDiffPath: ./output/media_source_diff
+  targetMergedPath: ./output/media_target_merged
+}

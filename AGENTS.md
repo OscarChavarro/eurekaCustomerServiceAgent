@@ -47,6 +47,20 @@ Use it as the default engineering policy unless a task explicitly requires an ex
 - Enforce one-way dependency direction from adapters toward ports/application/domain, never the opposite.
 - For legacy or transitional backends, move incrementally toward explicit ports and smaller use cases when touching existing code.
 
+### Backend Quality Checklist (Mandatory)
+
+- Every backend service must run a startup infrastructure availability preflight before accepting traffic.
+- The preflight must validate each declared dependency using a real connectivity check:
+- For databases (for example MongoDB), attempt connection with configured credentials.
+- For message brokers/queues (for example RabbitMQ), attempt authenticated broker connectivity.
+- For required upstream HTTP microservices, call their `/health` endpoint and require a successful response.
+- If any preflight check fails, startup must be blocked (service must not start listening for normal traffic).
+- On preflight failure, log a clear error message in English with the failed dependency name and failure reason.
+- After logging the failure, keep the process alive for a configurable delay sourced from JSON configuration, then terminate with non-zero exit code.
+- The default failure-delay value must be 15 minutes when configuration is missing or invalid.
+- The delay exists to give DevOps enough time to inspect failing Kubernetes pods before restart loops.
+- Every backend service must expose an HTTP `GET /health` endpoint.
+
 General folder structure is
 ```
 adapters

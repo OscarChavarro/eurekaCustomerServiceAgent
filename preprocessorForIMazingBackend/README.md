@@ -39,6 +39,36 @@ Response:
 }
 ```
 
+### `POST /mergeMedia`
+
+Request body:
+
+```json
+{
+  "sourceDiffPath": "/absolute/or/relative/source-diff-folder",
+  "targetMergedPath": "/absolute/or/relative/target-merged-folder"
+}
+```
+
+Behavior:
+
+1. Ensures `output/` exists (it is created when missing).
+2. Validates both input folders exist. If one is missing, returns `400` with the missing folder path and includes logs/counters in the response body.
+3. Recursively processes every file from `sourceDiffPath`:
+   - Moves file to target when relative path does not exist in target.
+   - Deletes source file when relative path exists in target and both files are binary-equal.
+   - Keeps source file unchanged when relative path exists but files differ.
+4. Writes logs in `output/`:
+   - `moved-files.log`
+   - `pre-existing-files.log`
+   - `conflicting-files.log`
+5. Removes empty directories left under `sourceDiffPath`.
+
+Response body includes:
+
+- `logs` paths for the three log files.
+- `counts` with totals for `moved`, `preExisting`, and `conflicting`.
+
 ## Health endpoint
 
 ### `GET /health`
@@ -113,3 +143,4 @@ It includes:
 
 - `GET /health`
 - `POST /normalizePath`
+- `POST /mergeMedia`

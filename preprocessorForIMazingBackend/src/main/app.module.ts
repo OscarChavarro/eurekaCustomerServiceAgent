@@ -5,6 +5,7 @@ import { ContactsBackendHttpAdapter } from './adapters/outbound/contacts/contact
 import { SimpleCsvParser } from './adapters/outbound/csv/simple-csv-parser.adapter';
 import { NodeFileSystemAdapter } from './adapters/outbound/fs/node-file-system.adapter';
 import { ConsoleLoggerAdapter } from './adapters/outbound/logging/console-logger.adapter';
+import { MergeMediaUseCase } from './application/MergeMediaUseCase';
 import { PreprocessWhatsappExportUseCase } from './application/PreprocessWhatsappExportUseCase';
 import { TOKENS } from './application/ports/tokens';
 import { StartupValidationOrchestrator } from './infrastructure/bootstrap/startup-validation.orchestrator';
@@ -22,6 +23,7 @@ import { SecretsConfig } from './infrastructure/config/settings/secrets.config';
     ContactsBackendConnectivityStartupValidator,
     StartupValidationOrchestrator,
     PreprocessWhatsappExportUseCase,
+    MergeMediaUseCase,
     {
       provide: TOKENS.FileSystemPort,
       useClass: NodeFileSystemAdapter
