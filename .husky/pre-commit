@@ -1,12 +1,27 @@
 #!/bin/sh
 set -e
 
+changed_files="$(git diff --cached --name-only --diff-filter=ACMR)"
+
+has_changes_in_backend() {
+  backend="$1"
+  printf '%s\n' "$changed_files" | grep -q "^${backend}/"
+}
+
 for backend in ingestionBackend backofficeBackend retrievalBackend contactsBackend preprocessorForIMazingBackend whatsappConnectorBackend; do
-  echo "Running arch:check in ${backend}"
-  (cd "$backend" && npm run arch:check)
+  if has_changes_in_backend "$backend"; then
+    echo "Running arch:check in ${backend}"
+    (cd "$backend" && npm run arch:check)
+  else
+    echo "Skipping arch:check in ${backend} (no staged changes)"
+  fi
 done
 
 for backend in ingestionBackend backofficeBackend retrievalBackend preprocessorForIMazingBackend; do
-  echo "Running lint in ${backend}"
-  (cd "$backend" && npm run lint)
+  if has_changes_in_backend "$backend"; then
+    echo "Running lint in ${backend}"
+    (cd "$backend" && npm run lint)
+  else
+    echo "Skipping lint in ${backend} (no staged changes)"
+  fi
 done
