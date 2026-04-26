@@ -38,8 +38,8 @@ export class MergeMediaUseCase {
   ) {}
 
   async execute(sourceDiffPath: string, targetMergedPath: string): Promise<MergeMediaResult> {
-    const resolvedSourceDiffPath = path.resolve(sourceDiffPath);
-    const resolvedTargetMergedPath = path.resolve(targetMergedPath);
+    const resolvedSourceDiffPath = await this.resolveExistingDirectoryPath(sourceDiffPath);
+    const resolvedTargetMergedPath = this.resolveMergeMediaInputPath(targetMergedPath);
     const outputPath = path.resolve(process.cwd(), 'output');
 
     const logs = {
@@ -56,10 +56,7 @@ export class MergeMediaUseCase {
       throw new MergeMediaInputValidationError(resolvedSourceDiffPath);
     }
 
-    const targetExists = await this.fileSystem.exists(resolvedTargetMergedPath);
-    if (!targetExists) {
-      throw new MergeMediaInputValidationError(resolvedTargetMergedPath);
-    }
+    await this.fileSystem.ensureDirectory(resolvedTargetMergedPath);
 
     const sourceFiles = await this.fileSystem.listFilesRecursively(resolvedSourceDiffPath);
     const moved: string[] = [];
@@ -117,8 +114,8 @@ export class MergeMediaUseCase {
     return {
       status: 'error',
       message: `Directory does not exist: ${missingDirectoryPath}`,
-      sourceDiffPath: path.resolve(sourceDiffPath),
-      targetMergedPath: path.resolve(targetMergedPath),
+      sourceDiffPath: this.resolveMergeMediaInputPath(sourceDiffPath),
+      targetMergedPath: this.resolveMergeMediaInputPath(targetMergedPath),
       outputPath,
       logs: {
         movedFilesLog: path.join(outputPath, 'moved-files.log'),
@@ -138,8 +135,8 @@ export class MergeMediaUseCase {
     return {
       status: 'error',
       message: `Unexpected error during merge media process: ${error instanceof Error ? error.message : String(error)}`,
-      sourceDiffPath: path.resolve(sourceDiffPath),
-      targetMergedPath: path.resolve(targetMergedPath),
+      sourceDiffPath: this.resolveMergeMediaInputPath(sourceDiffPath),
+      targetMergedPath: this.resolveMergeMediaInputPath(targetMergedPath),
       outputPath,
       logs: {
         movedFilesLog: path.join(outputPath, 'moved-files.log'),
@@ -163,5 +160,13 @@ export class MergeMediaUseCase {
   private async writeLog(logPath: string, entries: string[]): Promise<void> {
     const content = entries.length === 0 ? 'No files in this group.\n' : `${entries.join('\n')}\n`;
     await this.fileSystem.writeTextFile(logPath, content);
+  }
+
+  private resolveMergeMediaInputPath(inputPath: string): string {
+    return inputPath.trim();
+  }
+
+  private async resolveExistingDirectoryPath(inputPath: string): Promise<string> {
+    return this.resolveMergeMediaInputPath(inputPath);
   }
 }
