@@ -54,7 +54,7 @@ class ApplicationBootstrap {
     }
 
     await app.listen(serviceConfig.port);
-    this.logger.log(`contactsBackend listening on port ${serviceConfig.port}`);
+    this.logger.log(`contactsBackend is listening on TCP port ${serviceConfig.port}.`);
   }
 }
 

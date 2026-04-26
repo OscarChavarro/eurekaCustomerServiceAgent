@@ -154,7 +154,7 @@ async function bootstrap(): Promise<void> {
   await app.listen(configuration.serviceHttpPort, '0.0.0.0');
 
   Logger.log(
-    `${configuration.serviceStartupLogPrefix}: bootstrapped. HTTP listening on ${configuration.serviceHttpPort} and waiting for WhatsApp messages.`,
+    `whatsappConnectorBackend is listening on TCP port ${configuration.serviceHttpPort}.`,
     'Bootstrap'
   );
 }

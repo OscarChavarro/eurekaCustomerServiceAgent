@@ -49,6 +49,7 @@ class ApplicationBootstrap {
     }
 
     await app.listen(serviceConfig.port);
+    this.logger.log(`backofficeBackend is listening on TCP port ${serviceConfig.port}.`);
   }
 
   private async delay(ms: number): Promise<void> {

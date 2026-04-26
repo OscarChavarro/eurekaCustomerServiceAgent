@@ -48,7 +48,7 @@ class ApplicationBootstrap {
     }
 
     await app.listen(serviceConfig.port);
-    this.logger.log(`retrievalBackend listening on port ${serviceConfig.port}`);
+    this.logger.log(`retrievalBackend is listening on TCP port ${serviceConfig.port}.`);
   }
 
   private isAllowedOrigin(origin: string | undefined, serviceConfig: ServiceConfig): boolean {
