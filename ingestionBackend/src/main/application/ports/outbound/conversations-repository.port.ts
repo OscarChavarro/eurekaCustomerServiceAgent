@@ -75,6 +75,21 @@ export type ConversationMetadata = {
   lastMessageText: string | null;
 };
 
+export type ConversationSnapshot = {
+  conversationId: string;
+  sourceFile: string;
+  filePattern: string | null;
+  contactName: string | null;
+  firstMessageDate: string | null;
+  lastMessageDate: string | null;
+  lastMessageText: string | null;
+  rawMessages: RawConversationStageMessage[];
+  normalizedMessages: NormalizedConversationStageMessage[];
+  cleanedMessages: CleanedConversationStageMessage[];
+  structuredMessages: StructuredConversationStageMessage[];
+  chunkedMessages: ChunkedConversationStageMessage[];
+};
+
 export interface ConversationsRepositoryPort {
   upsertRawMessages(
     conversationId: string,
@@ -107,6 +122,7 @@ export interface ConversationsRepositoryPort {
     rawMessageExternalId: string,
     patch: RawMessageAudioNormalizedFieldsPatch
   ): Promise<void>;
+  findConversationSnapshot(conversationId: string): Promise<ConversationSnapshot | null>;
   updateConversationFilePattern(conversationId: string, filePattern: string): Promise<void>;
   findRawMessagesWithAudioAttachment(): Promise<RawConversationAudioMessage[]>;
   findRawMessagesWithAudioAttachmentFromConversationsWithAudioDetails(): Promise<

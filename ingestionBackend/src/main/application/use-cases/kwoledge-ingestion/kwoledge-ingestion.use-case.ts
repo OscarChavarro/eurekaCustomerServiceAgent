@@ -118,6 +118,13 @@ type ProcessedConversationStages = {
   embed: EmbedStageMessage[];
 };
 
+type RawConversationMergeResult = {
+  messages: RawConversationStageMessage[];
+  newMessages: number;
+  orderBroken: boolean;
+  requiresRebuild: boolean;
+};
+
 @Injectable()
 export class KwoledgeIngestionUseCase {
   private readonly logger = new Logger(KwoledgeIngestionUseCase.name);
@@ -149,7 +156,6 @@ export class KwoledgeIngestionUseCase {
 
   public async execute(command: KwoledgeIngestionCommand): Promise<KwoledgeIngestionResult> {
     await this.failedAudioResourceLogPort.resetLog();
-    await this.vectorStorePort.clearCollection();
     const rawMessages = await this.loadRawMessages(command.folderPath);
     const rawByConversation = this.groupByConversationId(rawMessages, (message) => message.conversationId);
     const orderedConversationIds = Array.from(rawByConversation.keys()).sort((left, right) =>
@@ -164,48 +170,95 @@ export class KwoledgeIngestionUseCase {
     let skippedMessages = 0;
     let importedAudioMessages = 0;
     let noiseAudioMessages = 0;
+    let processedConversations = 0;
 
     for (const [index, conversationId] of orderedConversationIds.entries()) {
       const currentPosition = index + 1;
-      const conversationRawMessages = rawByConversation.get(conversationId) ?? [];
-      const conversationMetadata = this.buildConversationMetadata(conversationRawMessages);
-
-      const rawStageMessages = conversationRawMessages.map((message) =>
+      const incomingRawMessages = rawByConversation.get(conversationId) ?? [];
+      const incomingRawStageMessages = incomingRawMessages.map((message) =>
         this.toRepositoryRawStageMessage(message)
       );
+      const existingSnapshot =
+        await this.conversationsRepositoryPort.findConversationSnapshot(conversationId);
+      const mergeResult = this.mergeRawConversationMessages(
+        conversationId,
+        existingSnapshot?.rawMessages ?? [],
+        incomingRawStageMessages
+      );
+      const mergedRawStageMessages = mergeResult.messages;
+      const sourceRawMessages = this.buildSourceRawMessagesForMergedConversation(
+        conversationId,
+        incomingRawMessages,
+        mergedRawStageMessages,
+        existingSnapshot?.sourceFile ?? incomingRawMessages[0]?.sourceFile ?? 'unknown',
+        existingSnapshot?.filePattern ?? this.resolveConversationFilePattern(incomingRawMessages),
+        existingSnapshot?.contactName ?? this.resolveConversationContactName(incomingRawMessages)
+      );
+      const conversationMetadata = this.buildConversationMetadata(sourceRawMessages);
+
       await this.conversationsRepositoryPort.upsertRawMessages(
         conversationId,
-        rawStageMessages,
+        mergedRawStageMessages,
         conversationMetadata
       );
-      this.logConversationPhase(currentPosition, totalConversations, conversationId, 'raw');
+      this.logConversationPhase(
+        currentPosition,
+        totalConversations,
+        conversationId,
+        `raw (new=${mergeResult.newMessages}, merged=${mergedRawStageMessages.length}, orderBroken=${mergeResult.orderBroken ? 'yes' : 'no'})`
+      );
+
+      if (!mergeResult.requiresRebuild) {
+        this.logConversationPhase(
+          currentPosition,
+          totalConversations,
+          conversationId,
+          'skip (no changes detected)'
+        );
+        continue;
+      }
+      processedConversations += 1;
 
       const normalizedStage = await this.runNormalizationStage(
         conversationId,
-        rawStageMessages
+        mergedRawStageMessages
+      );
+      const normalizedMessagesWithRecoveredAudioDetails =
+        this.applyExistingAudioDetailsToNormalizedMessages(
+          normalizedStage.messages,
+          mergedRawStageMessages
+        );
+      const pendingAudioTranscriptionCandidates = this.toRawAudioTranscriptionCandidates(
+        conversationId,
+        normalizedMessagesWithRecoveredAudioDetails.filter(
+          (normalizedMessage) => normalizedMessage.audioDetails === undefined
+        ),
+        conversationMetadata.filePattern
       );
       const transcriptionStage =
         await this.rawAudioTranscriptionOrchestratorService.processManyBlockingDetailed(
-          this.toRawAudioTranscriptionCandidates(
-            conversationId,
-            normalizedStage.messages,
-            conversationMetadata.filePattern
-          )
+          pendingAudioTranscriptionCandidates
         );
+      const preservedAudioProcessedMessages = normalizedMessagesWithRecoveredAudioDetails
+        .filter((normalizedMessage) => normalizedMessage.audioDetails !== undefined)
+        .map((normalizedMessage) => ({
+          rawMessageExternalId: normalizedMessage.externalId,
+          audioDetails: normalizedMessage.audioDetails as RawConversationAudioDetails
+        }));
       const normalizedMessagesWithAudioText = this.applyAudioTranscriptionsToNormalizedMessages(
-        normalizedStage.messages,
-        transcriptionStage.processed
+        normalizedMessagesWithRecoveredAudioDetails,
+        [...preservedAudioProcessedMessages, ...transcriptionStage.processed]
       );
       await this.persistNormalizedAudioFieldRepairsToRawMessages(
         conversationId,
-        rawStageMessages,
+        mergedRawStageMessages,
         normalizedMessagesWithAudioText
       );
       importedAudioMessages += transcriptionStage.importedSuccessfully;
       noiseAudioMessages += transcriptionStage.noise;
       const normalizedPipelineMessages = this.toPipelineRawMessages(
         conversationId,
-        conversationRawMessages,
+        sourceRawMessages,
         normalizedMessagesWithAudioText
       );
       const conversationCleanedMessages = this.runCleaningStage(normalizedPipelineMessages);
@@ -245,13 +298,18 @@ export class KwoledgeIngestionUseCase {
       );
       this.logConversationPhase(currentPosition, totalConversations, conversationId, 'chunk');
 
+      const existingEmbeddings =
+        await this.embeddingsRepositoryPort.findEmbeddingsByConversationId(conversationId);
       const conversationEmbeddedChunks = await this.runEmbeddingStage(
         normalizedPipelineMessages,
-        conversationSemanticChunks
+        conversationSemanticChunks,
+        existingEmbeddings
       );
+      await this.embeddingsRepositoryPort.deleteEmbeddingsByConversationId(conversationId);
       await this.persistEmbeddings(conversationEmbeddedChunks);
       this.logConversationPhase(currentPosition, totalConversations, conversationId, 'embed');
 
+      await this.vectorStorePort.deletePointsByConversationId(conversationId);
       const indexedChunks = await this.runStorageStage(conversationEmbeddedChunks);
       totalIndexedChunks += indexedChunks;
       this.logConversationPhase(
@@ -263,7 +321,7 @@ export class KwoledgeIngestionUseCase {
 
       await this.persistProcessedConversation(
         conversationId,
-        conversationRawMessages,
+        sourceRawMessages,
         normalizedMessagesWithAudioText,
         conversationCleanedMessages,
         conversationStructuredTurns,
@@ -272,7 +330,7 @@ export class KwoledgeIngestionUseCase {
       );
     }
 
-    if (allSemanticChunks.length === 0) {
+    if (processedConversations > 0 && allSemanticChunks.length === 0) {
       this.logger.warn(`No semantic chunks found in folder ${command.folderPath}.`);
     }
 
@@ -316,6 +374,122 @@ export class KwoledgeIngestionUseCase {
       conversationId,
       rawStageMessages
     );
+  }
+
+  private buildSourceRawMessagesForMergedConversation(
+    conversationId: string,
+    incomingRawMessages: RawConversationMessage[],
+    mergedRawStageMessages: RawConversationStageMessage[],
+    fallbackSourceFile: string,
+    filePattern: string | null,
+    contactName: string | null
+  ): RawConversationMessage[] {
+    const incomingByExternalId = new Map(
+      incomingRawMessages.map((incomingRawMessage) => [incomingRawMessage.externalId, incomingRawMessage])
+    );
+
+    return mergedRawStageMessages.map((mergedRawStageMessage) => {
+      const incomingRawMessage = incomingByExternalId.get(mergedRawStageMessage.externalId);
+      if (incomingRawMessage) {
+        return incomingRawMessage;
+      }
+
+      const parsedSentAt =
+        mergedRawStageMessage.sentAt !== null ? new Date(mergedRawStageMessage.sentAt) : null;
+      const hasValidSentAt = parsedSentAt !== null && !Number.isNaN(parsedSentAt.getTime());
+
+      return new RawConversationMessage(
+        conversationId,
+        contactName,
+        mergedRawStageMessage.externalId,
+        hasValidSentAt ? parsedSentAt : null,
+        mergedRawStageMessage.sender,
+        mergedRawStageMessage.text,
+        fallbackSourceFile,
+        filePattern,
+        mergedRawStageMessage.rowNumber,
+        this.toMessageDirection(mergedRawStageMessage.direction),
+        this.toNormalizedConversationCsvFields(mergedRawStageMessage.normalizedFields)
+      );
+    });
+  }
+
+  private mergeRawConversationMessages(
+    conversationId: string,
+    existingMessages: RawConversationStageMessage[],
+    incomingMessages: RawConversationStageMessage[]
+  ): RawConversationMergeResult {
+    if (existingMessages.length === 0) {
+      return {
+        messages: incomingMessages,
+        newMessages: incomingMessages.length,
+        orderBroken: false,
+        requiresRebuild: incomingMessages.length > 0
+      };
+    }
+
+    if (incomingMessages.length === 0) {
+      return {
+        messages: existingMessages,
+        newMessages: 0,
+        orderBroken: false,
+        requiresRebuild: false
+      };
+    }
+
+    const mergedMessages: RawConversationStageMessage[] = [...existingMessages];
+    let existingCursor = 0;
+    let newMessages = 0;
+    let orderBroken = false;
+
+    for (const incomingMessage of incomingMessages) {
+      const equivalentIndex = this.findEquivalentRawMessageIndex(
+        existingMessages,
+        incomingMessage,
+        existingCursor
+      );
+
+      if (equivalentIndex !== -1) {
+        existingCursor = equivalentIndex + 1;
+        continue;
+      }
+
+      newMessages += 1;
+      if (existingCursor < existingMessages.length) {
+        orderBroken = true;
+      }
+
+      mergedMessages.push(
+        this.ensureUniqueExternalId(conversationId, incomingMessage, mergedMessages)
+      );
+    }
+
+    const sortedMergedMessages = this.sortRawStageMessages(mergedMessages);
+    const requiresRebuild = newMessages > 0 || orderBroken;
+
+    return {
+      messages: sortedMergedMessages,
+      newMessages,
+      orderBroken,
+      requiresRebuild
+    };
+  }
+
+  private applyExistingAudioDetailsToNormalizedMessages(
+    normalizedMessages: NormalizedConversationStageMessage[],
+    rawMessages: RawConversationStageMessage[]
+  ): NormalizedConversationStageMessage[] {
+    const audioDetailsByExternalId = new Map(
+      rawMessages
+        .filter((rawMessage) => rawMessage.audioDetails !== undefined)
+        .map((rawMessage) => [rawMessage.externalId, rawMessage.audioDetails as RawConversationAudioDetails])
+    );
+
+    return normalizedMessages.map((normalizedMessage) => ({
+      ...normalizedMessage,
+      audioDetails:
+        normalizedMessage.audioDetails ?? audioDetailsByExternalId.get(normalizedMessage.externalId)
+    }));
   }
 
   private applyAudioTranscriptionsToNormalizedMessages(
@@ -486,18 +660,27 @@ export class KwoledgeIngestionUseCase {
 
   private async runEmbeddingStage(
     rawMessages: RawConversationMessage[],
-    semanticChunks: SemanticConversationChunk[]
+    semanticChunks: SemanticConversationChunk[],
+    existingEmbeddings: EmbeddingRepositoryRecord[]
   ): Promise<EmbeddedChunk[]> {
     if (semanticChunks.length === 0) {
       return [];
     }
 
     const rawMessagesByExternalId = this.buildRawMessagesIndex(rawMessages);
+    const existingEmbeddingByChunkId = new Map<string, EmbeddingRepositoryRecord>();
+    for (const existingEmbedding of existingEmbeddings) {
+      if (!existingEmbeddingByChunkId.has(existingEmbedding.chunkId)) {
+        existingEmbeddingByChunkId.set(existingEmbedding.chunkId, existingEmbedding);
+      }
+    }
     const embeddedChunks: EmbeddedChunk[] = [];
 
     for (const [chunkIndex, chunk] of semanticChunks.entries()) {
       const payload = this.buildEmbeddingPayload(chunk, rawMessagesByExternalId);
-      const vector = await this.embeddingPort.generateEmbedding(payload.chunkMessage);
+      const existingEmbedding = existingEmbeddingByChunkId.get(chunk.chunkId);
+      const vector =
+        existingEmbedding?.vector ?? (await this.embeddingPort.generateEmbedding(payload.chunkMessage));
       embeddedChunks.push({
         semanticChunk: chunk,
         chunkIndex,
@@ -974,6 +1157,132 @@ export class KwoledgeIngestionUseCase {
     }
 
     return MessageDirection.Unknown;
+  }
+
+  private findEquivalentRawMessageIndex(
+    existingMessages: RawConversationStageMessage[],
+    incomingMessage: RawConversationStageMessage,
+    startIndex: number
+  ): number {
+    for (let index = startIndex; index < existingMessages.length; index += 1) {
+      if (this.areEquivalentRawMessages(existingMessages[index], incomingMessage)) {
+        return index;
+      }
+    }
+
+    return -1;
+  }
+
+  private areEquivalentRawMessages(
+    left: RawConversationStageMessage,
+    right: RawConversationStageMessage
+  ): boolean {
+    if (left.externalId === right.externalId) {
+      return true;
+    }
+
+    const leftSentAt = this.normalizeRawMessageDate(left.sentAt);
+    const rightSentAt = this.normalizeRawMessageDate(right.sentAt);
+    const leftSender = this.normalizeRawMessageValue(left.sender);
+    const rightSender = this.normalizeRawMessageValue(right.sender);
+    const leftText = this.normalizeRawMessageValue(left.text);
+    const rightText = this.normalizeRawMessageValue(right.text);
+    const leftAttachment = this.normalizeRawMessageValue(left.normalizedFields.attachment);
+    const rightAttachment = this.normalizeRawMessageValue(right.normalizedFields.attachment);
+    const leftAttachmentType = this.normalizeRawMessageValue(left.normalizedFields.attachmentType);
+    const rightAttachmentType = this.normalizeRawMessageValue(right.normalizedFields.attachmentType);
+
+    return (
+      leftSentAt === rightSentAt &&
+      left.direction === right.direction &&
+      leftSender === rightSender &&
+      leftText === rightText &&
+      leftAttachment === rightAttachment &&
+      leftAttachmentType === rightAttachmentType
+    );
+  }
+
+  private ensureUniqueExternalId(
+    conversationId: string,
+    incomingMessage: RawConversationStageMessage,
+    currentMessages: RawConversationStageMessage[]
+  ): RawConversationStageMessage {
+    const externalIds = new Set(currentMessages.map((message) => message.externalId));
+    if (!externalIds.has(incomingMessage.externalId)) {
+      return incomingMessage;
+    }
+
+    const messageFingerprint = [
+      this.normalizeRawMessageDate(incomingMessage.sentAt),
+      incomingMessage.direction,
+      this.normalizeRawMessageValue(incomingMessage.sender),
+      this.normalizeRawMessageValue(incomingMessage.text),
+      this.normalizeRawMessageValue(incomingMessage.normalizedFields.attachment),
+      String(incomingMessage.rowNumber)
+    ].join('|');
+
+    const baseHash = createHash('sha256')
+      .update(`${conversationId}|${messageFingerprint}`)
+      .digest('hex')
+      .slice(0, 12);
+
+    let candidateExternalId = `${conversationId}-merged-${baseHash}`;
+    let collisionIndex = 1;
+
+    while (externalIds.has(candidateExternalId)) {
+      candidateExternalId = `${conversationId}-merged-${baseHash}-${collisionIndex}`;
+      collisionIndex += 1;
+    }
+
+    return {
+      ...incomingMessage,
+      externalId: candidateExternalId
+    };
+  }
+
+  private sortRawStageMessages(
+    rawMessages: RawConversationStageMessage[]
+  ): RawConversationStageMessage[] {
+    return [...rawMessages].sort((left, right) => {
+      const leftTime = left.sentAt ? new Date(left.sentAt).getTime() : Number.MAX_SAFE_INTEGER;
+      const rightTime = right.sentAt ? new Date(right.sentAt).getTime() : Number.MAX_SAFE_INTEGER;
+
+      if (leftTime !== rightTime) {
+        return leftTime - rightTime;
+      }
+
+      if (left.rowNumber !== right.rowNumber) {
+        return left.rowNumber - right.rowNumber;
+      }
+
+      return left.externalId.localeCompare(right.externalId);
+    });
+  }
+
+  private normalizeRawMessageDate(value: string | null): string {
+    if (!value) {
+      return '';
+    }
+
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      return value.trim().toLowerCase();
+    }
+
+    return parsed.toISOString();
+  }
+
+  private normalizeRawMessageValue(value: unknown): string {
+    if (typeof value !== 'string') {
+      return '';
+    }
+
+    return value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
   }
 
   private buildMessagesBreakdown(

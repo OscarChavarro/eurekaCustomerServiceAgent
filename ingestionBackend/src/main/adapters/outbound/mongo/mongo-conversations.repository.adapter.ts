@@ -3,6 +3,7 @@ import type {
   ChunkedConversationStageMessage,
   CleanedConversationStageMessage,
   ConversationMetadata,
+  ConversationSnapshot,
   ConversationsRepositoryPort,
   NormalizedConversationStageMessage,
   RawConversationAudioDetails,
@@ -276,6 +277,37 @@ export class MongoConversationsRepositoryAdapter implements ConversationsReposit
         }
       }
     );
+  }
+
+  public async findConversationSnapshot(
+    conversationId: string
+  ): Promise<ConversationSnapshot | null> {
+    const collection =
+      await this.mongoClientProvider.getConversationsCollection<MongoConversationDocument>();
+
+    const document = await collection.findOne({ _id: conversationId });
+    if (!document) {
+      return null;
+    }
+
+    return {
+      conversationId: document._id,
+      sourceFile: document.sourceFile,
+      filePattern: document.filePattern ?? null,
+      contactName: document.contactName ?? null,
+      firstMessageDate: document.firstMessageDate ?? null,
+      lastMessageDate: document.lastMessageDate ?? null,
+      lastMessageText: document.lastMessageText ?? null,
+      rawMessages: Array.isArray(document.rawMessages) ? document.rawMessages : [],
+      normalizedMessages: Array.isArray(document.normalizedMessages)
+        ? document.normalizedMessages
+        : [],
+      cleanedMessages: Array.isArray(document.cleanedMessages) ? document.cleanedMessages : [],
+      structuredMessages: Array.isArray(document.structuredMessages)
+        ? document.structuredMessages
+        : [],
+      chunkedMessages: Array.isArray(document.chunkedMessages) ? document.chunkedMessages : []
+    };
   }
 
   public async updateRawMessageAudioNormalizedFields(

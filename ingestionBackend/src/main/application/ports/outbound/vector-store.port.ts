@@ -6,6 +6,7 @@ export interface VectorPoint {
 
 export interface VectorStorePort {
   clearCollection(): Promise<void>;
+  deletePointsByConversationId(conversationId: string): Promise<void>;
   ensureCollection(dimension: number): Promise<void>;
   upsert(points: VectorPoint[]): Promise<void>;
 }

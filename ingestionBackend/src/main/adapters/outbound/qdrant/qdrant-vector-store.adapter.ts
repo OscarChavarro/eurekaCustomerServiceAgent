@@ -31,6 +31,29 @@ export class QdrantVectorStoreAdapter implements VectorStorePort {
     });
   }
 
+  public async deletePointsByConversationId(conversationId: string): Promise<void> {
+    const trimmedConversationId = conversationId.trim();
+    if (!trimmedConversationId) {
+      return;
+    }
+
+    const url = `${this.baseUrl}/collections/${this.serviceConfig.qdrantCollectionName}/points/delete?wait=true`;
+
+    await this.request(url, {
+      method: 'POST',
+      body: JSON.stringify({
+        filter: {
+          must: [
+            {
+              key: 'conversationId',
+              match: { value: trimmedConversationId }
+            }
+          ]
+        }
+      })
+    });
+  }
+
   public async ensureCollection(dimension: number): Promise<void> {
     const url = `${this.baseUrl}/collections/${this.serviceConfig.qdrantCollectionName}`;
     const collectionResponse = await this.request(url, { method: 'GET' }, { allowNotFound: true });

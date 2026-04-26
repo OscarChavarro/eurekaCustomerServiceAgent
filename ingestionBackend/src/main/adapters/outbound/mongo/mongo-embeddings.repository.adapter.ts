@@ -47,6 +47,32 @@ export class MongoEmbeddingsRepositoryAdapter implements EmbeddingsRepositoryPor
     );
   }
 
+  public async findEmbeddingsByConversationId(
+    conversationId: string
+  ): Promise<EmbeddingRepositoryRecord[]> {
+    const collection =
+      await this.mongoClientProvider.getEmbeddingsCollection<MongoEmbeddingDocument>();
+
+    const documents = await collection.find({ conversationId }).sort({ chunkIndex: 1 }).toArray();
+
+    return documents.map((document) => ({
+      embeddingId: document._id,
+      conversationId: document.conversationId,
+      chunkIndex: document.chunkIndex,
+      chunkId: document.chunkId,
+      text: document.text,
+      vector: document.vector,
+      createdAt: document.createdAt
+    }));
+  }
+
+  public async deleteEmbeddingsByConversationId(conversationId: string): Promise<number> {
+    const collection =
+      await this.mongoClientProvider.getEmbeddingsCollection<MongoEmbeddingDocument>();
+    const result = await collection.deleteMany({ conversationId });
+    return result.deletedCount ?? 0;
+  }
+
   public async deleteAllEmbeddings(): Promise<number> {
     const collection =
       await this.mongoClientProvider.getEmbeddingsCollection<MongoEmbeddingDocument>();
