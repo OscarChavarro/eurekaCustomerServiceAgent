@@ -1,32 +1,26 @@
-export enum CustomerStage {
-  UNDEFINED = 'UNDEFINED',
-  NEW_LEAD = 'NEW_LEAD',
-  ASKING_INFO = 'ASKING_INFO',
-  PRICE_CHECK = 'PRICE_CHECK',
-  READY_TO_BUY = 'READY_TO_BUY',
-  WAITING_PAYMENT = 'WAITING_PAYMENT',
-  WAITING_PHOTO = 'WAITING_PHOTO',
-  MOCKUP_SENT = 'MOCKUP_SENT',
-  WAITING_APPROVAL = 'WAITING_APPROVAL',
-  IN_PRODUCTION = 'IN_PRODUCTION',
-  SHIPPED = 'SHIPPED',
-  DELIVERED = 'DELIVERED',
-  POST_DELIVERY = 'POST_DELIVERY',
-  SUPPORT_ISSUE = 'SUPPORT_ISSUE'
-}
-
-export type PreviousConversationStage = {
-  stage: CustomerStage;
-  changedAt: string;
-  rawMessageIds: string[];
-};
+import type {
+  ConversationMessageEvidence,
+  LlmStageClassificationResult,
+  SemanticProbeMatch
+} from '../../../domain/conversation-stage/conversation-stage-inference.types';
+import type { ConversationStage } from '../../../domain/conversation-stage/conversation-stage.types';
 
 export type GetConversationStageCommand = {
   conversationId: string;
+  forceRefresh: boolean;
 };
 
-export type GetConversationStageResult = {
-  conversationId: string;
-  currentStage: CustomerStage;
-  previousStage: PreviousConversationStage[];
+export type GetConversationStageResult = ConversationStage;
+
+export type GetConversationStageDebugResult = {
+  stage: ConversationStage;
+  debug: {
+    refreshed: boolean;
+    cacheExpired: boolean;
+    messagesCount: number;
+    messagesSample: ConversationMessageEvidence[];
+    deterministicSignals: string[];
+    semanticMatches: SemanticProbeMatch[];
+    llmClassification: LlmStageClassificationResult | null;
+  };
 };

@@ -37,6 +37,16 @@ export type CorsConfig = {
   allowedNetworkCidr?: string;
 };
 
+export type InferenceConfig = {
+  maxMessagesPerConversation: number;
+  semanticProbeTopK: number;
+  semanticMinScore: number;
+  llmModel: string;
+  recomputeTtlMinutes: number;
+  allowLlmFallbackOnLowSignal: boolean;
+  salesCodePrefixes: string[];
+};
+
 @Injectable()
 export class ServiceConfig {
   constructor(
@@ -120,6 +130,18 @@ export class ServiceConfig {
     return {
       allowedOrigins: this.secretsConfig.values.cors.allowedOrigins.map((origin) => origin.trim()),
       allowedNetworkCidr: this.secretsConfig.values.cors.allowedNetworkCidr?.trim()
+    };
+  }
+
+  public get inferenceConfig(): InferenceConfig {
+    return {
+      maxMessagesPerConversation: this.settingsConfig.values.inference.maxMessagesPerConversation,
+      semanticProbeTopK: this.settingsConfig.values.inference.semanticProbeTopK,
+      semanticMinScore: this.settingsConfig.values.inference.semanticMinScore,
+      llmModel: process.env.LLM_MODEL?.trim() || this.settingsConfig.values.inference.llmModel,
+      recomputeTtlMinutes: this.settingsConfig.values.inference.recomputeTtlMinutes,
+      allowLlmFallbackOnLowSignal: this.settingsConfig.values.inference.allowLlmFallbackOnLowSignal,
+      salesCodePrefixes: this.settingsConfig.values.inference.salesCodePrefixes.map((item) => item.trim())
     };
   }
 

@@ -1,11 +1,11 @@
 meta {
-  name: Get Conversation Stage
+  name: Get Conversation Stage Debug
   type: http
-  seq: 1
+  seq: 2
 }
 
 get {
-  url: {{baseUrl}}/conversationStage?conversationId={{conversationId}}&forceRefresh={{forceRefresh}}
+  url: {{baseUrl}}/conversationStage/debug?conversationId={{conversationId}}&forceRefresh={{forceRefresh}}
   body: none
   auth: none
 }
@@ -17,5 +17,5 @@ headers {
 vars:pre-request {
   baseUrl: http://localhost:3672
   conversationId: 34611912345
-  forceRefresh: false
+  forceRefresh: true
 }
