@@ -1,0 +1,20 @@
+meta {
+  name: Get Conversation Stage
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/conversationStage?conversationId={{conversationId}}
+  body: none
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+vars:pre-request {
+  baseUrl: http://localhost:3672
+  conversationId: 34611912345
+}

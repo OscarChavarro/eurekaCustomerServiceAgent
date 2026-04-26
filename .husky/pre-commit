@@ -8,20 +8,29 @@ has_changes_in_backend() {
   printf '%s\n' "$changed_files" | grep -q "^${backend}/"
 }
 
-for backend in ingestionBackend backofficeBackend retrievalBackend contactsBackend preprocessorForIMazingBackend whatsappConnectorBackend; do
-  if has_changes_in_backend "$backend"; then
-    echo "Running arch:check in ${backend}"
-    (cd "$backend" && npm run arch:check)
-  else
-    echo "Skipping arch:check in ${backend} (no staged changes)"
-  fi
-done
+has_npm_script() {
+  backend="$1"
+  script_name="$2"
+  node -e "const p=require('./${backend}/package.json'); process.exit(p.scripts && p.scripts['${script_name}'] ? 0 : 1)"
+}
 
-for backend in ingestionBackend backofficeBackend retrievalBackend preprocessorForIMazingBackend; do
+run_script_if_applicable() {
+  backend="$1"
+  script_name="$2"
+
   if has_changes_in_backend "$backend"; then
-    echo "Running lint in ${backend}"
-    (cd "$backend" && npm run lint)
+    if has_npm_script "$backend" "$script_name"; then
+      echo "Running ${script_name} in ${backend}"
+      (cd "$backend" && npm run "$script_name")
+    else
+      echo "Skipping ${script_name} in ${backend} (script not defined)"
+    fi
   else
-    echo "Skipping lint in ${backend} (no staged changes)"
+    echo "Skipping ${script_name} in ${backend} (no staged changes)"
   fi
+}
+
+for backend in ingestionBackend backofficeBackend retrievalBackend contactsBackend preprocessorForIMazingBackend whatsappConnectorBackend conversationIntelligenceBackend; do
+  run_script_if_applicable "$backend" arch:check
+  run_script_if_applicable "$backend" lint
 done

@@ -1,24 +1,19 @@
-# Eureka Customer Service Agent
+# Eury Customer Service Agent
 
-This project is focused on building a customer-service knowledge and operations platform based on WhatsApp conversations.
+Eury turns WhatsApp conversation history into an auditable customer-service intelligence loop: it ingests and cleans chats (including audio and media), distills them into searchable knowledge for context-aware assistant replies, and gives operations teams tools to review conversations, rate response quality, manage contacts, and keep WhatsApp profile data synchronized.
 
-## Initial Idea
+## Business Flows
 
-The initial scope is to process WhatsApp conversation exports (CSV files generated with iMazing), transform them into structured knowledge, and prepare them for semantic search using vector storage.
+This platform is organized as complementary business flows, each owned by a dedicated service boundary.
 
-High-level ingestion flow:
+1. Conversation ingestion flow (`ingestionBackend`):
+   `CSV -> preprocess -> parse -> clean -> normalize -> structure -> chunk -> embed -> store`
 
-`CSV -> parse -> clean -> structure -> chunk -> embed -> store`
+2. Conversation intelligence flow (`conversationIntelligenceBackend`):
+   `conversation -> sentiment -> intent -> lifecycle_stage`
 
-This foundation is intended to support future customer-service workflows such as faster context retrieval, conversation understanding, and operational analytics.
-
-## Project Components
-
-The repository is organized to evolve into multiple services and applications over time. The first implemented component is the ingestion service.
-
-For its setup and usage, see:
-
-- [ingestionBackend README](./ingestionBackend/README.md)
+3. Assisted customer-chat flow:
+   an operational copilot helps the customer-service team answer WhatsApp prospects and customers with automatic responses, and escalates to a human agent when the situation requires direct human handling, keeping automation useful without making the interaction feel robotic.
 
 ## Architecture
 
