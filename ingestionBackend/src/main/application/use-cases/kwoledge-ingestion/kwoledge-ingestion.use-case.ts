@@ -1,5 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { createHash } from 'node:crypto';
+import { appendFile, mkdir, writeFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import type { ConversationCsvSourcePort } from '../../ports/inbound/conversation-csv-source.port';
 import type {
   ConversationsRepositoryPort,
@@ -121,6 +123,7 @@ type ProcessedConversationStages = {
 type RawConversationMergeResult = {
   messages: RawConversationStageMessage[];
   newMessages: number;
+  firstNewMessageExternalId: string | null;
   orderBroken: boolean;
   requiresRebuild: boolean;
 };
@@ -130,6 +133,15 @@ export class KwoledgeIngestionUseCase {
   private readonly logger = new Logger(KwoledgeIngestionUseCase.name);
   private static readonly COMPLETION_BANNER =
     '========================= INGESTION PROCESS COMPLETED ==========================';
+  private static readonly OUTPUT_DIRECTORY = resolve(process.cwd(), 'output');
+  private static readonly UNCHANGED_LOG_PATH = resolve(
+    KwoledgeIngestionUseCase.OUTPUT_DIRECTORY,
+    'unchanged.log'
+  );
+  private static readonly UPDATED_LOG_PATH = resolve(
+    KwoledgeIngestionUseCase.OUTPUT_DIRECTORY,
+    'updated.log'
+  );
 
   constructor(
     @Inject(TOKENS.ConversationCsvSourcePort)
@@ -156,6 +168,7 @@ export class KwoledgeIngestionUseCase {
 
   public async execute(command: KwoledgeIngestionCommand): Promise<KwoledgeIngestionResult> {
     await this.failedAudioResourceLogPort.resetLog();
+    await this.resetConversationChangeLogs();
     const rawMessages = await this.loadRawMessages(command.folderPath);
     const rawByConversation = this.groupByConversationId(rawMessages, (message) => message.conversationId);
     const orderedConversationIds = Array.from(rawByConversation.keys()).sort((left, right) =>
@@ -209,6 +222,7 @@ export class KwoledgeIngestionUseCase {
       );
 
       if (!mergeResult.requiresRebuild) {
+        await this.appendUnchangedConversationLog(conversationId);
         this.logConversationPhase(
           currentPosition,
           totalConversations,
@@ -218,6 +232,11 @@ export class KwoledgeIngestionUseCase {
         continue;
       }
       processedConversations += 1;
+      await this.appendUpdatedConversationLog(
+        conversationId,
+        mergeResult.newMessages,
+        mergeResult.firstNewMessageExternalId
+      );
 
       const normalizedStage = await this.runNormalizationStage(
         conversationId,
@@ -423,6 +442,7 @@ export class KwoledgeIngestionUseCase {
       return {
         messages: incomingMessages,
         newMessages: incomingMessages.length,
+        firstNewMessageExternalId: incomingMessages[0]?.externalId ?? null,
         orderBroken: false,
         requiresRebuild: incomingMessages.length > 0
       };
@@ -432,6 +452,7 @@ export class KwoledgeIngestionUseCase {
       return {
         messages: existingMessages,
         newMessages: 0,
+        firstNewMessageExternalId: null,
         orderBroken: false,
         requiresRebuild: false
       };
@@ -440,6 +461,7 @@ export class KwoledgeIngestionUseCase {
     const mergedMessages: RawConversationStageMessage[] = [...existingMessages];
     let existingCursor = 0;
     let newMessages = 0;
+    let firstNewMessageExternalId: string | null = null;
     let orderBroken = false;
 
     for (const incomingMessage of incomingMessages) {
@@ -459,9 +481,15 @@ export class KwoledgeIngestionUseCase {
         orderBroken = true;
       }
 
-      mergedMessages.push(
-        this.ensureUniqueExternalId(conversationId, incomingMessage, mergedMessages)
+      const uniqueIncomingMessage = this.ensureUniqueExternalId(
+        conversationId,
+        incomingMessage,
+        mergedMessages
       );
+      if (firstNewMessageExternalId === null) {
+        firstNewMessageExternalId = uniqueIncomingMessage.externalId;
+      }
+      mergedMessages.push(uniqueIncomingMessage);
     }
 
     const sortedMergedMessages = this.sortRawStageMessages(mergedMessages);
@@ -470,9 +498,34 @@ export class KwoledgeIngestionUseCase {
     return {
       messages: sortedMergedMessages,
       newMessages,
+      firstNewMessageExternalId,
       orderBroken,
       requiresRebuild
     };
+  }
+
+  private async resetConversationChangeLogs(): Promise<void> {
+    await mkdir(KwoledgeIngestionUseCase.OUTPUT_DIRECTORY, { recursive: true });
+    await Promise.all([
+      writeFile(KwoledgeIngestionUseCase.UNCHANGED_LOG_PATH, ''),
+      writeFile(KwoledgeIngestionUseCase.UPDATED_LOG_PATH, '')
+    ]);
+  }
+
+  private async appendUnchangedConversationLog(conversationId: string): Promise<void> {
+    await appendFile(KwoledgeIngestionUseCase.UNCHANGED_LOG_PATH, `${conversationId}\n`);
+  }
+
+  private async appendUpdatedConversationLog(
+    conversationId: string,
+    newMessages: number,
+    firstNewRawMessageId: string | null
+  ): Promise<void> {
+    const firstRawMessageId = firstNewRawMessageId ?? 'none';
+    await appendFile(
+      KwoledgeIngestionUseCase.UPDATED_LOG_PATH,
+      `${conversationId} ${newMessages} ${firstRawMessageId}\n`
+    );
   }
 
   private applyExistingAudioDetailsToNormalizedMessages(
@@ -1165,7 +1218,12 @@ export class KwoledgeIngestionUseCase {
     startIndex: number
   ): number {
     for (let index = startIndex; index < existingMessages.length; index += 1) {
-      if (this.areEquivalentRawMessages(existingMessages[index], incomingMessage)) {
+      const existingMessage = existingMessages[index];
+      if (existingMessage === undefined) {
+        continue;
+      }
+
+      if (this.areEquivalentRawMessages(existingMessage, incomingMessage)) {
         return index;
       }
     }
